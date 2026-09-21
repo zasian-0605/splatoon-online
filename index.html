@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>スプラ3風 Webオンライン v26 - 安定版（分割前ベース）</title>
+<title>スプラ3風 Webオンライン v36 - v25基準・ルーム制・アカウント</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -164,8 +164,21 @@ body.pointer-lock-ready{cursor:none !important;}
 .v6-gear-effects{font:12px/1.55 sans-serif;color:#e3ff00;margin-top:8px;}
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
+
+#account-screen{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(76,0,120,.92),rgba(5,5,12,.98) 65%);color:#fff;font-family:Arial,sans-serif;}
+#account-card{width:min(440px,92vw);background:rgba(14,14,22,.96);border:3px solid #e3ff00;box-shadow:12px 12px 0 rgba(0,0,0,.45);border-radius:18px;padding:22px;}
+#account-card h2{margin:0 0 5px;font-size:30px;letter-spacing:2px;color:#e3ff00;text-shadow:3px 3px #ff0055;}
+#account-sub{color:#ddd;font-size:13px;line-height:1.5;margin-bottom:14px;}
+.account-field{margin:10px 0}.account-field label{display:block;font-weight:900;font-size:12px;margin-bottom:5px}.account-field input{width:100%;box-sizing:border-box;padding:12px;border-radius:9px;border:2px solid #555;background:#08080d;color:#fff;font-size:16px;outline:none}.account-field input:focus{border-color:#e3ff00;}
+.account-actions{display:flex;gap:9px;margin-top:14px}.account-actions button{flex:1;padding:12px;border:0;border-radius:10px;font-weight:900;cursor:pointer}.account-primary{background:#e3ff00;color:#2f059c}.account-secondary{background:#ff2255;color:#fff}.account-ghost{background:#333;color:#fff}
+#account-status{min-height:22px;margin-top:10px;font-size:13px;font-weight:900;color:#ffd166;white-space:pre-wrap}
+#account-profile{display:none;margin-top:14px;padding:12px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid #444}
+#account-profile strong{color:#e3ff00;font-size:22px}.rank-badge{display:inline-block;padding:3px 9px;border-radius:999px;background:#ff2255;color:#fff;font-weight:900;margin-left:6px}
+#online-ready{background:#00d4ff;color:#07101a;}
+#online-ready.ready{background:#e3ff00;color:#2f059c;}
+#online-profile{margin:8px 0;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid #555;border-radius:10px;font:800 13px/1.4 Arial,sans-serif;}
 </style>
-<meta name="game-version" content="v26-clean-rollback"></head>
+<meta name="game-version" content="v36-room-account-stable"></head>
 <body>
 
 <div id="loading-screen">
@@ -206,6 +219,22 @@ body.pointer-lock-ready{cursor:none !important;}
 </div></div>
 <button id="btn-confirm">これでバッチリ！ ►</button>
 </div>
+</div>
+
+<div id="account-screen">
+  <div id="account-card">
+    <h2>WEB ID</h2>
+    <div id="account-sub">名前とパスワードでアカウントに入れます。腕前・勝敗・レートを保存します。初めてなら「新規登録」。</div>
+    <div class="account-field"><label>名前（2〜16文字）</label><input id="account-name" autocomplete="username" maxlength="16"></div>
+    <div class="account-field"><label>パスワード（4文字以上）</label><input id="account-password" type="password" autocomplete="current-password" maxlength="72"></div>
+    <div class="account-actions">
+      <button id="account-login" class="account-primary">ログイン</button>
+      <button id="account-register" class="account-secondary">新規登録</button>
+    </div>
+    <div class="account-actions"><button id="account-guest" class="account-ghost">ゲストで続ける（オフライン）</button></div>
+    <div id="account-status"></div>
+    <div id="account-profile"></div>
+  </div>
 </div>
 
 <div id="news-screen">
@@ -268,14 +297,16 @@ body.pointer-lock-ready{cursor:none !important;}
 
 <div id="online-panel">
   <div id="online-card">
-    <h2>オンライン バンカラマッチ</h2>
+    <h2>オンラインルーム</h2>
+    <div id="online-profile">プロフィール未読込</div>
     <div id="online-status">接続準備中…</div>
-    <div id="online-room">8人揃うまで自動マッチングします。</div>
+    <div id="online-room">部屋を作成しています…</div>
     <div id="online-actions">
-      <button id="online-start">マッチング開始</button>
+      <button id="online-start">部屋に入る</button>
+      <button id="online-ready">準備OK</button>
       <button id="online-cancel">戻る</button>
     </div>
-    <div id="online-note">ブラウザだけで遊べるWeb版。試し撃ち・CPU 4vs4・オンライン8人を搭載。オンライン時だけ通信サーバーを使います。</div>
+    <div id="online-note">2〜8人の部屋制。部屋の全員が準備OKになったら、その人数のまま対戦開始します。</div>
   </div>
 </div>
 
@@ -322,10 +353,7 @@ let battleTimer=180;
 let battleActive=false;
 let turfPct = {a:0,b:0};
 
-const STAGE_HALF_X = 30;
-const STAGE_HALF_Z = 75;
-// Legacy scalar kept for older UI calculations; stage mapping uses X/Z halves above.
-const STAGE_HALF = STAGE_HALF_Z;
+const STAGE_HALF = 45;
 const CLIMB_THRESHOLD = 55;
 
 const newsLines = [
@@ -522,6 +550,10 @@ function handleAdvanceEvent(e){
    キャラクターカスタマイズ
    ========================================================= */
 function startCustomizePhase(){
+  if(window.__accountReady!==true){
+    if(typeof window.showAccountScreen==='function') window.showAccountScreen();
+    return;
+  }
   currentPhase = 0.5;
   document.getElementById('loading-screen').style.opacity = 0;
   setTimeout(()=>{
@@ -1028,8 +1060,8 @@ sampleCanvas.width = 96; sampleCanvas.height = 96;
 const sampleCtx = sampleCanvas.getContext('2d');
 
 function worldToCanvas(x,z){
-  const u = (x + STAGE_HALF_X) / (STAGE_HALF_X*2);
-  const v = (z + STAGE_HALF_Z) / (STAGE_HALF_Z*2);
+  const u = (x + STAGE_HALF) / (STAGE_HALF*2);
+  const v = (z + STAGE_HALF) / (STAGE_HALF*2);
   return { cx: u*paintCanvas.width, cy: v*paintCanvas.height };
 }
 
@@ -1166,13 +1198,10 @@ function buildStage(){
 
   // v12 stage: tall rectangle, fully walkable/paintable floor, three clear routes.
   // World: X = -18..18, Z = -45..45.
-  const STAGE_W = 60;
-  const STAGE_D = 150;
+  const STAGE_W = 36;
+  const STAGE_D = 90;
   const halfW = STAGE_W/2;
   const halfD = STAGE_D/2;
-  const SX = STAGE_W / 36;
-  const SZ = STAGE_D / 90;
-  const addStageBlock = (x,y,z,w,h,d,color,opts={}) => addBlock(x*SX,y,z*SZ,w*SX,h,d*SZ,color,opts);
 
   const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
   const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
@@ -1190,16 +1219,16 @@ function buildStage(){
     paintCtx.fillStyle=hexToCss(colorHex);
     paintCtx.fillRect(x,y,w,h);
   }
-  paintRectWorld(-28,-74,28,-52,teamAHex);
-  paintRectWorld(-28,52,28,74,teamBHex);
+  paintRectWorld(-16,-44,16,-31,teamAHex);
+  paintRectWorld(-16,31,16,44,teamBHex);
   paintTexture.needsUpdate = true;
 
-  spawnPointA = new THREE.Vector3(0,0,-64);
-  spawnPointB = new THREE.Vector3(0,0, 64);
+  spawnPointA = new THREE.Vector3(0,0,-38);
+  spawnPointB = new THREE.Vector3(0,0, 38);
 
   // Broad spawn pads, deliberately far apart.
-  addStageBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
-  addStageBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
+  addBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
+  addBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
 
   // Three routes: left / center / right.
   // Left and right stay low. The center route is elevated and connected by stairs.
@@ -1218,18 +1247,18 @@ function buildStage(){
     {x:-6,z:-5,w:3,d:5,h:1.8}, {x:6,z:11,w:3,d:5,h:2.2},
     {x:-6,z:21,w:3,d:4,h:2.0}, {x:6,z:-21,w:3,d:4,h:2.0}
   ];
-  lowCovers.forEach(c=>addStageBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
+  lowCovers.forEach(c=>addBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
 
   // Mid dividers separate the three lanes but leave deliberate choke/opening points.
   // Height is low enough to read as cover, not an impassable wall.
   [-6,6].forEach(x=>{
-    [-32,-18,-2,14,28].forEach(z=>addStageBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
+    [-32,-18,-2,14,28].forEach(z=>addBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
   });
 
   // Center high route: long raised path.
-  addStageBlock(0,3,-14,8,3.0,20,0x657789);
-  addStageBlock(0,3, 14,8,3.0,20,0x657789);
-  addStageBlock(0,3,  0,8,3.0,10,0x718396);
+  addBlock(0,3,-14,8,3.0,20,0x657789);
+  addBlock(0,3, 14,8,3.0,20,0x657789);
+  addBlock(0,3,  0,8,3.0,10,0x718396);
   waypoints.push({x:0,z:-14,y:3});
   waypoints.push({x:0,z:0,y:3});
   waypoints.push({x:0,z:14,y:3});
@@ -1239,7 +1268,7 @@ function buildStage(){
     for(let i=0;i<8;i++){
       const z = dir * (23 + i*0.9);
       const h = 0.45 + (7-i)*0.32;
-      addStageBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
+      addBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
     }
   });
 
@@ -1248,25 +1277,22 @@ function buildStage(){
     {x:-12,z:14,w:6,d:8,h:2.2},
     {x:12,z:-14,w:6,d:8,h:2.2}
   ].forEach(p=>{
-    addStageBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
+    addBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
     waypoints.push({x:p.x,z:p.z,y:p.h});
   });
 
   // Connect left <-> center and center <-> right at two clear crossover points.
   // These bridges are low, wide and paintable.
   [-8,8].forEach(z=>{
-    addStageBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
-    addStageBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
+    addBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
+    addBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
     waypoints.push({x:-6,z});
     waypoints.push({x:6,z});
   });
 
   // Center observation block for another height change.
-  addStageBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
+  addBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
   waypoints.push({x:0,z:0,y:6});
-
-  // Expand route coordinates together with the enlarged rectangular stage.
-  waypoints = waypoints.map(p => ({...p, x:p.x*SX, z:p.z*SZ}));
 
   // Keep the outer edge visually clear. No water, pits, or non-paintable holes.
   // Movement itself is clamped to the rectangular playable area in collision code.
@@ -2360,8 +2386,8 @@ function updatePlayerMovement(delta){
 
 function clampStageXY(x,z){
   return {
-    x:Math.max(-29.25,Math.min(29.25,x)),
-    z:Math.max(-74.25,Math.min(74.25,z))
+    x:Math.max(-17.25,Math.min(17.25,x)),
+    z:Math.max(-43.25,Math.min(43.25,z))
   };
 }
 
@@ -2592,10 +2618,6 @@ function animate3D(){
   document.getElementById('btn-special').classList.toggle('sp-ready',specialReady);
   const wh=document.getElementById('weapon-hud');
   if(wh) wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${playerFighter.weapon.name}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]}　/　サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?'　★ READY':''}</div>`;
-  // The charge gauge is local-only. Enemy/AI charge states never appear on the player's HUD.
-  const sharedChargeGauge=document.getElementById('charge-gauge');
-  const localCharging=!!(playerFighter && playerFighter.alive && !playerFighter.squid_mode && (playerFighter.isCharging || playerFighter.wiperChargeStart || playerFighter.spinnerCharging));
-  if(sharedChargeGauge && !localCharging) sharedChargeGauge.style.display='none';
 
   if(currentPhase===2){
     turfTick += delta;
@@ -2761,27 +2783,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const mult = opts.mult || 1;
     const baseR = Math.max(.45, radius*1.18*mult);
     const {cx,cy}=worldToCanvas(x,z);
-    const crX=(baseR/(STAGE_HALF_X*2))*paintCanvas.width;
-    const crY=(baseR/(STAGE_HALF_Z*2))*paintCanvas.height;
+    const cr=(baseR/(STAGE_HALF*2))*paintCanvas.width;
     paintCtx.save();
     paintCtx.fillStyle=hexToCss(colorHex);
-    // Main soft stamp, kept circular in world space on the wide rectangular map.
+    // Main soft stamp
     paintCtx.beginPath();
-    paintCtx.ellipse(cx,cy,crX,crY,0,0,Math.PI*2);
+    paintCtx.arc(cx,cy,cr,0,Math.PI*2);
     paintCtx.fill();
     // Several organic satellites => much better coverage
     const n = Math.max(3, Math.min(10, Math.round(radius*1.7)));
     for(let i=0;i<n;i++){
       const a=i*2.399963 + (x*0.03+z*0.07);
-      const rrX=crX*(.25+.65*((i%5)/4));
-      rrY=crY*(.25+.65*((i%5)/4));
-      const px=cx+Math.cos(a)*rrX*.85, py=cy+Math.sin(a)*rrY*.85;
-      paintCtx.beginPath(); paintCtx.ellipse(px,py,crX*(.32+.12*(i%3)),crY*(.32+.12*(i%3)),0,0,Math.PI*2); paintCtx.fill();
+      const rr=cr*(.25+.65*((i%5)/4));
+      const px=cx+Math.cos(a)*rr*.85, py=cy+Math.sin(a)*rr*.85;
+      paintCtx.beginPath(); paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
     }
     // short trail segment when requested (roller/brush/wiper)
     if(opts.to){
       const to=worldToCanvas(opts.to.x,opts.to.z);
-      paintCtx.lineWidth=Math.max(2,Math.min(crX,crY)*1.5);
+      paintCtx.lineWidth=Math.max(2,cr*1.5);
       paintCtx.lineCap='round';
       paintCtx.beginPath(); paintCtx.moveTo(cx,cy); paintCtx.lineTo(to.cx,to.cy); paintCtx.stroke();
     }
@@ -3130,700 +3150,125 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(f.ink<35) f.ink=Math.min(100,f.ink+22*delta);
   };
 
-  /* ---------- Online state ---------- */
+  /* ---------- Online room system v36 ---------- */
   let onlineSocket=null, onlineActive=false, onlineRoomId=null, onlinePlayerId=null, onlineTeam=null;
+  let onlineReady=false, onlineStarted=false, onlineResultSent=false;
   const remoteMap=new Map();
-
   function setOnlineStatus(t){const e=document.getElementById('online-status');if(e)e.textContent=t;}
-  function roomText(players=[]){
-    return players.map(p=>`[${p.team}] ${p.id}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n')||'8人揃うまで自動マッチングします。';
-  }
   function onlineUrl(){ return (location.protocol==='https:'?'wss://':'ws://') + location.host; }
-
+  function renderOnlineRoom(players=[]){
+    const r=document.getElementById('online-room'); if(!r)return;
+    const lines=players.map((p,i)=>`[${p.ready?'✓':'　'}] ${p.name||p.id}${p.team?' ['+p.team+']':''}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n');
+    r.textContent=`部屋 ${onlineRoomId||'----'}\n${players.length}/8人（2〜8人で開始）\n${lines||'まだ誰もいません'}`;
+    const ready=document.getElementById('online-ready'); if(ready){ready.disabled=!onlineSocket||onlineSocket.readyState!==1||players.length<2;ready.textContent=onlineReady?'準備解除':'準備OK';ready.classList.toggle('ready',onlineReady);}
+  }
+  function showOnlineProfile(profile){
+    const e=document.getElementById('online-profile');if(e&&profile)e.innerHTML=`${profile.name}　<span class="rank-badge">${profile.rank}</span>　レート ${profile.rating}　｜ 勝 ${profile.wins} / 負 ${profile.losses}`;
+  }
+  function clearRemoteFighters(){
+    remoteMap.clear();
+    fighters=fighters.filter(f=>{if(f.remote){scene.remove(f.root);return false;}return true;});
+  }
   function openOnlinePanel(){
     document.getElementById('online-panel').style.display='flex';
     setOnlineStatus('サーバーに接続します…');
-    const savedWs=localStorage.getItem('splatoonWs');
-    const url=savedWs || (location.protocol==='file:' ? '' : onlineUrl());
+    onlineReady=false;onlineActive=false;onlineStarted=false;onlineResultSent=false;
+    if(onlineSocket){try{onlineSocket.close();}catch{} onlineSocket=null;}
+    const token=localStorage.getItem('splatoonAccountToken');
+    if(!token){setOnlineStatus('先にWEB IDへログインしてください。');return;}
+    const url=location.protocol==='file:' ? '' : onlineUrl();
+    if(!url){setOnlineStatus('公開URLではないためオンライン接続できません。');return;}
     try{
-      if(!url){ setOnlineStatus('オンラインは公開Web版のURLから利用してください。試し撃ち・CPU対戦はそのまま遊べます。'); return; }
       onlineSocket=new WebSocket(url);
       onlineSocket.onopen=()=>{
-        setOnlineStatus('接続OK。マッチング待機中');
-        document.getElementById('online-start').disabled=false;
+        setOnlineStatus('接続OK。部屋に入ります…');
+        onlineSocket.send(JSON.stringify({type:'bindAccount',token}));
       };
       onlineSocket.onmessage=(ev)=>{
         let m;try{m=JSON.parse(ev.data);}catch{return;}
-        if(m.type==="queue"){setOnlineStatus(`マッチング中… ${m.count}/8人`); const r=document.getElementById('online-room'); if(r) r.textContent=`8人揃うまで待機中… 現在 ${m.count}/8人`;}
-        if(m.type==="matchFound"){
-          onlineActive=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;
-          setOnlineStatus(`マッチング中… 8/8人 → ${m.team}チーム`);
-          document.getElementById('online-room').textContent=`8/8人
-${roomText(m.players)}`;
-          startOnlineBattle(m);
+        if(m.type==='accountBound'){
+          if(m.error){setOnlineStatus(m.error);return;}
+          showOnlineProfile(m.profile);
+          onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+          return;
         }
-        if(m.type==="playerJoin"||m.type==="playerLeave"){document.getElementById('online-room').textContent=roomText(m.players||[]);}
-        if(m.type==="state"){applyRemoteState(m);}
-        if(m.type==="paint"){ const localColor=window.__V6?.displayColorForPlayer?.(m.id); paintGround(m.x,m.z,m.radius,localColor??m.colorHex,{mult:m.mult||1,remote:true}); }
-        if(m.type==="serverToast"){showToast(m.text);}
-        if(m.type==="matchEnd" && onlineActive){onlineActive=false;endBattle();}
+        if(m.type==='queue'){
+          onlineRoomId=m.roomId;setOnlineStatus(`部屋 ${m.roomId} に参加しました`);return;
+        }
+        if(m.type==='room'){
+          onlineRoomId=m.roomId;setOnlineStatus(`部屋待機中　${m.players.length}/8人`);renderOnlineRoom(m.players||[]);return;
+        }
+        if(m.type==='matchFound'){
+          onlineActive=true;onlineStarted=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;onlineResultSent=false;
+          renderOnlineRoom(m.players||[]);
+          setOnlineStatus(`全員準備OK！ ${m.team}チームへ移動します…`);
+          const wait=Math.max(0,(m.startAt||Date.now()+1200)-Date.now());
+          setTimeout(()=>startOnlineBattle(m),wait);
+          
+          return;
+        }
+        if(m.type==='state'){applyRemoteState(m);return;}
+        if(m.type==='paint'){paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true});return;}
+        if(m.type==='serverToast'){showToast(m.text);return;}
+        if(m.type==='matchTimeout'){
+          if(onlineActive && !onlineResultSent) reportOnlineResult('DRAW');
+          return;
+        }
+        if(m.type==='matchEnd'){
+          onlineActive=false;onlineStarted=false;
+          if(m.results){const me=m.results.find(x=>x.id===onlinePlayerId);if(me&&me.profile){showOnlineProfile(me.profile);playerAccount.profile=me.profile;localStorage.setItem('splatoonAccountProfile',JSON.stringify(me.profile));updateAccountProfileUI(me.profile);}}
+          endBattle();
+          return;
+        }
       };
-      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。公開Web版のURLから開いているか確認してください。');
+      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。');
       onlineSocket.onclose=()=>{if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}};
-    }catch(e){setOnlineStatus('WebSocket開始に失敗しました');}
+    }catch{setOnlineStatus('WebSocket開始に失敗しました。');}
   }
-  function hideOnlinePanel(){
-    document.getElementById('online-panel').style.display='none';
-  }
+  function hideOnlinePanel(){document.getElementById('online-panel').style.display='none';}
   function closeOnlinePanel(){
-    hideOnlinePanel();
-    if(onlineSocket&&onlineSocket.readyState<=1){
-      try{onlineSocket.send(JSON.stringify({type:'leaveQueue'}));}catch{}
-      onlineSocket.close();
-    }
-    onlineSocket=null; onlineActive=false;
+    hideOnlinePanel();onlineReady=false;
+    if(onlineSocket&&onlineSocket.readyState<=1){try{onlineSocket.send(JSON.stringify({type:'leaveQueue'}));}catch{} try{onlineSocket.close();}catch{}}
+    onlineSocket=null;onlineActive=false;onlineStarted=false;
   }
   function startOnlineBattle(m){
-    hideOnlinePanel();
-    // remove CPU bots
-    fighters=fighters.filter(f=>{if(f.isPlayer)return true;scene.remove(f.root);return false;});
-    const me=playerFighter;
-    me.team=m.team; me.id=onlinePlayerId;
-    me.cfg.color=playerConfig.color;
-    me.root.position.copy(m.spawn|| (m.team==="A"?spawnPointA:spawnPointB));
-    me.pos=me.root.position;
-    teamAHex=inkColorPalette[playerConfig.color];
-    teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
+    hideOnlinePanel(); clearRemoteFighters();
+    const me=playerFighter;me.team=m.team;me.id=onlinePlayerId;me.cfg.color=playerConfig.color;
+    me.root.position.copy(m.spawn|| (m.team==='A'?spawnPointA:spawnPointB));me.pos=me.root.position;me.hp=me.maxHp;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
+    teamAHex=inkColorPalette[playerConfig.color]; teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
     battleTimer=180; battleActive=true; currentPhase=2;
-    document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block'; updateTeamLifeStrip(); document.getElementById('kill-feed').innerHTML='';
-    document.getElementById('range-hint').style.display='none';
-    showToast(`8人オンライン対戦！ ${m.team}チーム`);
-    sfx("match");
-    // create remote placeholders for everyone except self
+    document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block';document.getElementById('range-hint').style.display='none';document.getElementById('kill-feed').innerHTML='';
     (m.players||[]).forEach(p=>{if(p.id!==onlinePlayerId)ensureRemoteFighter(p);});
   }
-
   function ensureRemoteFighter(p){
-    if(remoteMap.has(p.id)) return remoteMap.get(p.id);
-    const cfg=makeAiCfg(p.team);
-    cfg.color=playerConfig.color;cfg.inkColorHex=window.__V6?.displayColorForPlayer?.(p.id) ?? (p.team==="A"?teamAHex:teamBHex);
-    const rf=BASE.createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
-    rf.ai=null;rf.weapon=weaponList[p.weaponId]||weaponList[0];rf.remote=true;remoteMap.set(p.id,rf);fighters.push(rf);
-    return rf;
+    if(remoteMap.has(p.id))return remoteMap.get(p.id);
+    const cfg=makeAiCfg(p.team);cfg.weapon=p.weaponId??0;cfg.color=playerConfig.color;cfg.inkColorHex=p.team==='A'?teamAHex:teamBHex;
+    const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});rf.ai=null;rf.weapon=weaponList[p.weaponId]||weaponList[0];rf.remote=true;remoteMap.set(p.id,rf);fighters.push(rf);return rf;
   }
   function applyRemoteState(m){
     if(m.id===onlinePlayerId)return;
-    const p=ensureRemoteFighter(m);
-    if(!p)return;
-    const wasAlive=!!p.alive;
-    p.pos.lerp(new THREE.Vector3(m.x,m.y||0,m.z),.55);
-    p.root.visible=m.alive!==false;
-    p.hp=m.hp??p.hp;p.ink=m.ink??p.ink;p.squid_mode=!!m.squid;p.alive=m.alive!==false;
-    if(wasAlive && !p.alive){ p.deathLocation=new THREE.Vector3(m.x,m.y||0,m.z); addKillFeed(`${weaponCategoryIcon(p)} ${p.team} ${p.id} がやられた`,'dead'); updateTeamLifeStrip(); }
-    p.root.rotation.y=m.yaw||0;p.human.rotation.y=m.yaw||0;
+    const p=ensureRemoteFighter(m);if(!p)return;
+    const wasAlive=p.alive;p.pos.lerp(new THREE.Vector3(m.x,m.y||0,m.z),.55);p.root.rotation.y=m.yaw||0;p.root.visible=m.alive!==false;p.alive=m.alive!==false;p.hp=m.hp??p.hp;p.ink=m.ink??p.ink;p.squid_mode=!!m.squid;p.weapon=weaponList[m.weaponId]||p.weapon;
     updateFighterAnimation(p,!!m.moving,p.squid_mode);
+    if(wasAlive&&!p.alive) addKillFeed(`${m.name||p.id} がやられた`,'dead');
   }
   function sendOnlineState(){
-    if(!onlineSocket||onlineSocket.readyState!==1||!onlineActive||!playerFighter)return;
-    onlineSocket.send(JSON.stringify({
-      type:'state',id:onlinePlayerId,roomId:onlineRoomId,team:playerFighter.team,
-      x:playerFighter.pos.x,y:playerFighter.pos.y,z:playerFighter.pos.z,yaw:playerFighter.root.rotation.y,
-      hp:playerFighter.hp,ink:playerFighter.ink,alive:playerFighter.alive,squid:!!playerFighter.squid_mode,
-      weaponId:playerFighter.weapon.id,moving:!!playerFighter._moving
-    }));
+    if(!onlineSocket||onlineSocket.readyState!==1||!onlineStarted||!playerFighter)return;
+    try{onlineSocket.send(JSON.stringify({type:'state',x:playerFighter.pos.x,y:playerFighter.pos.y,z:playerFighter.pos.z,yaw:playerFighter.root.rotation.y,hp:playerFighter.hp,ink:playerFighter.ink,alive:playerFighter.alive,squid:!!playerFighter.squid_mode,weaponId:playerFighter.weapon.id,moving:!!playerFighter._moving}));}catch{}
   }
-  let onlineStateTick=0;
-
-  /* ---------- Stage polish ---------- */
-  function addDecorPillar(x,z,h=5){
-    if(!stageGroup)return;
-    addBlock(x,0,z,2.4,h,2.4,0x39485e,{climbable:true});
-    waypoints.push({x,z,y:h});
+  function reportOnlineResult(winnerTeam){
+    if(onlineResultSent||!onlineSocket||onlineSocket.readyState!==1||!onlineStarted)return;
+    onlineResultSent=true;
+    try{onlineSocket.send(JSON.stringify({type:'matchResult',winnerTeam}));}catch{}
   }
-  const _baseBuildStage=buildStage;
-  buildStage=function(){
-    _baseBuildStage();
-    // Extra side lanes / cover / ramps for better flow.
-    [-28,-18,-8,8,18,28].forEach((x,i)=>{
-      addDecorPillar(x,(i%2===0?-4:4),4+(i%3));
-    });
-    [-30,-20,-10,10,20,30].forEach((z,i)=>{
-      addBlock((i%2===0?-6:6),0,z,3.2,1.1,2.0,0x6f7f98,{climbable:false});
-    });
-  };
-
-  /* ---------- Online keyboard + panel buttons ---------- */
-  document.getElementById('online-start').addEventListener('click',()=>{audioInit();if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',name:'player'}));setOnlineStatus('マッチング中… 1/8人'); const r=document.getElementById('online-room'); if(r)r.textContent='8人揃うまで待機中… 現在 1/8人';}});
+  document.getElementById('online-start').addEventListener('click',()=>{
+    if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));document.getElementById('online-start').disabled=true;setOnlineStatus('部屋に入っています…');}
+  });
+  document.getElementById('online-ready').addEventListener('click',()=>{
+    if(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted){onlineReady=!onlineReady;onlineSocket.send(JSON.stringify({type:'ready',ready:onlineReady,weaponId:playerConfig.weapon}));}
+  });
   document.getElementById('online-cancel').addEventListener('click',closeOnlinePanel);
-  window.addEventListener('keydown',(e)=>{
-    if(e.code==='KeyP' && currentPhase===1.5){openOnlinePanel();}
-  });
-
-  /* ---------- UI: gear list text ---------- */
-  const oldSetupCustomize=setupCustomizeUI;
-  setupCustomizeUI=function(){
-    oldSetupCustomize();
-    document.getElementById('select-outfit').addEventListener('change',()=>{
-      const o=outfitList[playerConfig.outfit];
-      showToast(`${o.name}：ギア効果が切り替わりました`);
-    });
-  };
-
-  /* ---------- Main loop wrapper: economy + network ---------- */
-  const oldAnimate3D=animate3D;
-  animate3D=function(){
-    // avoid recursively using oldAnimate3D forever: temporarily let it call wrapped funcs
-    return oldAnimate3D();
-  };
-
-  // Intercept result to leave online cleanly.
-  const oldEndBattle=endBattle;
-  endBattle=function(){
-    if(onlineSocket&&onlineSocket.readyState===1&&onlineActive){
-      try{onlineSocket.send(JSON.stringify({type:'endMatch',roomId:onlineRoomId}));}catch{}
-    }
-    onlineActive=false;
-    oldEndBattle();
-  };
-
-  // Periodic state sender and HUD tick
-  setInterval(()=>{
-    if(currentPhase===1.5||currentPhase===2){
-      ensureHud();
-      sendOnlineState();
-    }
-  },50);
-
-  // Patch spawn/respawn and special stats
-  const oldRespawn=respawnFighter;
-  respawnFighter=function(f){
-    oldRespawn(f); setupFighterEconomy(f); f.ink=100;
-    if(f.isPlayer)sfx("ui");
-  };
-
-  // Better information display for expanded categories
-  updateWeaponInfo=function(){
-    const w=weaponList[playerConfig.weapon]||weaponList[0];
-    let stat='';
-    if(w.category==="charger")stat=`チャージ:${w.chargeTime}ms / タップ:${w.tapDamage} / フル:${w.fullDamage} / インク:${w.inkCost.toFixed(1)}`;
-    else if(w.category==="roller")stat=`ローリング＋タテ振り / 威力:${w.swingDamage} / 塗り:${w.paintFan} / インク:${w.inkCost.toFixed(1)}`;
-    else if(w.category==="wiper")stat=`横斬り＋チャージ斬り / 威力:${w.slashDamage}→${w.chargedDamage} / 射程:${w.slashRange} / インク:${w.inkCost.toFixed(1)}`;
-    else if(w.category==="blaster")stat=`直撃:${w.damage} / 爆風:${w.splashDamage} / 間隔:${w.rate}ms / インク:${w.inkCost.toFixed(1)}`;
-    else if(w.category==="slosher")stat=`着弾:${w.damage} / 範囲:${w.explosionRadius||0} / インク:${w.inkCost.toFixed(1)}`;
-    else stat=`与ダメ:${w.damage} / 連射:${w.rate}ms / インク:${w.inkCost.toFixed(1)}`;
-    document.getElementById('weapon-info').textContent=`【${categoryLabel[w.category]}】\n${stat}\nサブ:${w.sub} / SP:${w.special}`;
-  };
-
-  // Ensure player model stays synced after weapon change.
-  const weaponSelect=document.getElementById('select-weapon');
-  weaponSelect.addEventListener('change',()=>{
-    if(playerFighter){
-      playerFighter.weapon=weaponList[parseInt(weaponSelect.value)];
-      playerFighter.cfg.weapon=playerConfig.weapon;
-      setupFighterEconomy(playerFighter);
-    }
-  });
-
-  // Make mobile shoot also charge wiper.
-  const oldDoPlayerSubThrow=doPlayerSubThrow;
-  doPlayerSubThrow=function(){oldDoPlayerSubThrow();};
-
-})();
-
-// === Projectile visual pass: larger ink orbs + continuous falling ink trail ===
-(function(){
-  const _baseSpawnBullet = spawnBullet;
-  spawnBullet = function(fighter, dir, opts){
-    const o = Object.assign({}, opts);
-    const category = fighter && fighter.weapon ? fighter.weapon.category : 'shooter';
-    const visual = category === 'blaster' ? 0.32 : category === 'slosher' ? 0.36 : category === 'charger' ? 0.24 : 0.22;
-    o.visRadius = Math.max(o.visRadius || 0, visual);
-    o.radius = Math.max(o.radius || 0.14, category === 'blaster' ? 0.30 : category === 'slosher' ? 0.34 : 0.20);
-    _baseSpawnBullet(fighter, dir, o);
-    const b = bullets[bullets.length-1];
-    if(b){
-      b.trailTimer = 0;
-      b.trailEvery = 0.035;
-      b.prevTrailPos = b.mesh.position.clone();
-      b.trailRadius = category === 'blaster' ? 0.25 : category === 'slosher' ? 0.29 : 0.19;
-    }
-  };
-
-  const _baseUpdateBullets = updateBullets;
-  updateBullets = function(delta){
-    for(const b of bullets){
-      if(!b.prevTrailPos) b.prevTrailPos=b.mesh.position.clone();
-      b.trailTimer=(b.trailTimer||0)+delta;
-    }
-    _baseUpdateBullets(delta);
-    for(const b of bullets){
-      if(!b.mesh || !b.mesh.parent) continue;
-      if((b.trailTimer||0) < (b.trailEvery||0.045)) continue;
-      const prev=b.prevTrailPos || b.mesh.position.clone();
-      const cur=b.mesh.position;
-      const dist=prev.distanceTo(cur);
-      if(dist>0.03){
-        const col=b.team==='A'?teamAHex:teamBHex;
-        const steps=Math.min(6,Math.max(1,Math.ceil(dist/0.60)));
-        for(let i=1;i<=steps;i++){
-          const t=i/steps;
-          const pos=prev.clone().lerp(cur,t);
-          paintGround(pos.x,pos.z,b.trailRadius||0.18,col,{trail:true, noNetwork:true});
-        }
-      }
-      b.prevTrailPos=cur.clone();
-      b.trailTimer=0;
-    }
-  };
-})();
-</script>
-
-
-<script>
-/* =====================================================================
-   FINAL FEEL PASS v5
-   - Very light projectile ink drips (normal shots)
-   - Charger paints a thin continuous straight line
-   - No ink consumption while moving/swimming
-   - Shift toggles squid directly; outside friendly ink is slower
-   - Ink slowly regenerates even while human, much faster as squid
-   - Mouse movement rotates camera immediately (no click/drag)
-   - Target/reveal marker floats above the player's head
-   ===================================================================== */
-(function(){
-  const COLOR_EPS = 0.08;
-
-  // --- Controlled paint: small, organic splats instead of overpainting ---
-  const _paintGroundPrev = paintGround;
-  paintGround = function(x,z,radius,colorHex,opts={}){
-    const r = Math.max(0.12, radius);
-    const isTrail = !!opts.trail;
-    const isShot = !!opts.shot;
-    const isRoll = !!opts.roller;
-    const isWiper = !!opts.wiper;
-    // Normal bullets: tiny dots; trail: even smaller drips; rollers/wipers keep a useful stripe.
-    let rr = r;
-    if(isTrail) rr = r * 0.34;
-    else if(isShot) rr = r * 0.62;
-    else if(isRoll || isWiper) rr = r * 0.88;
-    else rr = r * 0.72;
-    const safe = Math.min(2.8, Math.max(0.12, rr));
-    _paintGroundPrev(x,z,safe,colorHex,{...opts,mult:0.72});
-  };
-
-  // --- No movement ink drain; natural regeneration in both forms ---
-  const _regenPlayerPrev = regenPlayer;
-  regenPlayer = function(f,delta,isSquid){
-    setupFighterEconomy(f);
-    const gp=f.gearProfile||gearProfile(f);
-    const now=performance.now();
-    if(now < f.inkRegenBlockedUntil) return;
-    const friendly = onFighterInk(f);
-    // Human: slow passive regen; squid: fast regen on friendly ink.
-    const rate = isSquid && friendly ? 30 : 4.0;
-    f.ink = Math.min(100, f.ink + rate*delta*(gp.inkRegen||1));
-    if(isSquid && friendly && f.hp < f.maxHp){
-      f.hp = Math.min(f.maxHp, f.hp + 10*delta*(gp.inkRegen||1));
-    }
-  };
-
-  // --- Shift = squid. No ink cost for movement. Own ink is fast; enemy/no ink is slow. ---
-  updatePlayerMovement = function(delta){
-    const f=playerFighter; if(!f||!f.alive)return;
-    setupFighterEconomy(f);
-    const now=performance.now();
-    const isSquid=!!keys.shift;
-    f.squid_mode=isSquid;
-    const onOwnInk=onFighterInk(f);
-    regenPlayer(f,delta,isSquid);
-
-    const gp=f.gearProfile||gearProfile(f);
-    const isJetpack=f.jetpackUntil && now<f.jetpackUntil;
-    let speedMult = isSquid ? (onOwnInk?1.85:0.42) : 1;
-    if(!isSquid && isShooting && f.weapon.category!=="maneuver") speedMult*=0.62;
-    if(f.weapon.category==="maneuver"&&isShooting) speedMult*=1.12;
-    if(f.weapon.category==="roller"&&isShooting) speedMult*=1.03;
-    speedMult*=gp.move;
-    if(isSquid) speedMult*=gp.swim;
-    if(now<f.speedBoostUntil) speedMult*=1.5;
-    if(isJetpack) speedMult=1;
-
-    const moveDir=new THREE.Vector3();
-    if(keys.w)moveDir.z-=1;if(keys.s)moveDir.z+=1;if(keys.a)moveDir.x-=1;if(keys.d)moveDir.x+=1;
-    let moving=false;
-    if(moveDir.lengthSq()>0){
-      moveDir.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
-      playerVelocity.x=moveDir.x*15*speedMult;
-      playerVelocity.z=moveDir.z*15*speedMult;
-      moving=true;
-      if(!isSquid&&!isShooting) f.human.rotation.y=Math.atan2(playerVelocity.x,playerVelocity.z);
-    }else{playerVelocity.x*=.78;playerVelocity.z*=.78;}
-    f._moving=moving;
-
-    if(!isSquid){
-      f.human.rotation.y=yaw+Math.PI;
-      if(f.weapon.category==="roller"&&isShooting)doRollerAction(f,now,moving);
-      else if(f.weapon.category==="wiper"&&isShooting){
-        if(!f.wiperChargeStart)f.wiperChargeStart=now;
-        const frac=Math.min(1,(now-f.wiperChargeStart)/f.weapon.chargeTime);
-        const gauge=document.getElementById('charge-gauge');
-        gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));
-        if(frac>=1){doWiperSlash(f,1);f.wiperChargeStart=now;}
-      }else if(f.weapon.category==="charger"){
-        const gauge=document.getElementById('charge-gauge');
-        if(f.isCharging){const frac=Math.min(1,(now-f.chargeStart)/f.weapon.chargeTime);gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
-      }else if(isShooting){const d=new THREE.Vector3();camera.getWorldDirection(d);tryShoot(f,d,now);}
-    }else{
-      f.wiperChargeStart=0;f.isCharging=false;
-      document.getElementById('charge-gauge').style.display='none';
-    }
-
-    const climbing=tryMoveWithCollision(f,playerVelocity,delta,isSquid);
-    if(isJetpack){playerVelocity.y=0;f.pos.y=Math.max(f.pos.y,3.2);}
-    else{
-      if(keys.space&&canJump&&!climbing){playerVelocity.y=10;canJump=false;sfx("jump");}
-      if(!climbing)playerVelocity.y-=30*delta;else playerVelocity.y=4.5;
-      f.pos.y+=playerVelocity.y*delta;
-    }
-    const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
-    const restY=(isSquid&&onFighterInk(f))?floorY-.35:floorY;
-    if(!isJetpack&&f.pos.y<=restY){f.pos.y=restY;playerVelocity.y=0;canJump=true;}
-    updateFighterAnimation(f,moving,isSquid);
-    f.root.rotation.y=isSquid?yaw:f.human.rotation.y;
-    // Deliberately NO ink drain here: movement is free.
-  };
-
-  // --- Projectile appearance + tiny dripping trail ---
-  const _spawnBulletPrev = spawnBullet;
-  spawnBullet = function(fighter,dir,opts){
-    const category=fighter?.weapon?.category||'shooter';
-    const o={...opts};
-    o.visRadius = Math.max(o.visRadius||0, category==='blaster'?.32:category==='slosher'?.36:category==='charger'?.24:.22);
-    _spawnBulletPrev(fighter,dir,o);
-    const b=bullets[bullets.length-1];
-    if(!b)return;
-    b._v5TrailTimer=0;
-    b._v5Prev=b.mesh.position.clone();
-    b._v5Charger=(category==='charger');
-    b._v5TrailEvery=b._v5Charger?0.035:0.115;
-    b._v5TrailRadius=b._v5Charger?0.16:(category==='blaster'?0.13:0.10);
-  };
-
-  const _updateBulletsPrev = updateBullets;
-  updateBullets = function(delta){
-    for(const b of bullets) b._v5TrailTimer=(b._v5TrailTimer||0)+delta;
-    _updateBulletsPrev(delta);
-    for(const b of bullets){
-      if(!b.mesh||!b.mesh.parent)continue;
-      if((b._v5TrailTimer||0)<(b._v5TrailEvery||0.12))continue;
-      const prev=b._v5Prev||b.mesh.position.clone();
-      const cur=b.mesh.position;
-      const dist=prev.distanceTo(cur);
-      const col=b.team==='A'?teamAHex:teamBHex;
-      if(dist>0.03){
-        const step=b._v5Charger?0.28:0.75;
-        const count=Math.min(b._v5Charger?12:3,Math.max(1,Math.ceil(dist/step)));
-        for(let i=1;i<=count;i++){
-          const t=i/count;
-          const p=prev.clone().lerp(cur,t);
-          paintGround(p.x,p.z,b._v5TrailRadius,col,{trail:true,noNetwork:true});
-        }
-      }
-      b._v5Prev=cur.clone();b._v5TrailTimer=0;
-    }
-  };
-
-  // --- Charger: straight continuous ink line along the actual shot path ---
-  const _fireChargerShotPrev = fireChargerShot;
-  fireChargerShot = function(fighter,aimDir,chargeFrac){
-    const before=bullets.length;
-    _fireChargerShotPrev(fighter,aimDir,chargeFrac);
-    // The original charger is hitscan, so draw a thin, continuous sequence from origin toward hit point.
-    // Recreate its visible straight path without changing the hit logic.
-    const col=fighter.team==='A'?teamAHex:teamBHex;
-    const origin=fighter.pos.clone();origin.y+=1.2;
-    const dir=aimDir.clone().normalize();
-    const maxDist=60;
-    let last=0;
-    const step=0.42;
-    for(let d=0;d<maxDist;d+=step){
-      const p=origin.clone().addScaledVector(dir,d);
-      const wall=getBlockingWall(p.x,p.z,p.y);
-      const gh=getSupportHeight(p.x,p.z,p.y);
-      if(p.y<=gh)break;
-      paintGround(p.x,p.z,.16,col,{trail:true,noNetwork:true});
-      last=d;
-      if(wall)break;
-    }
-  };
-
-  // --- Aim/reveal marker: float ABOVE the target, never on the head itself ---
-  const markerLayer=document.getElementById('sensor-layer');
-  function ensureTargetMarker(){
-    if(!markerLayer)return;
-    if(!window.__v5TargetMarkers)window.__v5TargetMarkers=new Map();
-    fighters.forEach(f=>{
-      if(f.isPlayer || !f.alive || !f.revealedUntil || performance.now()>=f.revealedUntil){
-        const old=window.__v5TargetMarkers.get(f.id); if(old)old.remove(); if(old)window.__v5TargetMarkers.delete(f.id); return;
-      }
-      let el=window.__v5TargetMarkers.get(f.id);
-      if(!el){
-        el=document.createElement('div');
-        el.className='sensor-mark';
-        el.style.position='absolute';
-        el.style.borderLeft='9px solid transparent';
-        el.style.borderRight='9px solid transparent';
-        el.style.borderBottom='15px solid #ff2222';
-        el.style.filter='drop-shadow(2px 2px 0 #000)';
-        markerLayer.appendChild(el);
-        window.__v5TargetMarkers.set(f.id,el);
-      }
-      const p=f.pos.clone();p.y+=2.45;
-      p.project(camera);
-      const x=(p.x*.5+.5)*innerWidth;
-      const y=(-p.y*.5+.5)*innerHeight;
-      el.style.left=(x-9)+'px';el.style.top=(y-15)+'px';
-      el.style.display='block';
-    });
-  }
-  const oldAnimate3D=animate3D;
-  animate3D=function(){
-    if(currentPhase!==1.5&&currentPhase!==2)return;
-    oldAnimate3D();
-    if(currentPhase===1.5||currentPhase===2)ensureTargetMarker();
-  };
-
-  // --- v8 mouse camera: immediate rotation, no click / drag required ---
-  let v8LastMouseX = null, v8LastMouseY = null, v8LastMouseTime = 0;
-  document.addEventListener('mousemove', (e)=>{
-    if(currentPhase!==1.5 && currentPhase!==2){
-      v8LastMouseX = null; v8LastMouseY = null;
-      return;
-    }
-    setBattleCursor(true);
-
-    if(v8LastMouseX !== null && v8LastMouseY !== null){
-      const dx = Math.max(-80, Math.min(80, e.clientX - v8LastMouseX));
-      const dy = Math.max(-80, Math.min(80, e.clientY - v8LastMouseY));
-      const now = performance.now();
-      if(now - v8LastMouseTime > 1 && (dx !== 0 || dy !== 0)){
-        yaw -= dx * 0.008;
-        pitch -= dy * 0.008;
-        pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/3, pitch));
-        v8LastMouseTime = now;
-      }
-    }
-    v8LastMouseX = e.clientX;
-    v8LastMouseY = e.clientY;
-  }, true);
-
-  // --- HUD wording ---
-  const ins=document.getElementById('instructions');
-  if(ins){
-    const observer=new MutationObserver(()=>{
-      if(currentPhase===1.5||currentPhase===2){
-        if(!ins.textContent.includes('Shift')) return;
-      }
-    });
-    observer.observe(ins,{characterData:true,childList:true,subtree:true});
-  }
-
-  // Override the existing instruction text whenever entering the range/battle.
-  const _startRange=startRangePhase;
-  startRangePhase=function(){
-    _startRange();
-    const e=document.getElementById('instructions');
-    if(e)e.innerHTML='【PC】WASD:移動 / マウス:動かすだけで視点変更 / 左クリック:撃つ / 右クリック:サブ / Shift:イカ / Space:ジャンプ / Q:サブ / R:スペシャル<br>チャージャーは左クリック長押し→離すで発射。移動ではインクを消費しません。';
-  };
-  const _startBattle=startBattleFromRange;
-  startBattleFromRange=function(){
-    _startBattle();
-    const e=document.getElementById('instructions');
-    if(e)e.innerHTML='4vs4 CPU対戦！ WASD:移動 / マウス:そのまま視点変更 / 左クリック:攻撃 / 右クリック:サブ / Shift:イカ / Space:ジャンプ / R:スペシャル<br>イカは自分のインクで高速＋インク＆HP回復。通常時もインクが少しずつ回復します。';
-  };
-})();
-</script>
-
-<script>
-(function(){
-  /* =========================================================
-     v6 QUALITY PATCH
-     - Local per-view player/ink colors in online rooms
-     - Matchmaking counter 1/8 ... 8/8
-     - Hide mouse cursor in battle; camera moves immediately
-     - Custom gear powers with 3 equipment slots
-     - Add 4 spinner weapons and charge/fire behavior
-     - Remote players never run local AI
-     - Cleaner per-shot ink trails
-     ========================================================= */
-  const V6 = window.__V6 = window.__V6 || {};
-
-  /* ---------- Local online color system ---------- */
-  const onlineDisplayColors = new Map();
-  const COLOR_POOL = [0xe3ff00,0xff0055,0x00d4ff,0x9900ff,0x42e36f,0xff8a22,0x22a6ff,0xff4fd8];
-  function colorCss(hex){ return '#'+Math.round(hex).toString(16).padStart(6,'0'); }
-  function hashString(s){ let h=2166136261; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return h>>>0; }
-  function displayColorForPlayer(id){
-    if(id===onlinePlayerId) return inkColorPalette[playerConfig.color];
-    if(onlineDisplayColors.has(id)) return onlineDisplayColors.get(id);
-    let idx=hashString(String(id))%COLOR_POOL.length;
-    const own=inkColorPalette[playerConfig.color];
-    if(COLOR_POOL[idx]===own) idx=(idx+1)%COLOR_POOL.length;
-    const c=COLOR_POOL[idx]; onlineDisplayColors.set(id,c); return c;
-  }
-  V6.displayColorForPlayer=displayColorForPlayer;
-
-  function setBattleCursor(hidden){
-    document.body.style.cursor=hidden?'none':'';
-    if(renderer?.domElement) renderer.domElement.style.cursor=hidden?'none':'';
-    document.querySelectorAll('.mobile-btn').forEach(el=>el.style.cursor=hidden?'none':'');
-  }
-
-  /* ---------- Custom gear power editor ---------- */
-  const GEAR_POWERS={
-    none:{label:'なし',desc:'効果なし'},
-    ink_main:{label:'インク効率アップ(メイン)',desc:'メイン消費 -8%'},
-    ink_sub:{label:'インク効率アップ(サブ)',desc:'サブ消費 -10%'},
-    ink_recovery:{label:'インク回復力アップ',desc:'インク回復 +18%'},
-    swim_speed:{label:'イカダッシュ速度アップ',desc:'イカ速度 +8%'},
-    run_speed:{label:'ヒト移動速度アップ',desc:'ヒト速度 +8%'},
-    stealth_jump:{label:'ステルスジャンプ',desc:'スーパージャンプ着地点表示を弱化'},
-    ninja_squid:{label:'イカニンジャ',desc:'イカ移動を静かに'},
-    quick_respawn:{label:'復活時間短縮',desc:'復活待ち時間 -15%'},
-    quick_super_jump:{label:'スーパージャンプ時間短縮',desc:'ジャンプ準備 -12%'},
-    special_charge:{label:'スペシャル増加量アップ',desc:'SP獲得 +12%'},
-    special_saver:{label:'スペシャル減少量ダウン',desc:'やられ時SP減少を軽減'},
-    sub_power:{label:'サブ性能アップ',desc:'ボム/センサー性能 +10%'}
-  };
-  const powerKeys=Object.keys(GEAR_POWERS);
-  const defaultSlots={head:['ink_recovery','ninja_squid'],clothes:['ink_main','swim_speed'],shoes:['run_speed','quick_respawn']};
-  if(!playerConfig.gearSlots) playerConfig.gearSlots=JSON.parse(JSON.stringify(defaultSlots));
-
-  function ensureGearEditor(){
-    if(document.getElementById('v6-gear-editor')) return;
-    const panel=document.createElement('div');
-    panel.id='v6-gear-editor';
-    panel.innerHTML=`
-      <div class="v6-gear-title">ギアパワー カスタマイズ</div>
-      <div class="v6-gear-note">Eでいつでも開いて、自分好みに3種類のギアを組める。</div>
-      ${[['head','アタマギア'],['clothes','フクギア'],['shoes','クツギア']].map(([key,label])=>`
-        <div class="v6-slot"><div class="v6-slot-label">${label}</div><select data-slot="${key}" data-index="0"></select><select data-slot="${key}" data-index="1"></select></div>`).join('')}
-      <div class="v6-gear-effects" id="v6-gear-effects"></div>`;
-    document.getElementById('customize-screen').appendChild(panel);
-    panel.querySelectorAll('select').forEach(sel=>sel.addEventListener('change',()=>{
-      const key=sel.dataset.slot, idx=Number(sel.dataset.index);
-      playerConfig.gearSlots[key][idx]=sel.value;
-      applyCustomGear(playerFighter);
-      updateGearEditor();
-    }));
-  }
-  function fillGearSelects(){
-    ensureGearEditor();
-    document.querySelectorAll('#v6-gear-editor select').forEach(sel=>{
-      sel.innerHTML=powerKeys.map(k=>`<option value="${k}">${GEAR_POWERS[k].label}</option>`).join('');
-      const key=sel.dataset.slot, idx=Number(sel.dataset.index);
-      sel.value=playerConfig.gearSlots[key][idx]||'none';
-    });
-    updateGearEditor();
-  }
-  function getCustomGearProfile(){
-    const all=[...playerConfig.gearSlots.head,...playerConfig.gearSlots.clothes,...playerConfig.gearSlots.shoes];
-    const gp={inkSaver:1,subSaver:1,inkRegen:1,move:1,swim:1,maxHp:100,specialGain:1,respawn:3000,stealthJump:false,ninjaSquid:false,subPower:1};
-    all.forEach(k=>{
-      if(k==='ink_main')gp.inkSaver*=.92;
-      if(k==='ink_sub')gp.subSaver*=.90;
-      if(k==='ink_recovery')gp.inkRegen*=1.18;
-      if(k==='swim_speed')gp.swim*=1.08;
-      if(k==='run_speed')gp.move*=1.08;
-      if(k==='quick_respawn')gp.respawn*=.85;
-      if(k==='quick_super_jump')gp.superJump=.88;
-      if(k==='special_charge')gp.specialGain*=1.12;
-      if(k==='stealth_jump')gp.stealthJump=true;
-      if(k==='ninja_squid')gp.ninjaSquid=true;
-      if(k==='sub_power')gp.subPower*=1.10;
-    });
-    return gp;
-  }
-  function applyCustomGear(f){
-    if(!f) return;
-    const gp=getCustomGearProfile();
-    f.gearProfile=Object.assign({}, f.gearProfile||{}, gp);
-    f.cfg.gearSlots=JSON.parse(JSON.stringify(playerConfig.gearSlots));
-    f._customGearApplied=true;
-  }
-  function updateGearEditor(){
-    const e=document.getElementById('v6-gear-effects'); if(!e)return;
-    const gp=getCustomGearProfile();
-    const labels=[];
-    if(gp.inkSaver<1)labels.push(`メイン消費 -${Math.round((1-gp.inkSaver)*100)}%`);
-    if(gp.subSaver<1)labels.push(`サブ消費 -${Math.round((1-gp.subSaver)*100)}%`);
-    if(gp.inkRegen>1)labels.push(`インク回復 +${Math.round((gp.inkRegen-1)*100)}%`);
-    if(gp.swim>1)labels.push(`イカ速 +${Math.round((gp.swim-1)*100)}%`);
-    if(gp.move>1)labels.push(`ヒト速 +${Math.round((gp.move-1)*100)}%`);
-    if(gp.specialGain>1)labels.push(`SP増加 +${Math.round((gp.specialGain-1)*100)}%`);
-    if(gp.ninjaSquid)labels.push('イカニンジャ');
-    if(gp.stealthJump)labels.push('ステルスジャンプ');
-    e.textContent='現在の効果：'+(labels.join(' / ')||'なし');
-  }
-  V6.applyCustomGear=applyCustomGear;
-
-  /* ---------- Override E: gear customization after opening game ---------- */
-  const _oldGoToCustomize=goToCustomizeFromGame;
-  goToCustomizeFromGame=function(){
-    _oldGoToCustomize();
-    ensureGearEditor();
-    fillGearSelects();
-    setBattleCursor(false);
-    if(playerFighter) applyCustomGear(playerFighter);
-  };
-  const _oldSetupCustomize=setupCustomizeUI;
-  setupCustomizeUI=function(){
-    _oldSetupCustomize();
-    ensureGearEditor();
-    fillGearSelects();
-  };
-
-  /* ---------- Add spinner family ---------- */
-  if(!weaponList.some(w=>w.name==='スプラスピナー')){
-    weaponList.push(
-      {id:24,category:'spinner',name:'スプラスピナー',color:0x6be3ff,length:.58,thickness:.16,scope:false,
-       chargeTime:430,burstShots:10,burstRate:75,damage:30,range:23,speed:40,paintRadius:.88,inkCost:2.2,sub:'クイックボム',special:'エナジースタンド'},
-      {id:25,category:'spinner',name:'バレルスピナー',color:0xaaccee,length:.72,thickness:.20,scope:false,
-       chargeTime:720,burstShots:18,burstRate:85,damage:32,range:31,speed:44,paintRadius:.92,inkCost:2.9,sub:'スプリンクラー',special:'ホップソナー'},
-      {id:26,category:'spinner',name:'ノーチラス47',color:0x7788aa,length:.62,thickness:.18,scope:false,
-       chargeTime:650,burstShots:14,burstRate:78,damage:31,range:27,speed:42,paintRadius:.90,inkCost:2.7,sub:'ポイントセンサー',special:'マルチミサイル'},
-      {id:27,category:'spinner',name:'ハイドラント',color:0x555566,length:.82,thickness:.23,scope:false,
-       chargeTime:980,burstShots:22,burstRate:92,damage:38,range:35,speed:48,paintRadius:.95,inkCost:3.6,sub:'ロボットボム',special:'グレートバリア'}
-    );
-    categoryLabel.spinner='スピナー';
-  }
-
-  function shootSpinner(f,dir,now){
-    const w=f.weapon;
-    if(!f.spinnerCharging && !f.spinnerFiring){
-      if(!consumeInk(f,(w.inkCost||2.5)*.18))return;
-      f.spinnerCharging=true; f.spinnerChargeStart=now;
-      return;
-    }
-    if(f.spinnerCharging){
-      const frac=Math.min(1,(now-f.spinnerChargeStart)/w.chargeTime);
-      const gauge=document.getElementById('charge-gauge');
-      if(f.isPlayer){ gauge.style.display='block'; gauge.style.setProperty('--pct',Math.round(frac*100)); }
-      if(frac<1)return;
-      f.spinnerCharging=false;f.spinnerFiring=true;f.spinnerShotsLeft=w.burstShots;f.spinnerNextShot=now;
-      if(f.isPlayer) gauge.style.display='none';
-    }
-    if(f.spinnerFiring && f.spinnerShotsLeft>0 && now>=f.spinnerNextShot){
-      if(!consumeInk(f,w.inkCost)) { f.spinnerFiring=false; f.spinnerShotsLeft=0; return; }
-      f.spinnerNextShot=now+w.burstRate; f.spinnerShotsLeft--;
-      const d=dir.clone(); d.x+=(Math.random()-.5)*.035;d.y+=(Math.random()-.5)*.035;d.z+=(Math.random()-.5)*.035;d.normalize();
-      spawnBullet(f,d,{speed:w.speed,damage:w.damage,gravity:10,radius:.23,visRadius:.30,life:w.range/w.speed,paintRadius:w.paintRadius});
-      f.specialGauge=Math.min(100,f.specialGauge+1.1*(f.gearProfile?.specialGain||1));
-      sfx('shoot');
-      if(f.spinnerShotsLeft<=0)f.spinnerFiring=false;
-    }
-  }
-
+  /* room counts update without changing the stable v25 combat core */
   const _oldTryShoot=tryShoot;
   tryShoot=function(f,dir,now){
     if(f.weapon?.category==='spinner'){shootSpinner(f,dir,now);return;}
@@ -4226,8 +3671,8 @@ ${roomText(m.players)}`;
   function mapPoint(ctx,size,x,z){
     const pad=10;
     const usable=size-pad*2;
-    return {x:pad+((x+STAGE_HALF_X)/(STAGE_HALF_X*2))*usable,
-            y:pad+((z+STAGE_HALF_Z)/(STAGE_HALF_Z*2))*usable};
+    return {x:pad+((x+STAGE_HALF)/(STAGE_HALF*2))*usable,
+            y:pad+((z+STAGE_HALF)/(STAGE_HALF*2))*usable};
   }
 
   function drawMap(ctx,size){
@@ -4417,8 +3862,8 @@ ${roomText(m.players)}`;
     const nx=(x-pad/760)/usable;
     const nz=(y-pad/760)/usable;
     return {
-      x:-STAGE_HALF_X+Math.max(0,Math.min(1,nx))*STAGE_HALF_X*2,
-      z:-STAGE_HALF_Z+Math.max(0,Math.min(1,nz))*STAGE_HALF_Z*2
+      x:-STAGE_HALF+Math.max(0,Math.min(1,nx))*STAGE_HALF*2,
+      z:-STAGE_HALF+Math.max(0,Math.min(1,nz))*STAGE_HALF*2
     };
   }
 
@@ -4467,216 +3912,183 @@ ${roomText(m.players)}`;
 </script>
 
 
-
-<!-- v35 stability/gameplay fix: E behavior, squid ink rules, robust bomb visuals -->
 <script>
+/* =========================================================
+   v36: account + rank + safe squid state
+   Built on the working v25 code path. No page splitting.
+   ========================================================= */
 (function(){
-  // ------------------------------------------------------------
-  // 1) E is a lobby-only interaction key.
-  //    During practice/battle it must never kick the player out.
-  // ------------------------------------------------------------
-  window.addEventListener('keydown', function(e){
-    if(e.code !== 'KeyE') return;
-    if(currentPhase === 1.5 || currentPhase === 2 || currentPhase === 3){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if(currentPhase === 1.5){
-        showToast('試し撃ち中：Eでは移動しません');
+  const localKey='splatoonLocalAccountsV36';
+  const tokenKey='splatoonAccountToken';
+  const profileKey='splatoonAccountProfile';
+  const nameEl=()=>document.getElementById('account-name');
+  const passEl=()=>document.getElementById('account-password');
+  const statusEl=()=>document.getElementById('account-status');
+  const profileEl=()=>document.getElementById('account-profile');
+  window.playerAccount=window.playerAccount||{token:null,profile:null,online:false};
+
+  function localAccounts(){try{return JSON.parse(localStorage.getItem(localKey)||'{}')||{};}catch{return {};}}
+  function saveLocalAccounts(a){localStorage.setItem(localKey,JSON.stringify(a));}
+  async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+  function updateAccountProfileUI(profile){
+    if(!profile)return;
+    window.playerAccount.profile=profile;
+    localStorage.setItem(profileKey,JSON.stringify(profile));
+    const p=profileEl();if(p){p.style.display='block';p.innerHTML=`<strong>${profile.name}</strong> <span class="rank-badge">${profile.rank}</span><br>レート ${profile.rating}　勝利 ${profile.wins}　敗北 ${profile.losses}　試合 ${profile.games}`;}
+    const op=document.getElementById('online-profile');if(op)op.innerHTML=`${profile.name}　<span class="rank-badge">${profile.rank}</span>　レート ${profile.rating}　｜ 勝 ${profile.wins} / 負 ${profile.losses}`;
+  }
+  window.updateAccountProfileUI=updateAccountProfileUI;
+  function setStatus(t,good=false){const e=statusEl();if(e){e.textContent=t;e.style.color=good?'#7cffb2':'#ffd166';}}
+  function hideAccount(){const e=document.getElementById('account-screen');if(e)e.style.display='none';}
+  window.showAccountScreen=function(){
+    const e=document.getElementById('account-screen');if(!e)return;
+    document.getElementById('loading-screen').style.display='none';
+    e.style.display='flex';
+    const saved=localStorage.getItem('splatoonAccountName');if(saved&&nameEl())nameEl().value=saved;
+    const old=localStorage.getItem(profileKey);if(old){try{updateAccountProfileUI(JSON.parse(old));}catch{}}
+  };
+  function finishAuth(profile,token,online){
+    window.__accountReady=true;window.playerAccount={token:token||null,profile,online:!!online};
+    if(token)localStorage.setItem(tokenKey,token);
+    if(profile?.name)localStorage.setItem('splatoonAccountName',profile.name);
+    updateAccountProfileUI(profile);
+    setStatus('ログインしました。データを読み込みました。',true);
+    setTimeout(()=>{hideAccount(); if(typeof window.__startCustomizeBase==='function')window.__startCustomizeBase();},350);
+  }
+  async function api(path,body){
+    const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({ok:false,error:'サーバーの応答を読めませんでした。'}));
+    if(!r.ok||!d.ok)throw new Error(d.error||'通信エラー');
+    return d;
+  }
+  async function localLogin(mode){
+    const name=(nameEl()?.value||'').trim(), pw=passEl()?.value||'';
+    if(name.length<2||name.length>16||/\s/.test(name))throw new Error('名前は2〜16文字、空白なしで入力してください。');
+    if(pw.length<4)throw new Error('パスワードは4文字以上です。');
+    const a=localAccounts(), h=await sha256(pw+'::v36');
+    if(mode==='register'){
+      if(a[name])throw new Error('その名前はこの端末に登録済みです。');
+      a[name]={name,hash:h,rating:750,wins:0,losses:0,games:0};saveLocalAccounts(a);
+    }else if(!a[name]||a[name].hash!==h){throw new Error('名前またはパスワードが違います。');}
+    return a[name];
+  }
+  async function doAuth(mode){
+    setStatus(mode==='register'?'登録中…':'ログイン中…');
+    try{
+      const name=(nameEl()?.value||'').trim(), pw=passEl()?.value||'';
+      if(location.protocol!=='file:'){
+        const d=await api(mode==='register'?'/api/account/register':'/api/account/login',{name,password:pw});
+        finishAuth(d.profile,d.token,true); return;
       }
-    }
-  }, true);
-
-  // ------------------------------------------------------------
-  // 2) Squid rules
-  //    - Friendly ink: fast squid, HP/ink recovery handled below.
-  //    - Neutral/unpainted ground: squid allowed, but slower than human.
-  //    - Enemy ink: squid allowed for about 1 second, then forced human.
-  // ------------------------------------------------------------
-  function v35InkTeamAt(x,z){
-    if(!paintCanvas || !paintCtx) return 'none';
-    const q=worldToCanvas(x,z);
-    const cx=Math.floor(q.cx), cy=Math.floor(q.cy);
-    if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height) return 'none';
-    const d=paintCtx.getImageData(cx,cy,1,1).data;
-    const rgb=[d[0]/255,d[1]/255,d[2]/255];
-    if(rgb[0]+rgb[1]+rgb[2] < .12) return 'none';
-    const a=new THREE.Color(teamAHex), b=new THREE.Color(teamBHex);
-    const da=(rgb[0]-a.r)**2+(rgb[1]-a.g)**2+(rgb[2]-a.b)**2;
-    const db=(rgb[0]-b.r)**2+(rgb[1]-b.g)**2+(rgb[2]-b.b)**2;
-    if(da<0.085 && da<db) return 'A';
-    if(db<0.085 && db<da) return 'B';
-    return 'none';
+      const prof=await localLogin(mode);finishAuth({name:prof.name,rating:prof.rating,rank:rankLocal(prof.rating),wins:prof.wins,losses:prof.losses,games:prof.games},null,false);
+    }catch(e){setStatus(e.message||'ログインに失敗しました。');}
   }
+  function rankLocal(r){if(r>=2300)return'X';if(r>=2100)return'S+';if(r>=1950)return'S';if(r>=1800)return'A+';if(r>=1650)return'A';if(r>=1500)return'A-';if(r>=1350)return'B+';if(r>=1200)return'B';if(r>=1050)return'B-';if(r>=900)return'C+';if(r>=750)return'C';return'C-';}
+  window.__v36LocalRecordResult=function(winnerTeam){
+    const profile=window.playerAccount?.profile;
+    if(!profile||profile.name==='Guest')return;
+    const accounts=localAccounts(); const a=accounts[profile.name];
+    if(!a)return;
+    a.games=(a.games||0)+1;
+    const won=winnerTeam==='DRAW'?null:(playerFighter?.team===winnerTeam);
+    if(won===true){a.wins=(a.wins||0)+1;a.rating=Math.min(3000,(a.rating||750)+25);}
+    else if(won===false){a.losses=(a.losses||0)+1;a.rating=Math.max(0,(a.rating||750)-20);}
+    saveLocalAccounts(accounts);
+    const prof={name:a.name,rating:a.rating,rank:rankLocal(a.rating),wins:a.wins||0,losses:a.losses||0,games:a.games||0};
+    window.playerAccount.profile=prof;updateAccountProfileUI(prof);
+  };
 
-  function v35IsEnemyInk(f){
-    const t=v35InkTeamAt(f.pos.x,f.pos.z);
-    return t!=='none' && t!==f.team;
+  document.getElementById('account-login').addEventListener('click',()=>doAuth('login'));
+  document.getElementById('account-register').addEventListener('click',()=>doAuth('register'));
+  document.getElementById('account-guest').addEventListener('click',()=>{
+    window.__accountReady=true;window.playerAccount={token:null,profile:{name:'Guest',rating:750,rank:'C-',wins:0,losses:0,games:0},online:false};
+    updateAccountProfileUI(window.playerAccount.profile);hideAccount();
+    if(typeof window.__startCustomizeBase==='function')window.__startCustomizeBase();
+  });
+
+  // Preserve the v25 customization initializer once, then use it after account gate.
+  const originalStartCustomize=startCustomizePhase;
+  window.__startCustomizeBase=function(){originalStartCustomize();};
+  startCustomizePhase=function(){
+    if(window.__accountReady===true){originalStartCustomize();}
+    else window.showAccountScreen();
+  };
+
+  // Auto-restore a valid local profile in offline mode, or server token online.
+  (async()=>{
+    const saved=localStorage.getItem(profileKey);
+    if(saved){try{window.playerAccount.profile=JSON.parse(saved);}catch{}}
+    if(location.protocol!=='file:'){
+      const token=localStorage.getItem(tokenKey);
+      if(token){try{const r=await fetch('/api/account/me',{headers:{Authorization:'Bearer '+token}});const d=await r.json();if(d.ok){window.__accountReady=true;window.playerAccount={token,profile:d.profile,online:true};updateAccountProfileUI(d.profile);}}catch{}}
+    } else if(window.playerAccount.profile){window.__accountReady=true;}
+  })();
+
+  // ---------------------------------------------------------
+  // Robust squid toggle: own/neutral = allowed; enemy ink = max 1s.
+  // This sits above the old hold-to-swim input without altering it.
+  // ---------------------------------------------------------
+  let squidWanted=false, enemySquidUntil=0, enemyInkLocked=false;
+  function onEnemyInkSafe(f){
+    if(!f||!paintCtx)return false;
+    const {cx,cy}=worldToCanvas(f.pos.x,f.pos.z);
+    if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height)return false;
+    const d=paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data;
+    const c=new THREE.Color(f.team==='A'?teamBHex:teamAHex);
+    const r=d[0]/255,g=d[1]/255,b=d[2]/255;
+    return (r-c.r)**2+(g-c.g)**2+(b-c.b)**2<0.08;
   }
-
-  const v35PrevMovement = updatePlayerMovement;
-  updatePlayerMovement = function(delta){
-    const f=playerFighter;
-    if(!f || !f.alive){ return v35PrevMovement(delta); }
-    setupFighterEconomy(f);
+  function toggleSquid(e){
+    if(e) {e.preventDefault();e.stopImmediatePropagation();}
+    if(currentPhase!==1.5&&currentPhase!==2)return;
+    squidWanted=!squidWanted;
+    enemySquidUntil=0;enemyInkLocked=false;
+  }
+  window.addEventListener('keydown',e=>{if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!e.repeat)toggleSquid(e);},true);
+  document.getElementById('btn-squid').addEventListener('pointerdown',toggleSquid,true);
+  const baseMovement=updatePlayerMovement;
+  updatePlayerMovement=function(delta){
+    if(!playerFighter||!playerFighter.alive){return baseMovement(delta);}
+    const enemy=onEnemyInkSafe(playerFighter);
     const now=performance.now();
-    const inkTeam=v35InkTeamAt(f.pos.x,f.pos.z);
-    const enemyInk = inkTeam!=='none' && inkTeam!==f.team;
-
-    if(!f._v35EnemySquidUntil) f._v35EnemySquidUntil=0;
-
-    // Enemy ink gives a brief squid window, then forces human form.
-    if(enemyInk){
-      if(keys.shift && !f.squid_mode && now>f._v35EnemySquidUntil){
-        f._v35EnemySquidUntil=now+1000;
-      }
-      if(!keys.shift){
-        f._v35EnemySquidUntil=0;
-      }
-    }else{
-      f._v35EnemySquidUntil=0;
-    }
-
-    const allowedSquid = !!keys.shift && (!enemyInk || now < f._v35EnemySquidUntil);
-    const squidSpeed = inkTeam===f.team ? 1.85 : (enemyInk ? 0.30 : 0.52);
-    f._v35SquidSpeed=squidSpeed;
-
-    // Temporarily mirror the control state used by the original movement code,
-    // but let our wrapper decide whether squid mode is actually active.
+    if(enemy){
+      if(!enemySquidUntil&&!enemyInkLocked){enemySquidUntil=now+1000;enemyInkLocked=true;}
+      if(now>=enemySquidUntil)squidWanted=false;
+    }else{enemySquidUntil=0;enemyInkLocked=false;}
     const oldShift=keys.shift;
-    keys.shift=allowedSquid;
-    v35PrevMovement(delta);
-    keys.shift=oldShift;
-
-    // v25's movement function computes its own speed. Re-apply only the
-    // neutral/enemy restriction here so we do not disturb friendly-ink speed.
-    if(f.squid_mode && f._moving){
-      const factor = inkTeam===f.team ? 1 : (enemyInk ? 0.30 : 0.52);
-      f.pos.x = Math.max(-39, Math.min(39, f.pos.x));
-      f.pos.z = Math.max(-72, Math.min(72, f.pos.z));
-      // Do not drain ink just for squid movement; this game version uses
-      // regeneration/weapon consumption for the tank economy.
-      if(factor!==1){
-        // Convert the current displacement into a damped displacement around
-        // the already-updated position. This keeps neutral/enemy squid slower
-        // without rewriting the original collision code.
-        const vx=playerVelocity.x, vz=playerVelocity.z;
-        playerVelocity.x*=factor;
-        playerVelocity.z*=factor;
-      }
-    }
-
-    // Enemy ink: once the short window expires, immediately become human.
-    if(enemyInk && f.squid_mode && now>=f._v35EnemySquidUntil){
-      f.squid_mode=false;
-      f.human.visible=true;
-      f.squid.visible=false;
-    }
+    keys.shift=squidWanted;
+    baseMovement(delta);
+    // The stable v25 renderer uses keys.shift for the visual form.
+    keys.shift=squidWanted;
+    if(!squidWanted && playerFighter.squid_mode){playerFighter.squid_mode=false;playerFighter.human.visible=true;playerFighter.squid.visible=false;}
+    if(squidWanted && !enemy && !playerFighter.squid_mode){playerFighter.squid_mode=true;playerFighter.human.visible=false;playerFighter.squid.visible=true;}
+    if(squidWanted && enemy && now>=enemySquidUntil){playerFighter.squid_mode=false;playerFighter.human.visible=true;playerFighter.squid.visible=false;}
+    return undefined;
   };
 
-  // More explicit resource recovery: neutral squid recovers, but friendly
-  // squid recovers much faster; enemy squid has only a tiny recovery window.
-  if(typeof regenPlayer==='function'){
-    const v35PrevRegen=regenPlayer;
-    regenPlayer=function(f,delta,isSquid){
-      setupFighterEconomy(f);
-      const gp=f.gearProfile||gearProfile(f);
-      const now=performance.now();
-      if(now < f.inkRegenBlockedUntil) return;
-      const inkTeam=v35InkTeamAt(f.pos.x,f.pos.z);
-      if(!isSquid){
-        f.ink=Math.min(100,f.ink+4.0*delta*(gp.inkRegen||1));
-        return;
-      }
-      const rate=inkTeam===f.team?30:(inkTeam!=='none'?6:12);
-      f.ink=Math.min(100,f.ink+rate*delta*(gp.inkRegen||1));
-      if(inkTeam===f.team && f.hp<f.maxHp){
-        f.hp=Math.min(f.maxHp,f.hp+10*delta*(gp.inkRegen||1));
-      }
-    };
-  }
+  // Prevent the old keyup from turning off the new toggle state.
+  window.addEventListener('keyup',e=>{if(e.code==='ShiftLeft'||e.code==='ShiftRight'){e.preventDefault();e.stopImmediatePropagation();keys.shift=squidWanted;}},true);
 
-  // ------------------------------------------------------------
-  // 3) Bomb visual: larger, clearly spherical, always visible until the
-  //    actual bomb entity is removed. We replace the tiny placeholder mesh
-  //    created by the existing throw function with a dedicated group.
-  // ------------------------------------------------------------
-  const v35PrevThrow = tryThrowSub;
-  tryThrowSub = function(fighter,aimDir,now){
-    const before=subsList.length;
-    v35PrevThrow(fighter,aimDir,now);
-    if(subsList.length<=before) return;
-    const s=subsList[subsList.length-1];
-    if(!s || !s.mesh) return;
-    const old=s.mesh;
-    const col=s.team==='A'?teamAHex:teamBHex;
-    const g=new THREE.Group();
-    g.position.copy(old.position);
-    g.rotation.copy(old.rotation);
-    g.renderOrder=20;
+  // Battle E is intentionally disabled; it should never kick a live match to another phase.
+  window.addEventListener('keydown',e=>{
+    if(e.code==='KeyE'&&(currentPhase===2)){e.preventDefault();e.stopImmediatePropagation();}
+  },true);
 
-    const main=new THREE.Mesh(
-      new THREE.SphereGeometry(.42,14,10),
-      new THREE.MeshLambertMaterial({color:col})
-    );
-    main.scale.set(1,0.86,1);
-    main.frustumCulled=false;
-    g.add(main);
-
-    const ring=new THREE.Mesh(
-      new THREE.TorusGeometry(.47,.065,7,18),
-      new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88})
-    );
-    ring.rotation.x=Math.PI/2;
-    ring.frustumCulled=false;
-    g.add(ring);
-
-    const cap=new THREE.Mesh(
-      new THREE.BoxGeometry(.20,.11,.20),
-      new THREE.MeshBasicMaterial({color:0xffffff})
-    );
-    cap.position.y=.34;
-    cap.frustumCulled=false;
-    g.add(cap);
-
-    scene.remove(old);
-    scene.add(g);
-    s.mesh=g;
-    s._v35BombVisual={main,ring,cap,baseScale:1};
-    s._v35NoEarlyVisualCull=true;
-    s.mesh.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
-  };
-
-  const v35PrevUpdateSubs=updateSubs;
-  updateSubs=function(delta){
-    // Animate before update so the bomb remains visible during its flight.
-    const now=performance.now();
-    for(const s of subsList){
-      const v=s._v35BombVisual;
-      if(!v || !s.mesh) continue;
-      const pulse=1+Math.sin(now*.018+s.age*8)*.07;
-      v.main.scale.set(pulse,pulse*.86,pulse);
-      v.ring.rotation.z=now*.0025;
-      const fuse=(s.fuse||1.2);
-      const left=Math.max(0,1-(s.age/fuse));
-      const blink=left<.4 ? (Math.sin(now*.03)>0) : true;
-      v.main.visible=true;
-      v.ring.visible=blink;
-      v.cap.visible=true;
-      s.mesh.visible=true;
+  // Report online result before the stable v25 result screen is shown.
+  const baseEndBattleForV36=endBattle;
+  endBattle=function(){
+    computeTurf();
+    const winA=turfPct.a>=turfPct.b;
+    const winner=playerFighter?.team==='A' ? (winA?'A':'B') : (winA?'B':'A');
+    if(window.__v36OnlineReport && onlineActive && onlineStarted && !onlineResultSent){
+      window.__v36OnlineReport(winner);
     }
-    v35PrevUpdateSubs(delta);
+    if(!onlineActive && window.__v36LocalRecordResult) window.__v36LocalRecordResult(winner);
+    baseEndBattleForV36();
   };
-
-  // Helpful HUD hint, but no navigation action is attached to E in battle.
-  const hint=document.getElementById('range-hint');
-  if(hint && currentPhase===1.5){
-    hint.innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[O] CPU対戦　[P] オンライン　[E] は試し撃ち中は無効';
-  }
-
-  window.__V35={v35InkTeamAt, v35IsEnemyInk};
+  window.__v36OnlineReport=reportOnlineResult;
 })();
 </script>
-
 </body>
 </html>
 
