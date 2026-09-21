@@ -1,9 +1,15 @@
-# Splatoon-like Web v18
+# 自作インクバトル Web v19
 
-- town.html: 自作3Dロビー
-- battle.html: 対戦ステージ
-- 2〜8人オンライン：参加者全員が準備OKで開始
-- 3分ナワバリ形式の勝敗表示
-- MAPボタン / Mキーで必要な時だけフルマップ
-- 56×140の長方形ステージ、外周は水落ち判定
-- npm install → npm start
+ゲーム本体は `index.html` の1ファイルに統合しています。
+
+- 街ロビー → 施設 → 黄色い波の遷移 → 自動で試し撃ち
+- CPU対戦 / オンライン2〜8人
+- MAPは押した時だけ表示
+- ページを再読み込みするとゲーム状態・カスタマイズ保存をリセット
+- Three.jsはCDN読み込み
+
+## Render
+Build Command: `npm install`
+Start Command: `npm start`
+
+オンライン時は `server.js` と `ws` を使用します。

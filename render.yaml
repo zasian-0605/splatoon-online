@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: splatoon-online-v18
+    name: splatoon-online-v19
     runtime: node
     plan: free
     buildCommand: npm install
