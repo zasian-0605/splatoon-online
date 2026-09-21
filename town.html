@@ -165,6 +165,24 @@ body.pointer-lock-ready{cursor:none !important;}
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
 </style>
+
+<style id="v18-style">
+/* v18: map opens only on demand */
+#minimap{display:none !important;}
+#fullmap{display:none;}
+#v18-online-ready{margin-top:8px;text-align:center;font:900 14px/1.4 Arial,Meiryo,sans-serif;color:#e3ff00;}
+#result-screen.v18-result{background:radial-gradient(circle at 50% 38%,rgba(80,10,120,.96),rgba(7,3,18,.97) 68%);}
+.v18-result-card{width:min(760px,92vw);padding:34px 34px 28px;border:4px solid #fff;border-radius:24px;background:rgba(8,8,16,.86);box-shadow:14px 14px 0 rgba(0,0,0,.55);text-align:center;}
+.v18-result-kicker{font:900 15px/1 Arial,Meiryo,sans-serif;letter-spacing:4px;color:#e3ff00;margin-bottom:8px;}
+.v18-result-title{font:900 clamp(54px,10vw,92px)/.9 Arial Black,Impact,sans-serif;text-shadow:5px 5px 0 #000;margin:0 0 18px;}
+.v18-score-row{display:flex;gap:12px;justify-content:center;align-items:stretch;margin:16px 0;flex-wrap:wrap;}
+.v18-team-box{flex:1;min-width:180px;padding:16px;border-radius:16px;border:3px solid rgba(255,255,255,.6);background:rgba(255,255,255,.07);}
+.v18-team-box .label{font:900 14px Arial,Meiryo,sans-serif;opacity:.85;}
+.v18-team-box .pct{font:900 52px/1 Arial Black,Impact,sans-serif;margin-top:6px;}
+.v18-result-stats{font:900 15px/1.9 Arial,Meiryo,sans-serif;color:#fff;margin:14px 0 22px;}
+.v18-result-note{font:700 12px Arial,Meiryo,sans-serif;color:#bbb;margin-bottom:18px;}
+#online-start.ready-on{background:#e3ff00 !important;color:#2f059c !important;box-shadow:0 0 0 3px rgba(227,255,0,.25),0 0 22px rgba(227,255,0,.65);}
+</style>
 </head>
 <body>
 
@@ -270,9 +288,9 @@ body.pointer-lock-ready{cursor:none !important;}
   <div id="online-card">
     <h2>オンライン バンカラマッチ</h2>
     <div id="online-status">接続準備中…</div>
-    <div id="online-room">8人揃うまで自動マッチングします。</div>
+    <div id="online-room">2〜8人。参加者全員が「準備OK」なら開始します。</div><div id="v18-online-ready">準備状態：未参加</div>
     <div id="online-actions">
-      <button id="online-start">マッチング開始</button>
+      <button id="online-start">参加して準備OK</button>
       <button id="online-cancel">戻る</button>
     </div>
     <div id="online-note">ブラウザだけで遊べるWeb版。試し撃ち・CPU 4vs4・オンライン8人を搭載。オンライン時だけ通信サーバーを使います。</div>
@@ -958,8 +976,9 @@ sampleCanvas.width = 96; sampleCanvas.height = 96;
 const sampleCtx = sampleCanvas.getContext('2d');
 
 function worldToCanvas(x,z){
-  const u = (x + STAGE_HALF) / (STAGE_HALF*2);
-  const v = (z + STAGE_HALF) / (STAGE_HALF*2);
+  const bd = window.__BATTLE_BOUNDS || {halfW:28,halfD:70};
+  const u = (x + bd.halfW) / (bd.halfW*2);
+  const v = (z + bd.halfD) / (bd.halfD*2);
   return { cx: u*paintCanvas.width, cy: v*paintCanvas.height };
 }
 
@@ -967,7 +986,8 @@ function hexToCss(hex){ return '#' + hex.toString(16).padStart(6,'0'); }
 
 function paintGround(x,z,radius,colorHex){
   const {cx,cy} = worldToCanvas(x,z);
-  const cr = (radius/(STAGE_HALF*2)) * paintCanvas.width;
+  const bd = window.__BATTLE_BOUNDS || {halfW:28,halfD:70};
+  const cr = (radius/(bd.halfW*2)) * paintCanvas.width;
   paintCtx.fillStyle = hexToCss(colorHex);
   paintCtx.beginPath();
   const pts = 10 + Math.floor(Math.random()*6);
@@ -1182,7 +1202,7 @@ function createFighter(opts){
     armL: built.armL, armR: built.armR, legL: built.legL, legR: built.legR,
     weapon: weaponList[cfg.weapon], specialGauge:0, lastShot:0, lastSub:0,
     invulnUntil:0, speedBoostUntil:0, chargeStart:0, isCharging:false,
-    lastSwing:0, activeSpecialUntil:0,
+    lastSwing:0, activeSpecialUntil:0, kills:0, deaths:0,
     cfg: cfg,
     ai: opts.isPlayer ? null : { state:'patrol', target:null, waypoint: waypoints[Math.floor(Math.random()*waypoints.length)]||{x:0,z:0}, nextDecision:0, paintTick:0 }
   };
@@ -1248,6 +1268,7 @@ function killFighter(f){
   if(!f.alive) return;
   f.alive = false;
   f.deathLocation = f.pos.clone();
+  f.deaths=(f.deaths||0)+1;
   f.root.visible = false;
   f.respawnAt = performance.now() + 3000;
   addKillFeed(`${weaponCategoryIcon(f)} ${f.team==='A'?'A':'B'} ${f.id} がやられた`, 'dead');
@@ -1262,13 +1283,14 @@ function killFighter(f){
 function applyDamage(target, dmg, fromFighter){
   if(!target.alive) return;
   if(performance.now() < target.invulnUntil) return;
-  // グレートバリア：自陣シールド内なら無効化
   for(let i=0;i<shields.length;i++){
     const sh = shields[i];
     if(sh.team===target.team && target.pos.distanceTo(sh.pos)<sh.radius) return;
   }
+  if(fromFighter && fromFighter.team!==target.team){ target._lastAttackerId=fromFighter.id; }
   target.hp -= dmg;
   if(target.hp <= 0){
+    if(fromFighter && fromFighter.team!==target.team){ fromFighter.kills=(fromFighter.kills||0)+1; }
     killFighter(target);
   }
 }
@@ -2225,9 +2247,10 @@ function updatePlayerMovement(delta){
 }
 
 function clampStageXY(x,z){
+  const bd=window.__BATTLE_BOUNDS||{halfW:28,halfD:70,water:4};
   return {
-    x:Math.max(-17.25,Math.min(17.25,x)),
-    z:Math.max(-43.25,Math.min(43.25,z))
+    x:Math.max(-bd.halfW-bd.water*.75,Math.min(bd.halfW+bd.water*.75,x)),
+    z:Math.max(-bd.halfD-bd.water*.75,Math.min(bd.halfD+bd.water*.75,z))
   };
 }
 
@@ -2380,9 +2403,9 @@ function updateBullets(delta){
     if(hitFighter){
       if(b.explosive){
         explodeAt(b.mesh.position.clone(), b.explosionRadius, b.splashDamage, b.team, {paintRadius:b.paintRadius});
-        applyDamage(hitFighter, b.damage - b.splashDamage, null); // 直撃分は追加
+        applyDamage(hitFighter, b.damage - b.splashDamage, fighters.find(f=>f.id===b.fromId)||null); // 直撃分は追加
       } else {
-        applyDamage(hitFighter, b.damage, null);
+        applyDamage(hitFighter, b.damage, fighters.find(f=>f.id===b.fromId)||null);
       }
       for(let p=0;p<4;p++) spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
       scene.remove(b.mesh);
@@ -2996,7 +3019,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   function setOnlineStatus(t){const e=document.getElementById('online-status');if(e)e.textContent=t;}
   function roomText(players=[]){
-    return players.map(p=>`[${p.team}] ${p.id}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n')||'8人揃うまで自動マッチングします。';
+    return players.map(p=>`[${p.team}] ${p.id}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n')||'2〜8人。参加者全員が「準備OK」なら開始します。';
   }
   function onlineUrl(){ return (location.protocol==='https:'?'wss://':'ws://') + location.host; }
 
@@ -3113,7 +3136,7 @@ ${roomText(m.players)}`;
   };
 
   /* ---------- Online keyboard + panel buttons ---------- */
-  document.getElementById('online-start').addEventListener('click',()=>{audioInit();if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',name:'player'}));setOnlineStatus('マッチング中… 1/8人'); const r=document.getElementById('online-room'); if(r)r.textContent='8人揃うまで待機中… 現在 1/8人';}});
+  document.getElementById('online-start').addEventListener('click',()=>{audioInit();if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',name:'player'}));setOnlineStatus('マッチング中… 1/8人'); const r=document.getElementById('online-room'); if(r)r.textContent='2人以上集まり、全員が準備OKになると開始します。';}});
   document.getElementById('online-cancel').addEventListener('click',closeOnlinePanel);
   window.addEventListener('keydown',(e)=>{
     if(e.code==='KeyP' && currentPhase===1.5){openOnlinePanel();}
@@ -4328,7 +4351,175 @@ ${roomText(m.players)}`;
 
 
 
-</body>
+<script>
+/* =====================================================================
+   v18 FINAL INTEGRATION
+   - town.html -> battle.html mode routing
+   - online: 2~8 players, all ready => start
+   - full map only when M / MAP is pressed
+   - dynamic online team counts
+   - proper result card
+   - fixed rectangular stage bounds / map scaling
+   ===================================================================== */
+(function(){
+  const q=new URLSearchParams(location.search);
+  const mode=q.get('mode');
+
+  // Dynamic online HUD roster count (works for 2..8 players).
+  const oldLifeStrip=window.updateTeamLifeStrip;
+  if(typeof oldLifeStrip==='function'){
+    window.updateTeamLifeStrip=function(){
+      try{
+        const a=document.getElementById('life-a'), b=document.getElementById('life-b');
+        const paint=(team,el)=>{
+          if(!el)return;
+          el.innerHTML='';
+          const list=(fighters||[]).filter(f=>f&&f.team===team);
+          for(let i=0;i<list.length;i++){
+            const f=list[i];const dot=document.createElement('span');
+            dot.className='life-dot'+(!f.alive?' dead':'');
+            dot.textContent=f.alive?'●':'×';
+            dot.style.background=f.alive?(team==='A'?'#dfff00':'#ff3c6b'):'#444';
+            el.appendChild(dot);
+          }
+        };
+        paint('A',a);paint('B',b);
+      }catch(e){ oldLifeStrip(); }
+    };
+  }
+
+  // Map is strictly opt-in: keyboard M or the on-screen MAP button opens the full map.
+  const mini=document.getElementById('minimap'); if(mini)mini.style.display='none';
+  const mapBtn=document.getElementById('btn-map');
+  if(mapBtn){ mapBtn.textContent='MAP'; }
+
+  // Better match result presentation.
+  const baseEnd=window.endBattle;
+  if(typeof baseEnd==='function'){
+    window.endBattle=function(){
+      baseEnd();
+      const screen=document.getElementById('result-screen');
+      if(!screen)return;
+      screen.classList.add('v18-result');
+      const title=document.getElementById('result-title');
+      const detail=document.getElementById('result-detail');
+      if(!title||!detail||!playerFighter)return;
+      computeTurf();
+      const a=turfPct.a,b=turfPct.b,neutral=Math.max(0,100-a-b);
+      let winner='DRAW';
+      if(a>b)winner='A TEAM'; else if(b>a)winner='B TEAM';
+      const won=(playerFighter.team==='A'?a:b) > (playerFighter.team==='A'?b:a);
+      if(a===b) winner='DRAW';
+      const kills=playerFighter.kills||0,deaths=playerFighter.deaths||0;
+      const card=document.createElement('div');card.className='v18-result-card';
+      const h2=document.createElement('div');h2.className='v18-result-kicker';h2.textContent='BATTLE RESULTS';card.appendChild(h2);
+      const tt=document.createElement('div');tt.className='v18-result-title';tt.textContent=a===b?'DRAW':(won?'WIN!':'LOSE');tt.style.color=a===b?'#fff':(won?'#e3ff00':'#ff3b6b');card.appendChild(tt);
+      const row=document.createElement('div');row.className='v18-score-row';
+      row.innerHTML=`<div class="v18-team-box"><div class="label">TEAM A</div><div class="pct">${a}%</div></div><div class="v18-team-box"><div class="label">TEAM B</div><div class="pct">${b}%</div></div>`;card.appendChild(row);
+      const stats=document.createElement('div');stats.className='v18-result-stats';
+      stats.innerHTML=`${kills} K / ${deaths} D　｜　未塗り ${neutral}%<br>勝利チーム：${winner}`;card.appendChild(stats);
+      const note=document.createElement('div');note.className='v18-result-note';note.textContent='塗った面積 + 生存状況を確認して、次のバトルへ。';card.appendChild(note);
+      const btn=document.getElementById('btn-result-ok'); if(btn){ card.appendChild(btn); }
+      screen.replaceChildren(card);
+      screen.style.display='flex';
+    };
+  }
+
+  // Online ready-state UI and socket message side-listener.
+  let onlineJoined=false,onlineReady=false,readyListenerInstalled=false;
+  function readyEl(){return document.getElementById('v18-online-ready');}
+  function setReadyUI(){
+    const e=readyEl(),b=document.getElementById('online-start');
+    if(e)e.textContent=onlineJoined?`準備状態：${onlineReady?'✅ READY':'⏳ 未準備'}`:'準備状態：未参加';
+    if(b){b.textContent=onlineJoined?(onlineReady?'準備を解除':'準備OK'):'参加して準備OK';b.classList.toggle('ready-on',onlineReady);}
+  }
+  function attachReadyListener(){
+    if(readyListenerInstalled)return;
+    const ws=onlineSocket;
+    if(!ws||!ws.addEventListener)return;
+    readyListenerInstalled=true;
+    ws.addEventListener('message',(ev)=>{
+      let m;try{m=JSON.parse(ev.data)}catch{return;}
+      if(m.type==='queue'||m.type==='playerReady'||m.type==='lobbyState'){
+        if(m.selfReady!==undefined)onlineReady=!!m.selfReady;
+        const cnt=m.count??(m.players||[]).length;
+        const r=document.getElementById('online-room');
+        if(r)r.textContent=`参加者 ${cnt}/8人
+${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('\
+')||'まだ参加者はいません'}`;
+        setReadyUI();
+      }
+    });
+  }
+
+  // We intercept the existing button's capture phase so the old 8-player action cannot fire.
+  document.addEventListener('click',(e)=>{
+    const btn=e.target?.closest?.('#online-start');
+    if(!btn)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    const go=()=>{
+      const ws=onlineSocket;
+      if(!ws||ws.readyState!==1){showToast('サーバー接続を待ってね');return;}
+      if(!onlineJoined){
+        ws.send(JSON.stringify({type:'joinQueue',name:'player',ready:true}));
+        onlineJoined=true;onlineReady=true;
+      }else{
+        onlineReady=!onlineReady;
+        ws.send(JSON.stringify({type:'ready',ready:onlineReady}));
+      }
+      setReadyUI();attachReadyListener();
+    };
+    go();
+  },true);
+
+  // Patch openOnlinePanel only once, without replacing its original socket handlers.
+  if(typeof window.openOnlinePanel==='function'){
+    const oldOpen=window.openOnlinePanel;
+    window.openOnlinePanel=function(){
+      onlineJoined=false;onlineReady=false;setReadyUI();
+      oldOpen();
+      let tries=0;
+      const poll=()=>{
+        attachReadyListener();
+        if(!readyListenerInstalled && tries++<60)setTimeout(poll,50);
+      };
+      poll();
+    };
+  }
+  const cancel=document.getElementById('online-cancel');
+  if(cancel){cancel.addEventListener('click',()=>{onlineJoined=false;onlineReady=false;setReadyUI();},true);}
+
+  // Direct page boot: /battle.html?mode=range|cpu|online.
+  if(mode){
+    document.getElementById('news-screen')?.style && (document.getElementById('news-screen').style.display='none');
+    document.getElementById('lobby-ui')?.style && (document.getElementById('lobby-ui').style.display='none');
+    const boot=()=>{
+      const api=window.__V15;
+      if(!api?.launchRange){setTimeout(boot,50);return;}
+      api.launchRange();
+      if(mode==='cpu'){setTimeout(()=>{ if(typeof startBattleFromRange==='function') startBattleFromRange(); },160);}
+      if(mode==='online'){setTimeout(()=>{ if(typeof window.openOnlinePanel==='function') window.openOnlinePanel(); },220);}
+    };
+    setTimeout(boot,80);
+  }
+
+  // Reset per-battle counters on a fresh battle.
+  const oldBattle=window.startBattleFromRange;
+  if(typeof oldBattle==='function'){
+    window.startBattleFromRange=function(){
+      if(playerFighter){playerFighter.kills=0;playerFighter.deaths=0;playerFighter.specialGauge=0;}
+      oldBattle();
+      document.getElementById('result-screen')?.classList.remove('v18-result');
+    };
+  }
+
+  // Clear URL mode when going back to city from the battle result.
+  document.getElementById('btn-result-ok')?.addEventListener('click',()=>{
+    try{location.href='town.html';}catch{}
+  },true);
+
+})();
+</script></body>
 </html>
 
 <script>
@@ -4935,17 +5126,10 @@ ${roomText(m.players)}`;
   }
   function action(key){
     if(currentPhase!==1.25)return;
-    const p=lobby.player; if(!p)return;
-    let target=lobby.pois.find(v=>v.key===key);
-    if(!target) return;
-    if(Math.hypot(p.pos.x-target.x,p.pos.z-target.z)>6.8){
-      showToast('その施設まで歩いて近づいてね');return;
-    }
-    leaveLobby();
-    if(key==='range'){ setTimeout(()=>{launchRange();},0); }
-    else if(key==='cpu'){ setTimeout(()=>{launchRange();setTimeout(()=>startBattleFromRange(),80);},0); }
-    else if(key==='online'){ setTimeout(()=>{launchRange();setTimeout(()=>openOnlinePanel(),80);},0); }
-    else if(key==='custom'){ setTimeout(()=>{goToCustomizeFromGame();},0); }
+    if(key==='range'){ location.href='battle.html?mode=range'; return; }
+    if(key==='cpu'){ location.href='battle.html?mode=cpu'; return; }
+    if(key==='online'){ location.href='battle.html?mode=online'; return; }
+    if(key==='custom'){ leaveLobby(); goToCustomizeFromGame(); return; }
   }
   function nearestAction(){
     let best=null,bd=6.8;
