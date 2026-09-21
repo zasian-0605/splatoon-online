@@ -4467,84 +4467,536 @@ ${roomText(m.players)}`;
 </script>
 
 
+
+<!-- v35 stability/gameplay fix: E behavior, squid ink rules, robust bomb visuals -->
 <script>
-/* =====================================================================
-   V34 STABILITY / SIMPLE ARENA PATCH
-   Base: v25. Remove all complex stage gimmicks.
-   Use a fresh battle fighter instead of reusing the lobby avatar.
-   ===================================================================== */
 (function(){
-  'use strict';
-  const W=60,D=150;
-
-  buildStage=function(){
-    if(stageGroup){try{scene.remove(stageGroup);}catch(e){}}
-    stageGroup=new THREE.Group(); scene.add(stageGroup);
-    collidableBlocks=[]; waypoints=[];
-    decals.forEach(d=>{try{scene.remove(d.mesh);}catch(e){}}); decals=[];
-    const water=new THREE.Mesh(new THREE.PlaneGeometry(W+14,D+14,1,1),new THREE.MeshLambertMaterial({color:0x176b83,transparent:true,opacity:.93}));
-    water.rotation.x=-Math.PI/2; water.position.y=-.32; stageGroup.add(water);
-    const ground=new THREE.Mesh(new THREE.PlaneGeometry(W,D,1,1),new THREE.MeshLambertMaterial({map:paintTexture}));
-    ground.rotation.x=-Math.PI/2; stageGroup.add(ground);
-    paintCtx.fillStyle='#555566'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
-    const rect=(x0,z0,x1,z1,c)=>{const a=worldToCanvas(x0,z0),b=worldToCanvas(x1,z1);paintCtx.fillStyle=hexToCss(c);paintCtx.fillRect(Math.min(a.cx,b.cx),Math.min(a.cy,b.cy),Math.abs(b.cx-a.cx),Math.abs(b.cy-a.cy));};
-    rect(-27,-74,27,-55,teamAHex); rect(-27,55,27,74,teamBHex); paintTexture.needsUpdate=true;
-    spawnPointA=new THREE.Vector3(0,0,-64); spawnPointB=new THREE.Vector3(0,0,64);
-    const walls=[
-      {x:-14,z:-30,w:14,h:3,d:2.5},{x:14,z:-18,w:14,h:2.6,d:2.5},{x:0,z:-2,w:16,h:3.2,d:2.5},
-      {x:-14,z:18,w:14,h:2.8,d:2.5},{x:14,z:30,w:14,h:3,d:2.5},{x:0,z:42,w:18,h:2.5,d:2.5}
-    ];
-    walls.forEach(w=>addBlock(w.x,0,w.z,w.w,w.h,w.d,0x566577,{climbable:false}));
-    for(const z of [-52,-30,-8,14,36,56]){waypoints.push({x:-21,z},{x:0,z},{x:21,z});}
-    stageBuilt=true;
-  };
-
-  function resetInput(){
-    keys.w=keys.a=keys.s=keys.d=keys.space=keys.shift=false;
-    isShooting=false; playerVelocity.set(0,0,0); canJump=true;
-    const g=document.getElementById('charge-gauge'); if(g) g.style.display='none';
-  }
-
-  function cleanBattleStart(){
-    try{window.__V15?.leaveLobby?.();}catch(e){try{lobby.active=false;}catch(_){}}
-    resetInput();
-    try{if(lobby?.player?.root)scene.remove(lobby.player.root);}catch(e){}
-    try{lobby.player=null;}catch(e){}
-    try{if(playerFighter?.root)scene.remove(playerFighter.root);}catch(e){}
-    playerFighter=null; fighters=[]; stageBuilt=false;
-    const fn=window.__V25StartRange;
-    if(typeof fn!=='function') throw new Error('v25 startRangePhase missing');
-    fn();
-    if(playerFighter){
-      playerFighter.pos.set(spawnPointA.x,0,spawnPointA.z-4);
-      playerFighter.root.position.copy(playerFighter.pos);
-      playerFighter.root.visible=true; playerFighter.human.visible=true; playerFighter.squid.visible=false;
-      playerFighter.squid_mode=false; playerFighter.alive=true; playerFighter.hp=playerFighter.maxHp; playerFighter.ink=100;
-      playerFighter.specialGauge=0; playerFighter.isCharging=false; playerFighter._moving=false;
+  // ------------------------------------------------------------
+  // 1) E is a lobby-only interaction key.
+  //    During practice/battle it must never kick the player out.
+  // ------------------------------------------------------------
+  window.addEventListener('keydown', function(e){
+    if(e.code !== 'KeyE') return;
+    if(currentPhase === 1.5 || currentPhase === 2 || currentPhase === 3){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if(currentPhase === 1.5){
+        showToast('試し撃ち中：Eでは移動しません');
+      }
     }
-    currentPhase=1.5; battleActive=false; prevTime=performance.now();
-  }
-  window.__V34StartRange=cleanBattleStart;
+  }, true);
 
-  const baseBattle=startBattleFromRange;
-  startBattleFromRange=function(){
-    baseBattle();
-    if(currentPhase!==2||!playerFighter)return;
-    const offs=[-5.4,-1.8,1.8,5.4];
-    fighters.filter(f=>f.team==='A').slice(0,4).forEach((f,i)=>{f.pos.set(spawnPointA.x+offs[i],0,spawnPointA.z);f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;});
-    fighters.filter(f=>f.team==='B').slice(0,4).forEach((f,i)=>{f.pos.set(spawnPointB.x+offs[i],0,spawnPointB.z);f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;});
+  // ------------------------------------------------------------
+  // 2) Squid rules
+  //    - Friendly ink: fast squid, HP/ink recovery handled below.
+  //    - Neutral/unpainted ground: squid allowed, but slower than human.
+  //    - Enemy ink: squid allowed for about 1 second, then forced human.
+  // ------------------------------------------------------------
+  function v35InkTeamAt(x,z){
+    if(!paintCanvas || !paintCtx) return 'none';
+    const q=worldToCanvas(x,z);
+    const cx=Math.floor(q.cx), cy=Math.floor(q.cy);
+    if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height) return 'none';
+    const d=paintCtx.getImageData(cx,cy,1,1).data;
+    const rgb=[d[0]/255,d[1]/255,d[2]/255];
+    if(rgb[0]+rgb[1]+rgb[2] < .12) return 'none';
+    const a=new THREE.Color(teamAHex), b=new THREE.Color(teamBHex);
+    const da=(rgb[0]-a.r)**2+(rgb[1]-a.g)**2+(rgb[2]-a.b)**2;
+    const db=(rgb[0]-b.r)**2+(rgb[1]-b.g)**2+(rgb[2]-b.b)**2;
+    if(da<0.085 && da<db) return 'A';
+    if(db<0.085 && db<da) return 'B';
+    return 'none';
+  }
+
+  function v35IsEnemyInk(f){
+    const t=v35InkTeamAt(f.pos.x,f.pos.z);
+    return t!=='none' && t!==f.team;
+  }
+
+  const v35PrevMovement = updatePlayerMovement;
+  updatePlayerMovement = function(delta){
+    const f=playerFighter;
+    if(!f || !f.alive){ return v35PrevMovement(delta); }
+    setupFighterEconomy(f);
+    const now=performance.now();
+    const inkTeam=v35InkTeamAt(f.pos.x,f.pos.z);
+    const enemyInk = inkTeam!=='none' && inkTeam!==f.team;
+
+    if(!f._v35EnemySquidUntil) f._v35EnemySquidUntil=0;
+
+    // Enemy ink gives a brief squid window, then forces human form.
+    if(enemyInk){
+      if(keys.shift && !f.squid_mode && now>f._v35EnemySquidUntil){
+        f._v35EnemySquidUntil=now+1000;
+      }
+      if(!keys.shift){
+        f._v35EnemySquidUntil=0;
+      }
+    }else{
+      f._v35EnemySquidUntil=0;
+    }
+
+    const allowedSquid = !!keys.shift && (!enemyInk || now < f._v35EnemySquidUntil);
+    const squidSpeed = inkTeam===f.team ? 1.85 : (enemyInk ? 0.30 : 0.52);
+    f._v35SquidSpeed=squidSpeed;
+
+    // Temporarily mirror the control state used by the original movement code,
+    // but let our wrapper decide whether squid mode is actually active.
+    const oldShift=keys.shift;
+    keys.shift=allowedSquid;
+    v35PrevMovement(delta);
+    keys.shift=oldShift;
+
+    // v25's movement function computes its own speed. Re-apply only the
+    // neutral/enemy restriction here so we do not disturb friendly-ink speed.
+    if(f.squid_mode && f._moving){
+      const factor = inkTeam===f.team ? 1 : (enemyInk ? 0.30 : 0.52);
+      f.pos.x = Math.max(-39, Math.min(39, f.pos.x));
+      f.pos.z = Math.max(-72, Math.min(72, f.pos.z));
+      // Do not drain ink just for squid movement; this game version uses
+      // regeneration/weapon consumption for the tank economy.
+      if(factor!==1){
+        // Convert the current displacement into a damped displacement around
+        // the already-updated position. This keeps neutral/enemy squid slower
+        // without rewriting the original collision code.
+        const vx=playerVelocity.x, vz=playerVelocity.z;
+        playerVelocity.x*=factor;
+        playerVelocity.z*=factor;
+      }
+    }
+
+    // Enemy ink: once the short window expires, immediately become human.
+    if(enemyInk && f.squid_mode && now>=f._v35EnemySquidUntil){
+      f.squid_mode=false;
+      f.human.visible=true;
+      f.squid.visible=false;
+    }
   };
 
-  setInterval(()=>{
-    const g=document.getElementById('charge-gauge'); if(!g)return;
-    const local=!!(playerFighter&&(currentPhase===1.5||currentPhase===2)&&playerFighter.weapon?.category==='charger'&&playerFighter.isCharging&&!playerFighter.squid_mode);
-    if(!local)g.style.display='none';
-  },80);
+  // More explicit resource recovery: neutral squid recovers, but friendly
+  // squid recovers much faster; enemy squid has only a tiny recovery window.
+  if(typeof regenPlayer==='function'){
+    const v35PrevRegen=regenPlayer;
+    regenPlayer=function(f,delta,isSquid){
+      setupFighterEconomy(f);
+      const gp=f.gearProfile||gearProfile(f);
+      const now=performance.now();
+      if(now < f.inkRegenBlockedUntil) return;
+      const inkTeam=v35InkTeamAt(f.pos.x,f.pos.z);
+      if(!isSquid){
+        f.ink=Math.min(100,f.ink+4.0*delta*(gp.inkRegen||1));
+        return;
+      }
+      const rate=inkTeam===f.team?30:(inkTeam!=='none'?6:12);
+      f.ink=Math.min(100,f.ink+rate*delta*(gp.inkRegen||1));
+      if(inkTeam===f.team && f.hp<f.maxHp){
+        f.hp=Math.min(f.maxHp,f.hp+10*delta*(gp.inkRegen||1));
+      }
+    };
+  }
+
+  // ------------------------------------------------------------
+  // 3) Bomb visual: larger, clearly spherical, always visible until the
+  //    actual bomb entity is removed. We replace the tiny placeholder mesh
+  //    created by the existing throw function with a dedicated group.
+  // ------------------------------------------------------------
+  const v35PrevThrow = tryThrowSub;
+  tryThrowSub = function(fighter,aimDir,now){
+    const before=subsList.length;
+    v35PrevThrow(fighter,aimDir,now);
+    if(subsList.length<=before) return;
+    const s=subsList[subsList.length-1];
+    if(!s || !s.mesh) return;
+    const old=s.mesh;
+    const col=s.team==='A'?teamAHex:teamBHex;
+    const g=new THREE.Group();
+    g.position.copy(old.position);
+    g.rotation.copy(old.rotation);
+    g.renderOrder=20;
+
+    const main=new THREE.Mesh(
+      new THREE.SphereGeometry(.42,14,10),
+      new THREE.MeshLambertMaterial({color:col})
+    );
+    main.scale.set(1,0.86,1);
+    main.frustumCulled=false;
+    g.add(main);
+
+    const ring=new THREE.Mesh(
+      new THREE.TorusGeometry(.47,.065,7,18),
+      new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88})
+    );
+    ring.rotation.x=Math.PI/2;
+    ring.frustumCulled=false;
+    g.add(ring);
+
+    const cap=new THREE.Mesh(
+      new THREE.BoxGeometry(.20,.11,.20),
+      new THREE.MeshBasicMaterial({color:0xffffff})
+    );
+    cap.position.y=.34;
+    cap.frustumCulled=false;
+    g.add(cap);
+
+    scene.remove(old);
+    scene.add(g);
+    s.mesh=g;
+    s._v35BombVisual={main,ring,cap,baseScale:1};
+    s._v35NoEarlyVisualCull=true;
+    s.mesh.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+  };
+
+  const v35PrevUpdateSubs=updateSubs;
+  updateSubs=function(delta){
+    // Animate before update so the bomb remains visible during its flight.
+    const now=performance.now();
+    for(const s of subsList){
+      const v=s._v35BombVisual;
+      if(!v || !s.mesh) continue;
+      const pulse=1+Math.sin(now*.018+s.age*8)*.07;
+      v.main.scale.set(pulse,pulse*.86,pulse);
+      v.ring.rotation.z=now*.0025;
+      const fuse=(s.fuse||1.2);
+      const left=Math.max(0,1-(s.age/fuse));
+      const blink=left<.4 ? (Math.sin(now*.03)>0) : true;
+      v.main.visible=true;
+      v.ring.visible=blink;
+      v.cap.visible=true;
+      s.mesh.visible=true;
+    }
+    v35PrevUpdateSubs(delta);
+  };
+
+  // Helpful HUD hint, but no navigation action is attached to E in battle.
+  const hint=document.getElementById('range-hint');
+  if(hint && currentPhase===1.5){
+    hint.innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[O] CPU対戦　[P] オンライン　[E] は試し撃ち中は無効';
+  }
+
+  window.__V35={v35InkTeamAt, v35IsEnemyInk};
 })();
 </script>
+
 </body>
 </html>
 
+<script>
+/* =====================================================================
+   FINAL v13 STAGE GIMMICK PATCH
+   - 段差を減らして長いスロープ中心の立体ステージ
+   - 外周の裏取りルート / 高所ルート / ジャンプパッド
+   - 上昇リフト / 飛び出しランチャー
+   - 同色インクで膨らむスポンジブロック
+   - 塗り状況で変化するスポンジ・ギミック
+   ===================================================================== */
+(function(){
+  const THREE_ = THREE;
+  const slopeRegions=[];
+  const jumpPads=[];
+  const launchers=[];
+  const movingPlatforms=[];
+  const spongeBlocks=[];
+  const gimmickMeshes=[];
+  let gimmickTick=0;
+
+  function mkMat(hex,opts={}){
+    return new THREE_.MeshLambertMaterial(Object.assign({color:hex},opts));
+  }
+  function addGMesh(m){ if(stageGroup){ stageGroup.add(m); gimmickMeshes.push(m); } return m; }
+
+  function addRamp(x,z,w,length,baseY,rise,axis='z'){
+    const thickness=0.45;
+    const angle=Math.atan2(rise,length);
+    const geo=new THREE_.BoxGeometry(w,thickness,length);
+    const mesh=new THREE_.Mesh(geo,mkMat(0x71849a));
+    mesh.position.set(x,baseY+rise/2,z);
+    if(axis==='z') mesh.rotation.x=-angle;
+    else mesh.rotation.z=angle;
+    addGMesh(mesh);
+    slopeRegions.push({xMin:x-w/2,xMax:x+w/2,zMin:z-length/2,zMax:z+length/2,baseY,rise,length,axis});
+    return mesh;
+  }
+
+  function slopeHeightAt(x,z){
+    let best=-Infinity;
+    for(const r of slopeRegions){
+      if(x<r.xMin||x>r.xMax||z<r.zMin||z>r.zMax) continue;
+      let t;
+      if(r.axis==='z') t=(z-r.zMin)/r.length;
+      else t=(x-r.xMin)/r.length;
+      const y=r.baseY+r.rise*Math.max(0,Math.min(1,t));
+      if(y>best) best=y;
+    }
+    return best===-Infinity?null:best;
+  }
+
+  function addJumpPad(x,z,dirX,dirZ,power=18,label='ジャンプパッド'){
+    const group=new THREE_.Group();
+    const base=new THREE_.Mesh(new THREE_.CylinderGeometry(1.15,1.15,.22,32),mkMat(0x8d9bb0));
+    base.position.y=.12; group.add(base);
+    const ring=new THREE_.Mesh(new THREE_.TorusGeometry(.82,.10,10,32),mkMat(0xe9f7ff,{emissive:0x6ecbff,emissiveIntensity:1.8}));
+    ring.rotation.x=Math.PI/2; ring.position.y=.28; group.add(ring);
+    group.position.set(x,0,z); addGMesh(group);
+    jumpPads.push({x,z,radius:1.35,dir:new THREE_.Vector3(dirX,0,dirZ).normalize(),power,coolUntil:0,mesh:group,label});
+    return group;
+  }
+
+  function addLauncher(x,z,dirX,dirZ,power=28,label='ランチャー'){
+    const group=new THREE_.Group();
+    const pad=new THREE_.Mesh(new THREE_.CylinderGeometry(1.0,1.18,.3,24),mkMat(0x59677b));
+    pad.position.y=.15; group.add(pad);
+    const arrow=new THREE_.Mesh(new THREE_.ConeGeometry(.48,.9,6),mkMat(0xb8efff,{emissive:0x59cfff,emissiveIntensity:1.5}));
+    arrow.rotation.z=-Math.PI/2; arrow.position.set(dirX*0.34,.55,dirZ*0.34); group.add(arrow);
+    group.position.set(x,0,z); addGMesh(group);
+    launchers.push({x,z,radius:1.25,dir:new THREE_.Vector3(dirX,0,dirZ).normalize(),power,coolUntil:0,mesh:group,label});
+    return group;
+  }
+
+  function addMovingPlatform(x,z,w,d,baseY,amplitude,speed){
+    const mesh=new THREE_.Mesh(new THREE_.BoxGeometry(w,.6,d),mkMat(0x65798f));
+    mesh.position.set(x,baseY,z); addGMesh(mesh);
+    const p={mesh,x,z,w,d,baseY,amplitude,speed,phase:Math.random()*Math.PI*2};
+    movingPlatforms.push(p);
+    return p;
+  }
+
+  function addSponge(x,z,w=3,d=3,maxH=5){
+    const geo=new THREE_.BoxGeometry(w,.7,d);
+    const mat=mkMat(0xf0aa42);
+    const mesh=new THREE_.Mesh(geo,mat);
+    mesh.position.set(x,.35,z); addGMesh(mesh);
+    const s={mesh,x,z,w,d,maxH,height:.7,target:.7,team:null,lastHit:0};
+    spongeBlocks.push(s);
+    return s;
+  }
+
+  function addRouteMarker(x,z,text){
+    const g=new THREE_.Group();
+    const base=new THREE_.Mesh(new THREE_.CylinderGeometry(.34,.34,.14,18),mkMat(0x2e3949));
+    base.position.y=.07;g.add(base);
+    const pole=new THREE_.Mesh(new THREE_.CylinderGeometry(.035,.035,1.1,8),mkMat(0xaab8ca));
+    pole.position.y=.62;g.add(pole);
+    g.position.set(x,0,z);addGMesh(g);
+  }
+
+  const _buildStageV12=buildStage;
+  buildStage=function(){
+    _buildStageV12();
+    slopeRegions.length=0;jumpPads.length=0;launchers.length=0;movingPlatforms.length=0;spongeBlocks.length=0;gimmickMeshes.length=0;
+
+    // Wipe only the newly created arrays; stage itself is already rebuilt above.
+    // Broad ramps = main vertical circulation. Most transitions are slopes, not stairs.
+    addRamp(-12,-22,8,16,0,2.6,'z');
+    addRamp(12,22,8,16,0,2.6,'z');
+    addRamp(0,-26,10,14,0,4.6,'z');
+    addRamp(0,26,10,14,0,4.6,'z');
+    addRamp(-8,0,6,18,0,2.2,'x');
+    addRamp(8,0,6,18,0,2.2,'x');
+
+    // Huge high observation route + soft approach ramps.
+    addRamp(0,-4,12,12,2.2,2.8,'z');
+    addRamp(0,4,12,12,5.0, -2.8,'z');
+
+    // Outer back routes: long flank lanes that can wrap behind the enemy team.
+    addRamp(-15,-3,3.2,46,0,1.4,'z');
+    addRamp(15,3,3.2,46,0,1.4,'z');
+
+    // Jump pads to break sight lines and create alternate attacks.
+    addJumpPad(-10,-25,0,1,18,'左高台へ');
+    addJumpPad(10,25,0,-1,18,'右高台へ');
+    addJumpPad(-14,12,1,-.2,16,'中央横へ');
+    addJumpPad(14,-12,-1,.2,16,'中央横へ');
+
+    // Launchers: strong vertical arcs / long bypass movement.
+    addLauncher(-4,-31,0,1,30,'中央上空へ');
+    addLauncher(4,31,0,-1,30,'中央上空へ');
+    addLauncher(-15,0,1,0,22,'裏取りショートカット');
+    addLauncher(15,0,-1,0,22,'裏取りショートカット');
+
+    // Very high moving lifts.
+    addMovingPlatform(-9,0,5,5,1.2,5.8,.8);
+    addMovingPlatform(9,0,5,5,1.2,5.8,.75);
+    addMovingPlatform(0,-16,5,5,2.0,7.5,.55);
+    addMovingPlatform(0,16,5,5,2.0,7.5,.58);
+
+    // Sponge walls. Same-color ink grows them; opposite-color ink shrinks them.
+    addSponge(-5,-12,3.6,2.8,5.5);
+    addSponge(5,-12,3.6,2.8,5.5);
+    addSponge(-5,12,3.6,2.8,5.5);
+    addSponge(5,12,3.6,2.8,5.5);
+    addSponge(0,-2,4.2,2.5,6.5);
+    addSponge(0,2,4.2,2.5,6.5);
+
+    addRouteMarker(-15,-36,'左裏取り');
+    addRouteMarker(15,36,'右裏取り');
+    addRouteMarker(0,0,'中央高所');
+  };
+
+  const _supportV13=getSupportHeight;
+  getSupportHeight=function(x,z,y){
+    let best=_supportV13(x,z,y);
+    const sy=slopeHeightAt(x,z);
+    if(sy!==null && sy<=y+1.1 && sy>best) best=sy;
+    for(const p of movingPlatforms){
+      const py=p.mesh.position.y+.3;
+      if(x>=p.mesh.position.x-p.w/2 && x<=p.mesh.position.x+p.w/2 && z>=p.mesh.position.z-p.d/2 && z<=p.mesh.position.z+p.d/2){
+        if(py<=y+1.2 && py>best) best=py;
+      }
+    }
+    return best;
+  };
+
+  function readPaintAt(x,z){
+    try{
+      const uv=worldToCanvas(x,z);
+      if(uv.cx<0||uv.cy<0||uv.cx>=paintCanvas.width||uv.cy>=paintCanvas.height) return null;
+      const d=paintCtx.getImageData(Math.floor(uv.cx),Math.floor(uv.cy),1,1).data;
+      const rgb=[d[0],d[1],d[2]];
+      const ca=new THREE_.Color(teamAHex), cb=new THREE_.Color(teamBHex);
+      const da=(rgb[0]/255-ca.r)**2+(rgb[1]/255-ca.g)**2+(rgb[2]/255-ca.b)**2;
+      const db=(rgb[0]/255-cb.r)**2+(rgb[1]/255-cb.g)**2+(rgb[2]/255-cb.b)**2;
+      if(Math.min(da,db)>.12) return null;
+      return da<db?'A':'B';
+    }catch(e){ return null; }
+  }
+
+  function updateSponge(s,delta){
+    const team=readPaintAt(s.x,s.z);
+    if(team){
+      // The first ink becomes the sponge's current color. Repeated shots of the
+      // same color make it inflate; the opposite color makes it collapse.
+      if(!s.team) s.team=team;
+      if(team===s.team){
+        s.target=s.maxH;
+      }else{
+        s.target=.7;
+        s.team=team;
+      }
+      const move=delta*5.0;
+      s.height += Math.sign(s.target-s.height)*Math.min(Math.abs(s.target-s.height),move);
+    } else {
+      s.target=Math.max(.7,s.height-delta*.15);
+      s.height += Math.sign(s.target-s.height)*Math.min(Math.abs(s.target-s.height),delta*.3);
+    }
+    s.mesh.scale.y=Math.max(.08,s.height/.7);
+    s.mesh.position.y=s.height/2;
+  }
+
+  function updatePlatforms(time){
+    for(const p of movingPlatforms){
+      const y=p.baseY + Math.sin(time*p.speed*.001+p.phase)*p.amplitude;
+      p.mesh.position.y=y;
+    }
+  }
+
+  function tryGimmickLaunch(f,now){
+    if(!f || !f.alive) return false;
+    for(const p of jumpPads){
+      if(now<p.coolUntil) continue;
+      const dx=f.pos.x-p.x,dz=f.pos.z-p.z;
+      if(dx*dx+dz*dz <= p.radius*p.radius && f.pos.y<2.5){
+        f.pos.y=Math.max(f.pos.y,getSupportHeight(f.pos.x,f.pos.z,f.pos.y)+.15);
+        playerVelocity.y=p.power;
+        p.coolUntil=now+650;
+        try{sfx('jump');}catch(e){}
+        showToastFor(f,p.label+'！');
+        return true;
+      }
+    }
+    for(const p of launchers){
+      if(now<p.coolUntil) continue;
+      const dx=f.pos.x-p.x,dz=f.pos.z-p.z;
+      if(dx*dx+dz*dz <= p.radius*p.radius && f.pos.y<2.5){
+        playerVelocity.x=p.dir.x*p.power;
+        playerVelocity.z=p.dir.z*p.power;
+        playerVelocity.y=p.power*.95;
+        p.coolUntil=now+900;
+        try{sfx('jump');}catch(e){}
+        showToastFor(f,p.label+'！');
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const _updateMoveV13=updatePlayerMovement;
+  updatePlayerMovement=function(delta){
+    const beforeY=playerFighter?playerFighter.pos.y:0;
+    _updateMoveV13(delta);
+    if(playerFighter && playerFighter.alive){
+      tryGimmickLaunch(playerFighter,performance.now());
+      const support=getSupportHeight(playerFighter.pos.x,playerFighter.pos.z,playerFighter.pos.y);
+      if(playerFighter.pos.y<support) playerFighter.pos.y=support;
+      // Small slope gravity smoothing prevents sticking at tiny slope seams.
+      if(Math.abs(playerFighter.pos.y-beforeY)<0.001 && playerFighter.pos.y<support+.08) playerFighter.pos.y=support;
+    }
+  };
+
+  // AI can use launch pads too.
+  const _updateAIV13=updateAI;
+  updateAI=function(f,delta,now){
+    _updateAIV13(f,delta,now);
+    if(f && f.alive){
+      for(const p of jumpPads){
+        const dx=f.pos.x-p.x,dz=f.pos.z-p.z;
+        if(dx*dx+dz*dz<=p.radius*p.radius && f.pos.y<2.5){
+          f.pos.y=getSupportHeight(f.pos.x,f.pos.z,f.pos.y)+.15;
+          // AI does not share playerVelocity; use a direct arc.
+          f._gimmickVY=p.power;
+        }
+      }
+      if(f._gimmickVY){
+        f._gimmickVY-=30*delta;
+        f.pos.y+=f._gimmickVY*delta;
+        const sy=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
+        if(f.pos.y<=sy){f.pos.y=sy;f._gimmickVY=0;}
+      }
+    }
+  };
+
+  // Paint hit -> sponge response. Uses the existing bullet positions and stops the shot on impact.
+  const _updateBulletsGimmick=updateBullets;
+  updateBullets=function(delta){
+    _updateBulletsGimmick(delta);
+    // The regular bullet loop may have removed the bullet already; this pass handles active hits.
+    for(let i=bullets.length-1;i>=0;i--){
+      const b=bullets[i];
+      if(!b||!b.mesh||!b.mesh.parent) continue;
+      for(const s of spongeBlocks){
+        const dx=b.mesh.position.x-s.x,dz=b.mesh.position.z-s.z;
+        if(Math.abs(dx)<=s.w/2+.35 && Math.abs(dz)<=s.d/2+.35 && b.mesh.position.y<=s.height+1.3){
+          const same=(b.team==='A');
+          // Any team projectile paints the sponge zone; the matching team makes the block swell.
+          paintGround(s.x,s.z,Math.max(s.w,s.d)*.62,b.team==='A'?teamAHex:teamBHex,{trail:true,noNetwork:true});
+          s.team=b.team;
+          s.target=b.team==='A'?s.maxH:.7;
+          s.lastHit=performance.now();
+          for(let p=0;p<8;p++) spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,b.team==='A'?teamAHex:teamBHex);
+          scene.remove(b.mesh); bullets.splice(i,1); break;
+        }
+      }
+    }
+  };
+
+  // Animation / gimmick update.
+  const _animateV13=animate3D;
+  animate3D=function(){
+    _animateV13();
+    if(currentPhase===1.5||currentPhase===2){
+      const now=performance.now();
+      const dt=.016;
+      gimmickTick+=dt;
+      updatePlatforms(now);
+      for(const s of spongeBlocks) updateSponge(s,dt);
+      // Gentle animation of pads / launchers.
+      for(const p of jumpPads) if(p.mesh) p.mesh.rotation.y=now*.0012;
+      for(const p of launchers) if(p.mesh) p.mesh.rotation.y=-now*.0008;
+    }
+  };
+
+  window.__V13={slopeRegions,jumpPads,launchers,movingPlatforms,spongeBlocks};
+})();
+</script>
 
 <script>
 /* =====================================================================
@@ -4827,9 +5279,9 @@ ${roomText(m.players)}`;
       showToast('その施設まで歩いて近づいてね');return;
     }
     leaveLobby();
-    if(key==='range'){ setTimeout(()=>{(window.__V34StartRange || launchRange)();},0); }
-    else if(key==='cpu'){ setTimeout(()=>{(window.__V34StartRange || launchRange)();setTimeout(()=>startBattleFromRange(),80);},0); }
-    else if(key==='online'){ setTimeout(()=>{(window.__V34StartRange || launchRange)();setTimeout(()=>openOnlinePanel(),80);},0); }
+    if(key==='range'){ setTimeout(()=>{launchRange();},0); }
+    else if(key==='cpu'){ setTimeout(()=>{launchRange();setTimeout(()=>startBattleFromRange(),80);},0); }
+    else if(key==='online'){ setTimeout(()=>{launchRange();setTimeout(()=>openOnlinePanel(),80);},0); }
     else if(key==='custom'){ setTimeout(()=>{goToCustomizeFromGame();},0); }
   }
   function nearestAction(){
@@ -4893,7 +5345,7 @@ ${roomText(m.players)}`;
   }
 
   // Capture the current, fully patched range launcher once, then make startRangePhase mean "go to lobby".
-  const launchRange=window.startRangePhase; window.__V25StartRange=launchRange;
+  const launchRange=window.startRangePhase;
   if(typeof launchRange!=='function') return;
   window.startLobbyPhase=startLobbyPhase;
   window.startRangePhase=function(){startLobbyPhase();};
