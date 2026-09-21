@@ -1,15 +1,8 @@
-# スプラ3風 Webオンライン v25
+# スプラ3風 Webゲーム v27
 
-分割前に動作していた1ファイル版をベースに戻した安定版です。
-ゲーム本体は `index.html` 1ファイルに入っています。
-オンライン通信には `server.js` が必要です。
-
-## 構成
-- index.html：街・試し撃ち・CPU・オンライン・カスタマイズ・バトル・結果画面
-- server.js：WebSocketオンラインサーバー
-- package.json
-- render.yaml
-
-## Render
-Build Command: `npm install`
-Start Command: `npm start`
+分割前に動いていた安定版を土台にした版。
+- index.html にゲーム本体を集約
+- ロビーは正面のLOBBYへ進むだけ。周囲は普通の町
+- ステージは80 x 140の平面＋四角い低い壁。床も壁も塗装可能
+- マニューバーは片手1個を左右に1個ずつ表示。射撃中にジャンプ入力で短いスライド
+- server.js / package.json / render.yaml はオンライン通信

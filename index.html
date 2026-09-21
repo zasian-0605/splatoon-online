@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>スプラ3風 Webオンライン v25 - 安定版（分割前ベース）</title>
+<title>スプラ3風 Webオンライン v27 - 安定軽量版</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -165,7 +165,7 @@ body.pointer-lock-ready{cursor:none !important;}
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
 </style>
-<meta name="game-version" content="v25-clean-rollback"></head>
+<meta name="game-version" content="v26-clean-rollback"></head>
 <body>
 
 <div id="loading-screen">
@@ -219,8 +219,8 @@ body.pointer-lock-ready{cursor:none !important;}
   <div id="lobby-brand"><div class="small">ORIGINAL WEB CITY</div><div class="big">BANDARU CENTRAL</div></div>
   <div id="lobby-menu">
     <div id="lobby-menu-title">ロビー</div>
-    <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
-    <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">🟨 南西：試し撃ち　🟥 南東：CPU　🟦 北西：カスタム　🟪 北東：オンライン</div>
+    <div id="lobby-menu-note">正面のLOBBYへ進むだけ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
+    <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">🟨 正面：LOBBY / 試し撃ち受付</div>
     <button class="lobby-btn" data-lobby-action="range">🎯 試し撃ち場 <span class="k">1 / E</span></button>
     <button class="lobby-btn" data-lobby-action="cpu">⚔ CPU 4vs4 <span class="k">2</span></button>
     <button class="lobby-btn" data-lobby-action="online">🌐 オンライン8人 <span class="k">3</span></button>
@@ -322,7 +322,10 @@ let battleTimer=180;
 let battleActive=false;
 let turfPct = {a:0,b:0};
 
-const STAGE_HALF = 45;
+const STAGE_HALF_X = 40;
+const STAGE_HALF_Z = 70;
+// Legacy scalar kept for older UI calculations; stage mapping uses X/Z halves above.
+const STAGE_HALF = STAGE_HALF_Z;
 const CLIMB_THRESHOLD = 55;
 
 const newsLines = [
@@ -903,16 +906,12 @@ function buildPlayerModelGroup(cfg){
       addBox(weaponGroup,.16,.10,.16,dark,0,-r*2.0,0);
       addSubdividedBox(weaponGroup,.22,.14,.50,glow,0,-r*2.35,0);
     } else if(selectedWeapon.category==='maneuver'){
-      // マニューバー：二丁を左右に開いた未来的ブラスター
-      const side=0.23;
-      [[-side,0],[side,0]].forEach(([sx])=>{
-        const g=new THREE.Group(); g.position.x=sx; weaponGroup.add(g);
-        addSubdividedBox(g,.16,.16,.42,c,0,0,0,0, sx<0?-.10:.10,0);
-        addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
-        addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
-        addBox(g,.11,.26,.11,dark,0,-.20,-.02);
-      });
-      addBox(weaponGroup,.34,.07,.12,metal,0,.05,-.12);
+      // 片手ぶんを1個だけ作る。呼び出し側で左右の手に1個ずつ配置する。
+      addSubdividedBox(weaponGroup,.16,.16,.42,c,0,0,0,0,.02,0);
+      addCyl(weaponGroup,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
+      addCyl(weaponGroup,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
+      addBox(weaponGroup,.11,.26,.11,dark,0,-.20,-.02);
+      addBox(weaponGroup,.09,.06,.16,metal,0,.08,-.18);
     } else if(selectedWeapon.category==='slosher'){
       // スロッシャー：明確なバケツ形状＋液体チャンバー＋長い柄
       const bucket=new THREE.Group(); bucket.rotation.z=Math.PI/2; weaponGroup.add(bucket);
@@ -950,9 +949,8 @@ function buildPlayerModelGroup(cfg){
   aR.add(weaponGroup);
 
   if(selectedWeapon.category==='maneuver'){
-    const weaponGroup2 = buildWeaponMesh();
-    weaponGroup2.scale.set(0.85,0.85,0.85);
-    weaponGroup2.position.set(0,-.55,.1);
+    const weaponGroup2=buildWeaponMesh();
+    weaponGroup2.position.set(0,-.55,.1);weaponGroup2.rotation.y=Math.PI;
     aL.add(weaponGroup2);
   }
 
@@ -1025,8 +1023,8 @@ sampleCanvas.width = 96; sampleCanvas.height = 96;
 const sampleCtx = sampleCanvas.getContext('2d');
 
 function worldToCanvas(x,z){
-  const u = (x + STAGE_HALF) / (STAGE_HALF*2);
-  const v = (z + STAGE_HALF) / (STAGE_HALF*2);
+  const u = (x + STAGE_HALF_X) / (STAGE_HALF_X*2);
+  const v = (z + STAGE_HALF_Z) / (STAGE_HALF_Z*2);
   return { cx: u*paintCanvas.width, cy: v*paintCanvas.height };
 }
 
@@ -1153,117 +1151,24 @@ function addBlock(x,y,z,w,h,d,color,opts={}){
 }
 
 function buildStage(){
-  if(stageGroup){ scene.remove(stageGroup); }
-  stageGroup = new THREE.Group();
-  scene.add(stageGroup);
-  collidableBlocks = [];
-  waypoints = [];
-  decals.forEach(d=>scene.remove(d.mesh));
-  decals = [];
-
-  // v12 stage: tall rectangle, fully walkable/paintable floor, three clear routes.
-  // World: X = -18..18, Z = -45..45.
-  const STAGE_W = 36;
-  const STAGE_D = 90;
-  const halfW = STAGE_W/2;
-  const halfD = STAGE_D/2;
-
-  const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
-  const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI/2;
-  stageGroup.add(ground);
-
-  // Reset paint and give both teams a broad, separated home zone.
-  paintCtx.fillStyle = '#555566';
-  paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
-  function paintRectWorld(x0,z0,x1,z1,colorHex){
-    const a=worldToCanvas(x0,z0), b=worldToCanvas(x1,z1);
-    const x=Math.min(a.cx,b.cx), y=Math.min(a.cy,b.cy);
-    const w=Math.abs(b.cx-a.cx), h=Math.abs(b.cy-a.cy);
-    paintCtx.fillStyle=hexToCss(colorHex);
-    paintCtx.fillRect(x,y,w,h);
-  }
-  paintRectWorld(-16,-44,16,-31,teamAHex);
-  paintRectWorld(-16,31,16,44,teamBHex);
-  paintTexture.needsUpdate = true;
-
-  spawnPointA = new THREE.Vector3(0,0,-38);
-  spawnPointB = new THREE.Vector3(0,0, 38);
-
-  // Broad spawn pads, deliberately far apart.
-  addBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
-  addBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
-
-  // Three routes: left / center / right.
-  // Left and right stay low. The center route is elevated and connected by stairs.
-  const routeXs = [-12,0,12];
-  routeXs.forEach(x=>{
-    waypoints.push({x,z:-30});
-    waypoints.push({x,z:-10});
-    waypoints.push({x,z:10});
-    waypoints.push({x,z:30});
-  });
-
-  // Low lane cover. Openings between covers keep each route flowing.
-  const lowCovers = [
-    {x:-12,z:-25,w:7,d:3,h:2.4}, {x:-12,z:-12,w:5,d:3,h:1.5}, {x:-12,z:4,w:7,d:3,h:2.8}, {x:-12,z:22,w:5,d:3,h:1.8},
-    {x:12,z:-25,w:7,d:3,h:2.4},  {x:12,z:-12,w:5,d:3,h:1.5}, {x:12,z:4,w:7,d:3,h:2.8},  {x:12,z:22,w:5,d:3,h:1.8},
-    {x:-6,z:-5,w:3,d:5,h:1.8}, {x:6,z:11,w:3,d:5,h:2.2},
-    {x:-6,z:21,w:3,d:4,h:2.0}, {x:6,z:-21,w:3,d:4,h:2.0}
-  ];
-  lowCovers.forEach(c=>addBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
-
-  // Mid dividers separate the three lanes but leave deliberate choke/opening points.
-  // Height is low enough to read as cover, not an impassable wall.
-  [-6,6].forEach(x=>{
-    [-32,-18,-2,14,28].forEach(z=>addBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
-  });
-
-  // Center high route: long raised path.
-  addBlock(0,3,-14,8,3.0,20,0x657789);
-  addBlock(0,3, 14,8,3.0,20,0x657789);
-  addBlock(0,3,  0,8,3.0,10,0x718396);
-  waypoints.push({x:0,z:-14,y:3});
-  waypoints.push({x:0,z:0,y:3});
-  waypoints.push({x:0,z:14,y:3});
-
-  // Stair ramps at both ends of the high route, made from short steps.
-  [-1,1].forEach(dir=>{
-    for(let i=0;i<8;i++){
-      const z = dir * (23 + i*0.9);
-      const h = 0.45 + (7-i)*0.32;
-      addBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
-    }
-  });
-
-  // Two raised side platforms create additional vertical options without cluttering the stage.
-  [
-    {x:-12,z:14,w:6,d:8,h:2.2},
-    {x:12,z:-14,w:6,d:8,h:2.2}
-  ].forEach(p=>{
-    addBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
-    waypoints.push({x:p.x,z:p.z,y:p.h});
-  });
-
-  // Connect left <-> center and center <-> right at two clear crossover points.
-  // These bridges are low, wide and paintable.
-  [-8,8].forEach(z=>{
-    addBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
-    addBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
-    waypoints.push({x:-6,z});
-    waypoints.push({x:6,z});
-  });
-
-  // Center observation block for another height change.
-  addBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
-  waypoints.push({x:0,z:0,y:6});
-
-  // Keep the outer edge visually clear. No water, pits, or non-paintable holes.
-  // Movement itself is clamped to the rectangular playable area in collision code.
-  stageBuilt = true;
+  if(stageGroup){scene.remove(stageGroup);}
+  stageGroup=new THREE.Group();scene.add(stageGroup);
+  collidableBlocks=[];waypoints=[];
+  decals.forEach(d=>scene.remove(d.mesh));decals=[];
+  const STAGE_W=80,STAGE_D=140;
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W,STAGE_D,1,1),new THREE.MeshLambertMaterial({map:paintTexture}));
+  ground.rotation.x=-Math.PI/2;stageGroup.add(ground);
+  paintCtx.fillStyle='#555566';paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+  const paintRectWorld=(x0,z0,x1,z1,colorHex)=>{const a=worldToCanvas(x0,z0),b=worldToCanvas(x1,z1);const x=Math.min(a.cx,b.cx),y=Math.min(a.cy,b.cy),w=Math.abs(b.cx-a.cx),h=Math.abs(b.cy-a.cy);paintCtx.fillStyle=hexToCss(colorHex);paintCtx.fillRect(x,y,w,h);};
+  paintRectWorld(-38,-68,38,-45,teamAHex);paintRectWorld(-38,45,38,68,teamBHex);paintTexture.needsUpdate=true;
+  spawnPointA=new THREE.Vector3(0,0,-57);spawnPointB=new THREE.Vector3(0,0,57);
+  const walls=[[-20,-30,10,2.6,4],[20,-24,10,2.6,4],[-18,0,12,2.8,4],[18,4,12,2.8,4],[-20,28,10,2.6,4],[20,32,10,2.6,4],[0,-12,4,2.3,10],[0,12,4,2.3,10]];
+  walls.forEach(v=>addBlock(v[0],0,v[1],v[2],v[3],v[4],0x586474,{climbable:false}));
+  const pts=[[-30,-50],[0,-50],[30,-50],[-30,-25],[0,-25],[30,-25],[-30,0],[0,0],[30,0],[-30,25],[0,25],[30,25],[-30,50],[0,50],[30,50]];
+  waypoints=pts.map(([x,z])=>({x,z}));
+  const water=new THREE.Mesh(new THREE.PlaneGeometry(92,152,1,1),new THREE.MeshLambertMaterial({color:0x2977b8,transparent:true,opacity:.78}));
+  water.rotation.x=-Math.PI/2;water.position.y=-.55;stageGroup.add(water);stageBuilt=true;
 }
-
 /* =========================================================
    コリジョン判定
    ========================================================= */
@@ -1399,7 +1304,8 @@ function applyDamage(target, dmg, fromFighter){
 }
 
 function spawnParticle(x,y,z,colorHex){
-  const p = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:colorHex}));
+  if(particles.length>120){const old=particles.shift();if(old?.mesh?.parent)scene.remove(old.mesh);}
+  const p=new THREE.Mesh(new THREE.SphereGeometry(0.1,6,4),new THREE.MeshBasicMaterial({color:colorHex}));
   p.position.set(x,y,z);
   const vx=(Math.random()-0.5)*10, vy=Math.random()*5, vz=(Math.random()-0.5)*10;
   scene.add(p);
@@ -2139,6 +2045,9 @@ function ensureWorld(){
 function startRangePhase(){
   ensureWorld();
   if(!stageBuilt) buildStage();
+  bullets.forEach(b=>{if(b.mesh?.parent)scene.remove(b.mesh);});bullets.length=0;
+  subs.forEach(x=>{if(x.mesh?.parent)scene.remove(x.mesh);});subs.length=0;
+  particles.forEach(p=>{if(p.mesh?.parent)scene.remove(p.mesh);});particles.length=0;
 
   teamAHex = inkColorPalette[playerConfig.color];
   teamBHex = (playerConfig.color===1) ? 0x00e5ff : 0xff2255;
@@ -2267,15 +2176,11 @@ function updateFighterAnimation(f, moving, isSquid){
 }
 
 function onFighterInk(f){
-  const {cx,cy} = worldToCanvas(f.pos.x, f.pos.z);
-  if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height) return false;
-  const d = paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data;
-  const teamColor = new THREE.Color(f.team==='A'?teamAHex:teamBHex);
-  const r=d[0]/255,g=d[1]/255,b=d[2]/255;
-  const dist = (r-teamColor.r)**2+(g-teamColor.g)**2+(b-teamColor.b)**2;
-  return dist < 0.07;
+  const now=performance.now();if(f._inkSampleAt&&now-f._inkSampleAt<70)return !!f._onOwnInk;f._inkSampleAt=now;
+  const {cx,cy}=worldToCanvas(f.pos.x,f.pos.z);if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height){f._onOwnInk=false;return false;}
+  const d=paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data,tc=new THREE.Color(f.team==='A'?teamAHex:teamBHex);
+  const r=d[0]/255,g=d[1]/255,b=d[2]/255;f._onOwnInk=((r-tc.r)**2+(g-tc.g)**2+(b-tc.b)**2)<.07;return f._onOwnInk;
 }
-
 function updatePlayerMovement(delta){
   const f = playerFighter;
   const isSquid = keys.shift;
@@ -2349,35 +2254,15 @@ function updatePlayerMovement(delta){
   if(isSquid && moving && wallOnInk && Math.random()<0.3) spawnParticle(f.pos.x,0.1,f.pos.z, f.team==='A'?teamAHex:teamBHex);
 }
 
-function clampStageXY(x,z){
-  return {
-    x:Math.max(-17.25,Math.min(17.25,x)),
-    z:Math.max(-43.25,Math.min(43.25,z))
-  };
-}
+function clampStageXY(x,z){return {x:Math.max(-39.15,Math.min(39.15,x)),z:Math.max(-69.15,Math.min(69.15,z))};}
 
-function tryMoveWithCollision(f, vel, delta, isSquid){
-  const rawNx = f.pos.x + vel.x*delta;
-  const rawNz = f.pos.z + vel.z*delta;
-  const clamped = clampStageXY(rawNx,rawNz);
-  const nx = clamped.x;
-  const nz = clamped.z;
-  const wall = getBlockingWall(nx, nz, f.pos.y);
-  if(wall){
-    const isMine = wall.paintTeam===f.team && wall.paintLevel>=CLIMB_THRESHOLD && wall.climbable;
-    if(isSquid && isMine && (vel.x!==0||vel.z!==0)){
-      return true;
-    }
-    const wallX = getBlockingWall(nx, f.pos.z, f.pos.y);
-    const wallZ = getBlockingWall(f.pos.x, nz, f.pos.y);
-    if(!wallX) f.pos.x = nx;
-    if(!wallZ) f.pos.z = nz;
-    return false;
-  }
-  f.pos.x = nx; f.pos.z = nz;
-  return false;
+function tryMoveWithCollision(f,vel,delta,isSquid){
+  const rawNx=f.pos.x+vel.x*delta,rawNz=f.pos.z+vel.z*delta;
+  if(Math.abs(rawNx)>STAGE_HALF_X+1.2||Math.abs(rawNz)>STAGE_HALF_Z+1.2){f.pos.x=rawNx;f.pos.z=rawNz;if(f.alive)killFighter(f);return false;}
+  const c=clampStageXY(rawNx,rawNz),nx=c.x,nz=c.z,wall=getBlockingWall(nx,nz,f.pos.y);
+  if(wall){const mine=wall.paintTeam===f.team&&wall.paintLevel>=CLIMB_THRESHOLD&&wall.climbable;if(isSquid&&mine&&(vel.x||vel.z))return true;const wx=getBlockingWall(nx,f.pos.z,f.pos.y),wz=getBlockingWall(f.pos.x,nz,f.pos.y);if(!wx)f.pos.x=nx;if(!wz)f.pos.z=nz;return false;}
+  f.pos.x=nx;f.pos.z=nz;return false;
 }
-
 function updateAI(f, delta, now){
   if(!f.alive) return;
   const enemies = fighters.filter(o=>o.team!==f.team && o.alive);
@@ -2547,75 +2432,20 @@ function updateBullets(delta){
   }
 }
 
-let turfTick=0;
+let turfTick=0;let battleLoopRunning=false;
 function animate3D(){
-  if(currentPhase!==1.5 && currentPhase!==2) return;
-  requestAnimationFrame(animate3D);
-
-  const time = performance.now();
-  const delta = Math.min((time-prevTime)/1000, 0.1);
-  prevTime = time;
-
-  if(playerFighter.alive){
-    updatePlayerMovement(delta);
-  } else if(time > playerFighter.respawnAt){
-    respawnFighter(playerFighter);
-  }
-
-  if(currentPhase===2){
-    fighters.forEach(f=>{
-      if(f.isPlayer) return;
-      if(!f.alive){ if(time>f.respawnAt) respawnFighter(f); return; }
-      updateAI(f, delta, time);
-    });
-  }
-
-  updateBullets(delta);
-  updateSubs(delta);
-  updateOngoingEffects(delta);
-
-  document.getElementById('hp-bar').style.width = Math.max(0,playerFighter.hp) + '%';
-  document.getElementById('hp-bar').style.background = playerFighter.hp>40?'#4caf50':'#ff3333';
-  const specialReady=playerFighter.specialGauge>=specialCostReady;
-  document.getElementById('special-bar').style.width = playerFighter.specialGauge + '%';
-  document.getElementById('special-bar-bg').classList.toggle('sp-ready',specialReady);
-  document.getElementById('special-ready').style.display=specialReady?'block':'none';
-  document.getElementById('btn-special').classList.toggle('sp-ready',specialReady);
-  const wh=document.getElementById('weapon-hud');
-  if(wh) wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${playerFighter.weapon.name}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]}　/　サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?'　★ READY':''}</div>`;
-
-  if(currentPhase===2){
-    turfTick += delta;
-    if(turfTick>1){
-      turfTick=0;
-      computeTurf();
-      document.getElementById('turf-a').style.width = turfPct.a+'%';
-      document.getElementById('turf-b').style.width = turfPct.b+'%';
-    }
-    battleTimer -= delta;
-    if(battleTimer<0) battleTimer=0;
-    const mm = Math.floor(battleTimer/60), ss = Math.floor(battleTimer%60);
-    document.getElementById('timer').textContent = mm+':'+String(ss).padStart(2,'0');
-    const aliveA = fighters.filter(f=>f.team==='A'&&f.alive).length;
-    const aliveB = fighters.filter(f=>f.team==='B'&&f.alive).length;
-    document.getElementById('alive-count').textContent = `生存 A:${aliveA}/4  B:${aliveB}/4`;
-    updateTeamLifeStrip();
-    if(battleTimer<=0 && battleActive){ endBattle(); return; }
-  }
-
-  const offset = new THREE.Vector3(1.5,1.5,cameraDistance);
-  offset.applyAxisAngle(new THREE.Vector3(1,0,0), pitch);
-  offset.applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
-  camera.position.copy(playerFighter.pos).add(offset);
-  const lookTarget = playerFighter.pos.clone(); lookTarget.y += 1.5;
-  camera.lookAt(lookTarget);
-  const dm=document.getElementById('death-location-marker');
-  if(dm && playerFighter.deathLocation && !playerFighter.alive){
-    const v=playerFighter.deathLocation.clone(); v.y+=1.8; v.project(camera);
-    dm.style.left=((v.x*.5+.5)*window.innerWidth)+'px'; dm.style.top=((-v.y*.5+.5)*window.innerHeight)+'px';
-  }
-
-  renderer.render(scene, camera);
+  if(currentPhase!==1.5&&currentPhase!==2){battleLoopRunning=false;return;}if(battleLoopRunning)return;battleLoopRunning=true;
+  const loop=()=>{if(currentPhase!==1.5&&currentPhase!==2){battleLoopRunning=false;return;}const time=performance.now(),delta=Math.min((time-prevTime)/1000,.1);prevTime=time;
+    if(playerFighter.alive)updatePlayerMovement(delta);else if(time>playerFighter.respawnAt)respawnFighter(playerFighter);
+    if(currentPhase===2)fighters.forEach(f=>{if(f.isPlayer)return;if(!f.alive){if(time>f.respawnAt)respawnFighter(f);return;}updateAI(f,delta,time);});
+    updateBullets(delta);updateSubs(delta);updateOngoingEffects(delta);
+    document.getElementById('hp-bar').style.width=Math.max(0,playerFighter.hp)+'%';document.getElementById('hp-bar').style.background=playerFighter.hp>40?'#4caf50':'#ff3333';
+    const specialReady=playerFighter.specialGauge>=specialCostReady;document.getElementById('special-bar').style.width=playerFighter.specialGauge+'%';document.getElementById('special-bar-bg').classList.toggle('sp-ready',specialReady);document.getElementById('special-ready').style.display=specialReady?'block':'none';document.getElementById('btn-special').classList.toggle('sp-ready',specialReady);
+    const wh=document.getElementById('weapon-hud');if(wh)wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${playerFighter.weapon.name}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]} / サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?' ★ READY':''}</div>`;
+    const cg=document.getElementById('charge-gauge');const localCharging=!!(playerFighter&&!playerFighter.squid_mode&&(playerFighter.isCharging||playerFighter.wiperChargeStart||playerFighter.spinnerCharging));if(cg&&!localCharging)cg.style.display='none';
+    if(currentPhase===2){turfTick+=delta;if(turfTick>1){turfTick=0;computeTurf();document.getElementById('turf-a').style.width=turfPct.a+'%';document.getElementById('turf-b').style.width=turfPct.b+'%';}battleTimer=Math.max(0,battleTimer-delta);const mm=Math.floor(battleTimer/60),ss=Math.floor(battleTimer%60);document.getElementById('timer').textContent=mm+':'+String(ss).padStart(2,'0');document.getElementById('alive-count').textContent=`生存 A:${fighters.filter(f=>f.team==='A'&&f.alive).length}/4  B:${fighters.filter(f=>f.team==='B'&&f.alive).length}/4`;updateTeamLifeStrip();if(battleTimer<=0&&battleActive){endBattle();return;}}
+    const offset=new THREE.Vector3(1.5,1.5,cameraDistance).applyAxisAngle(new THREE.Vector3(1,0,0),pitch).applyAxisAngle(new THREE.Vector3(0,1,0),yaw);camera.position.copy(playerFighter.pos).add(offset);const lookTarget=playerFighter.pos.clone();lookTarget.y+=1.5;camera.lookAt(lookTarget);renderer.render(scene,camera);requestAnimationFrame(loop);};
+  requestAnimationFrame(loop);
 }
 
 /* =========================================================
@@ -2748,25 +2578,27 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const mult = opts.mult || 1;
     const baseR = Math.max(.45, radius*1.18*mult);
     const {cx,cy}=worldToCanvas(x,z);
-    const cr=(baseR/(STAGE_HALF*2))*paintCanvas.width;
+    const crX=(baseR/(STAGE_HALF_X*2))*paintCanvas.width;
+    const crY=(baseR/(STAGE_HALF_Z*2))*paintCanvas.height;
     paintCtx.save();
     paintCtx.fillStyle=hexToCss(colorHex);
-    // Main soft stamp
+    // Main soft stamp, kept circular in world space on the wide rectangular map.
     paintCtx.beginPath();
-    paintCtx.arc(cx,cy,cr,0,Math.PI*2);
+    paintCtx.ellipse(cx,cy,crX,crY,0,0,Math.PI*2);
     paintCtx.fill();
     // Several organic satellites => much better coverage
     const n = Math.max(3, Math.min(10, Math.round(radius*1.7)));
     for(let i=0;i<n;i++){
       const a=i*2.399963 + (x*0.03+z*0.07);
-      const rr=cr*(.25+.65*((i%5)/4));
-      const px=cx+Math.cos(a)*rr*.85, py=cy+Math.sin(a)*rr*.85;
-      paintCtx.beginPath(); paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
+      const rrX=crX*(.25+.65*((i%5)/4));
+      rrY=crY*(.25+.65*((i%5)/4));
+      const px=cx+Math.cos(a)*rrX*.85, py=cy+Math.sin(a)*rrY*.85;
+      paintCtx.beginPath(); paintCtx.ellipse(px,py,crX*(.32+.12*(i%3)),crY*(.32+.12*(i%3)),0,0,Math.PI*2); paintCtx.fill();
     }
     // short trail segment when requested (roller/brush/wiper)
     if(opts.to){
       const to=worldToCanvas(opts.to.x,opts.to.z);
-      paintCtx.lineWidth=Math.max(2,cr*1.5);
+      paintCtx.lineWidth=Math.max(2,Math.min(crX,crY)*1.5);
       paintCtx.lineCap='round';
       paintCtx.beginPath(); paintCtx.moveTo(cx,cy); paintCtx.lineTo(to.cx,to.cy); paintCtx.stroke();
     }
@@ -3445,6 +3277,10 @@ ${roomText(m.players)}`;
     }else{playerVelocity.x*=.78;playerVelocity.z*=.78;}
     f._moving=moving;
 
+    if(!keys.space)f._slideLock=false;
+    if(f.weapon.category==='maneuver'&&isShooting&&keys.space&&moving&&!f._slideLock){f._slideLock=true;f._slideUntil=now+420;f._slideDir=moveDir.clone();try{sfx('jump');}catch(e){}}
+    if(f._slideUntil&&now<f._slideUntil){const sd=f._slideDir||new THREE.Vector3(0,0,-1);playerVelocity.x=sd.x*25;playerVelocity.z=sd.z*25;}
+
     if(!isSquid){
       f.human.rotation.y=yaw+Math.PI;
       if(f.weapon.category==="roller"&&isShooting)doRollerAction(f,now,moving);
@@ -3463,6 +3299,7 @@ ${roomText(m.players)}`;
       document.getElementById('charge-gauge').style.display='none';
     }
 
+    if(f._slideUntil&&now>=f._slideUntil)f._slideUntil=0;
     const climbing=tryMoveWithCollision(f,playerVelocity,delta,isSquid);
     if(isJetpack){playerVelocity.y=0;f.pos.y=Math.max(f.pos.y,3.2);}
     else{
@@ -3793,10 +3630,10 @@ ${roomText(m.players)}`;
     if(f.spinnerCharging){
       const frac=Math.min(1,(now-f.spinnerChargeStart)/w.chargeTime);
       const gauge=document.getElementById('charge-gauge');
-      gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));
+      if(f.isPlayer){ gauge.style.display='block'; gauge.style.setProperty('--pct',Math.round(frac*100)); }
       if(frac<1)return;
       f.spinnerCharging=false;f.spinnerFiring=true;f.spinnerShotsLeft=w.burstShots;f.spinnerNextShot=now;
-      gauge.style.display='none';
+      if(f.isPlayer) gauge.style.display='none';
     }
     if(f.spinnerFiring && f.spinnerShotsLeft>0 && now>=f.spinnerNextShot){
       if(!consumeInk(f,w.inkCost)) { f.spinnerFiring=false; f.spinnerShotsLeft=0; return; }
@@ -4211,8 +4048,8 @@ ${roomText(m.players)}`;
   function mapPoint(ctx,size,x,z){
     const pad=10;
     const usable=size-pad*2;
-    return {x:pad+((x+STAGE_HALF)/(STAGE_HALF*2))*usable,
-            y:pad+((z+STAGE_HALF)/(STAGE_HALF*2))*usable};
+    return {x:pad+((x+STAGE_HALF_X)/(STAGE_HALF_X*2))*usable,
+            y:pad+((z+STAGE_HALF_Z)/(STAGE_HALF_Z*2))*usable};
   }
 
   function drawMap(ctx,size){
@@ -4402,8 +4239,8 @@ ${roomText(m.players)}`;
     const nx=(x-pad/760)/usable;
     const nz=(y-pad/760)/usable;
     return {
-      x:-STAGE_HALF+Math.max(0,Math.min(1,nx))*STAGE_HALF*2,
-      z:-STAGE_HALF+Math.max(0,Math.min(1,nz))*STAGE_HALF*2
+      x:-STAGE_HALF_X+Math.max(0,Math.min(1,nx))*STAGE_HALF_X*2,
+      z:-STAGE_HALF_Z+Math.max(0,Math.min(1,nz))*STAGE_HALF_Z*2
     };
   }
 
@@ -4554,57 +4391,7 @@ ${roomText(m.players)}`;
   }
 
   const _buildStageV12=buildStage;
-  buildStage=function(){
-    _buildStageV12();
-    slopeRegions.length=0;jumpPads.length=0;launchers.length=0;movingPlatforms.length=0;spongeBlocks.length=0;gimmickMeshes.length=0;
-
-    // Wipe only the newly created arrays; stage itself is already rebuilt above.
-    // Broad ramps = main vertical circulation. Most transitions are slopes, not stairs.
-    addRamp(-12,-22,8,16,0,2.6,'z');
-    addRamp(12,22,8,16,0,2.6,'z');
-    addRamp(0,-26,10,14,0,4.6,'z');
-    addRamp(0,26,10,14,0,4.6,'z');
-    addRamp(-8,0,6,18,0,2.2,'x');
-    addRamp(8,0,6,18,0,2.2,'x');
-
-    // Huge high observation route + soft approach ramps.
-    addRamp(0,-4,12,12,2.2,2.8,'z');
-    addRamp(0,4,12,12,5.0, -2.8,'z');
-
-    // Outer back routes: long flank lanes that can wrap behind the enemy team.
-    addRamp(-15,-3,3.2,46,0,1.4,'z');
-    addRamp(15,3,3.2,46,0,1.4,'z');
-
-    // Jump pads to break sight lines and create alternate attacks.
-    addJumpPad(-10,-25,0,1,18,'左高台へ');
-    addJumpPad(10,25,0,-1,18,'右高台へ');
-    addJumpPad(-14,12,1,-.2,16,'中央横へ');
-    addJumpPad(14,-12,-1,.2,16,'中央横へ');
-
-    // Launchers: strong vertical arcs / long bypass movement.
-    addLauncher(-4,-31,0,1,30,'中央上空へ');
-    addLauncher(4,31,0,-1,30,'中央上空へ');
-    addLauncher(-15,0,1,0,22,'裏取りショートカット');
-    addLauncher(15,0,-1,0,22,'裏取りショートカット');
-
-    // Very high moving lifts.
-    addMovingPlatform(-9,0,5,5,1.2,5.8,.8);
-    addMovingPlatform(9,0,5,5,1.2,5.8,.75);
-    addMovingPlatform(0,-16,5,5,2.0,7.5,.55);
-    addMovingPlatform(0,16,5,5,2.0,7.5,.58);
-
-    // Sponge walls. Same-color ink grows them; opposite-color ink shrinks them.
-    addSponge(-5,-12,3.6,2.8,5.5);
-    addSponge(5,-12,3.6,2.8,5.5);
-    addSponge(-5,12,3.6,2.8,5.5);
-    addSponge(5,12,3.6,2.8,5.5);
-    addSponge(0,-2,4.2,2.5,6.5);
-    addSponge(0,2,4.2,2.5,6.5);
-
-    addRouteMarker(-15,-36,'左裏取り');
-    addRouteMarker(15,36,'右裏取り');
-    addRouteMarker(0,0,'中央高所');
-  };
+  buildStage=function(){_buildStageV12();slopeRegions.length=0;jumpPads.length=0;launchers.length=0;movingPlatforms.length=0;spongeBlocks.length=0;gimmickMeshes.length=0;};
 
   const _supportV13=getSupportHeight;
   getSupportHeight=function(x,z,y){
@@ -4921,7 +4708,7 @@ ${roomText(m.players)}`;
   }
   function npc(x,z,col,phase){
     const g=new THREE.Group();
-    const body=new THREE.Mesh(new THREE.CapsuleGeometry(.5,1.05,4,8),mat(col));body.position.y=1.1;g.add(body);
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.48,.52,1.15,8),mat(col));body.position.y=1.1;g.add(body);
     const head=new THREE.Mesh(new THREE.SphereGeometry(.52,8,6),mat(0xe6c8ba));head.position.y=2.35;g.add(head);
     const bag=new THREE.Mesh(new THREE.BoxGeometry(.7,.55,.28),mat(accent[(Math.abs(x+z)|0)%accent.length]));bag.position.set(0,1.25,-.52);g.add(bag);
     g.position.set(x,0,z);add(g);
@@ -4936,65 +4723,21 @@ ${roomText(m.players)}`;
     g.position.set(x,0,z);add(g);lobby.props.push(g);
   }
   function buildLobby(){
-    if(lobby.group) return;
-    ensureWorld();
-    lobby.group=new THREE.Group();scene.add(lobby.group);
-    // city ground + main streets
-    box(0,-.18,0,116,.36,88,0x30313e);
-    box(0,.02,0,16,.05,88,0x202331); // central avenue
-    box(0,.02,0,116,.05,12,0x202331); // cross street
-    // plaza
-    const plaza=new THREE.Mesh(new THREE.CylinderGeometry(13,13,.18,48),mat(0x46485c));plaza.position.set(0,.12,0);add(plaza);
-    const plazaRing=new THREE.Mesh(new THREE.TorusGeometry(9.5,.24,8,32),mat(0xe3ff00,{emissive:0xe3ff00,emissiveIntensity:.7}));plazaRing.rotation.x=Math.PI/2;plazaRing.position.y=.28;add(plazaRing);
-    // fountain / central monument
-    cyl(0,.25,0,2.9,1.1,0x555f78,32);cyl(0,1.2,0,2.1,.45,0x22283a,32);
-    const orb=new THREE.Mesh(new THREE.SphereGeometry(1.15,20,16),mat(0x00d4ff,{emissive:0x00d4ff,emissiveIntensity:2}));orb.position.set(0,3.05,0);add(orb);
-    // main blocks
-    building(-23,-28,18,11,12,0x343b53,'GEAR','L');
-    building(23,-28,18,11,10,0x3c4a58,'WEAPON','R');
-    building(-23,27,20,12,16,0x3d3554,'TOWN','L');
-    building(23,27,20,12,18,0x2e4d54,'ONLINE','R');
-    building(-48,-25,9,24,20,0x2b3444,'LOFT','L');
-    building(48,-25,9,24,24,0x47364f,'STUDIO','R');
-    building(-48,20,9,20,15,0x28414f,'ARCADE','L');
-    building(48,20,9,20,21,0x4c4858,'CAFE','R');
-    lowShop(-22,-8,'GEAR SHOP',0xe3ff00);
-    lowShop(22,-8,'WEAPON',0xff0055);
-    lowShop(-22,9,'CAFE',0x00d4ff);
-    lowShop(22,9,'BATTLE',0x9900ff);
-    // side alley storefronts
-    for(const z of [-30,-17,17,30]){
-      lowShop(-39,z,'SHOP',accent[(Math.abs(z)|0)%accent.length]);
-      lowShop(39,z,'LAB',accent[(Math.abs(z)+2)%accent.length]);
-    }
-    // road decor
-    addRoadDecor();
-    for(let x=-48;x<=48;x+=12){streetLamp(x,-12);streetLamp(x,12);}
-    // trees + benches
-    [[-9,-10],[9,-10],[-9,10],[9,10],[-31,1],[31,1],[-31,38],[31,38]].forEach((p,i)=>tree(p[0],p[1],1+(i%3)*.12));
-    for(const p of [[-5,-2],[5,-2],[-5,2],[5,2]]){ box(p[0],.2,p[1],3,.45,.65,0x675b4f); }
-    // vending / poles / billboard
-    addVending(-8,-3,0x00d4ff);addVending(8,3,0xffa63d);
-    addBillboard(0,-39);
-    addOverpass();
-    // POIs
-    poi(-22,-13,'range','試し撃ち場');
-    poi(22,-13,'cpu','CPU対戦');
-    poi(-22,14,'custom','カスタマイズ');
-    poi(22,14,'online','オンライン');
-    // NPC crowd
-    const npcColors=[0xe3ff00,0xff0055,0x00d4ff,0x9900ff,0x75f0a8,0xffa63d];
-    [[-7,-5],[7,-5],[-10,17],[10,17],[-30,4],[30,-4],[-36,12],[36,12],[0,19],[0,-19]].forEach((p,i)=>npc(p[0],p[1],npcColors[i%npcColors.length],i*.7));
-    lobby.group.visible=false;
+    if(lobby.group)return;ensureWorld();lobby.group=new THREE.Group();scene.add(lobby.group);lobby.obstacles.length=0;lobby.npcs.length=0;lobby.props.length=0;lobby.pois.length=0;
+    box(0,-.2,0,120,.4,92,0x343744);box(0,.02,0,18,.06,92,0x242633);
+    box(0,0,11,26,9,12,0x3b315d);obstacle(0,11,26,12);box(0,9.2,11,28,.45,14,0x151520);sign(0,6.2,4.85,18,2.6,'LOBBY',0xe3ff00);sign(0,3.2,4.82,11,1.5,'ENTER / E',0xffffff);poi(0,3.0,'range','ロビー / 試し撃ち受付');
+    [[-34,-20,20,9,10,0x4a4d5a],[-34,6,18,10,8,0x3f4652],[-34,28,22,10,12,0x454a58],[34,-20,20,9,11,0x4b4654],[34,6,18,10,8,0x424c56],[34,28,22,10,13,0x4a4d5a]].forEach(v=>{const[x,z,w,d,h,c]=v;box(x,0,z,w,h,d,c);obstacle(x,z,w,d);});
+    for(const z of [-22,-4,14,32]){streetLamp(-12,z);streetLamp(12,z);}[[ -16,-12],[16,-12],[-16,24],[16,24],[-46,28],[46,28]].forEach((p,i)=>tree(p[0],p[1],.9+(i%2)*.1));
+    [[-7,-12],[7,-4],[-16,34],[16,34]].forEach((p,i)=>npc(p[0],p[1],[0xe3ff00,0xff0055,0x00d4ff,0x9900ff][i],i*.9));lobby.group.visible=false;
   }
   function ensureLobbyPlayer(){
     if(lobby.player) return lobby.player;
     if(!playerFighter){
-      playerFighter=createFighter({id:'lobby_player',isPlayer:true,team:'A',x:0,z:-18,cfg:Object.assign({},playerConfig)});
+      playerFighter=createFighter({id:'lobby_player',isPlayer:true,team:'A',x:0,z:-25,cfg:Object.assign({},playerConfig)});
       fighters=[playerFighter];
     }
     lobby.player=playerFighter;
-    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;lobby.player.squid=false;
+    lobby.player.pos.set(0,0,-25);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;lobby.player.squid=false;
     lobby.player.human.visible=true;lobby.player.squid.visible=false;
     return lobby.player;
   }
@@ -5076,7 +4819,7 @@ ${roomText(m.players)}`;
     buildLobby();ensureLobbyPlayer();
     currentPhase=1.25;lobby.active=true;lobby.group.visible=true;
     lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.human.visible=true;lobby.player.squid.visible=false;
-    lobbyYaw=0.25;lobbyPitch=-0.12;
+    lobbyYaw=0;lobbyPitch=-0.12;
     document.getElementById('battle-ui').style.display='none';
     document.getElementById('range-hint').style.display='none';
     document.getElementById('online-panel').style.display='none';
