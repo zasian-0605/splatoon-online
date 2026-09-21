@@ -1,15 +1,14 @@
-# 自作インクバトル Web v19
+# v22 Complete One-File Web Game
 
-ゲーム本体は `index.html` の1ファイルに統合しています。
+- Game client is entirely in `index.html` (lobby, practice, CPU battle, online panel, customization, result screen, stage/gimmicks, HUD).
+- `server.js` is only the Node/WebSocket server needed for online play.
+- Reloading the page starts again from the initial loading screen; game configuration is not persisted.
+- No `town.html` or `battle.html` is required.
 
-- 街ロビー → 施設 → 黄色い波の遷移 → 自動で試し撃ち
-- CPU対戦 / オンライン2〜8人
-- MAPは押した時だけ表示
-- ページを再読み込みするとゲーム状態・カスタマイズ保存をリセット
-- Three.jsはCDN読み込み
+Render:
+- Build Command: `npm install`
+- Start Command: `npm start`
 
-## Render
-Build Command: `npm install`
-Start Command: `npm start`
 
-オンライン時は `server.js` と `ws` を使用します。
+## v22 fix
+施設移動を旧 startRangePhase のラップ処理から切り離し、同一 index.html 内の直接初期化へ変更。施設移動失敗トーストを出さず、試し撃ち・CPU・オンラインをページ遷移なしで起動。

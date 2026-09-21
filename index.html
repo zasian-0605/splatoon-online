@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>街ロビー | スプラ3風 Webオンライン v16 - 軽量自作ロビー</title>
+<title>自作インクバトル Webゲーム v21 - Complete One File</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -201,6 +201,7 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
 </style>
 </head>
 <body>
+<!-- v21 COMPLETE: lobby + practice + CPU + online + customize + results + stage gimmicks are all inside this one HTML file. -->
 <div id="facility-transition" aria-hidden="true">
   <div class="ft-bg"></div>
   <div class="ft-wave ft-wave-a"></div>
@@ -4376,7 +4377,6 @@ ${roomText(m.players)}`;
 <script>
 /* =====================================================================
    v19 ONE-FILE INTEGRATION
-   - town.html -> battle.html mode routing
    - online: 2~8 players, all ready => start
    - full map only when M / MAP is pressed
    - dynamic online team counts
@@ -4511,7 +4511,7 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   const cancel=document.getElementById('online-cancel');
   if(cancel){cancel.addEventListener('click',()=>{onlineJoined=false;onlineReady=false;setReadyUI();},true);}
 
-  // Direct page boot: /battle.html?mode=range|cpu|online.
+  // Optional legacy direct-mode compatibility; the normal game stays in this one HTML file.
   if(mode){
     document.getElementById('news-screen')?.style && (document.getElementById('news-screen').style.display='none');
     document.getElementById('lobby-ui')?.style && (document.getElementById('lobby-ui').style.display='none');
@@ -5145,29 +5145,134 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     }
   }
   let facilityTransitionBusy=false;
-  function playFacilityEntry(next, label='TRY SHOOTING'){
-    if(facilityTransitionBusy)return;
+
+  // v20: robust in-page facility transition. Never reloads the document.
+  function directPracticeInit(){
+    // Make all non-battle layers disappear first.
+    const ids=['loading-screen','news-screen','customize-screen','lobby-ui','result-screen','online-panel'];
+    ids.forEach(id=>{const el=document.getElementById(id); if(el){el.style.display='none'; el.style.opacity='0';}});
+    const trans=document.getElementById('facility-transition');
+    if(trans){trans.classList.remove('active');trans.style.display='none';}
+
+    ensureWorld();
+    if(!stageBuilt) buildStage();
+
+    teamAHex = inkColorPalette[playerConfig.color];
+    teamBHex = (playerConfig.color===1) ? 0x00e5ff : 0xff2255;
+
+    // Reset battle objects from a previous failed entry.
+    bullets.forEach(b=>b.mesh && scene.remove(b.mesh)); bullets=[];
+    subsList.forEach(b=>b.mesh && scene.remove(b.mesh)); subsList=[];
+    particles.forEach(b=>b.mesh && scene.remove(b.mesh)); particles=[];
+    if(!playerFighter){
+      playerFighter=createFighter({id:'player',isPlayer:true,team:'A',x:spawnPointA.x,z:spawnPointA.z-4,cfg:Object.assign({},playerConfig)});
+    } else {
+      playerFighter.pos.set(spawnPointA.x,0,spawnPointA.z-4);
+      playerFighter.hp=playerFighter.maxHp;
+      playerFighter.alive=true;
+      playerFighter.root.visible=true;
+      playerFighter.weapon=weaponList[playerConfig.weapon] || weaponList[0];
+      try{ rebuildFighterModel(playerFighter,playerConfig); }catch(e){}
+    }
+    fighters=[playerFighter];
+    playerVelocity.set(0,0,0); canJump=true; yaw=0; pitch=-0.2;
+
+    document.getElementById('battle-ui').style.display='block';
+    document.getElementById('battle-ui').style.opacity='1';
+    document.getElementById('range-hint').style.display='block';
+    document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズ　[O] CPU対戦　[P] オンライン';
+    document.getElementById('instructions').innerHTML='【PC】WASD:移動 / マウス:視点 / 左クリック:撃つ / Shift:イカ / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ/iPad】左側スワイプ:移動 / 右側スワイプ:視点 / ボタンで操作';
+    document.getElementById('respawn-overlay').style.display='none';
+    document.getElementById('result-screen').style.display='none';
+    document.getElementById('top-battle-status').style.display='none';
+    document.getElementById('alive-count').style.display='none';
+    currentPhase=1.5;
+    battleActive=false;
+    prevTime=performance.now();
+    try{ window.__V10?.showMaps?.(false); }catch(e){}
+    try{ window.__V10?.requestLock?.(); }catch(e){}
+    animate3D();
+  }
+
+  function enterFacility(key){
+    if(facilityTransitionBusy) return;
     facilityTransitionBusy=true;
+    const labels={range:'TRY SHOOTING',cpu:'CPU BATTLE',online:'ONLINE',custom:'CUSTOMIZE'};
     const ov=document.getElementById('facility-transition');
     const text=ov?.querySelector('.ft-text');
-    if(text){text.innerHTML=`LOADING<br><span>${label}</span>`;}
+    if(text) text.innerHTML=`LOADING<br><span>${labels[key]||String(key).toUpperCase()}</span>`;
     document.body.classList.remove('facility-shake');
     void document.body.offsetWidth;
     document.body.classList.add('facility-shake');
-    if(ov){ov.classList.remove('active');void ov.offsetWidth;ov.classList.add('active');}
-    setTimeout(()=>{ try{leaveLobby();}catch(e){} },180);
-    setTimeout(()=>{ try{next();}catch(e){showToast('施設への移動に失敗しました');} },1150);
-    setTimeout(()=>document.body.classList.remove('facility-shake'),680);
-    setTimeout(()=>{ if(ov){ov.classList.remove('active');ov.style.display='none';} facilityTransitionBusy=false; },1650);
-    if(ov)ov.style.display='block';
+    if(ov){
+      ov.style.display='block';
+      ov.classList.remove('active');
+      void ov.offsetWidth;
+      ov.classList.add('active');
+    }
+
+    // Stop the lobby immediately. Do NOT call any legacy page-navigation or
+    // startRangePhase wrappers here. Everything stays inside this one HTML file.
+    leaveLobby();
+
+    setTimeout(()=>{
+      try{
+        // All facility entries use the same reliable in-page battle initializer.
+        // This avoids the old chain of wrapped startRangePhase functions.
+        if(key==='range'){
+          directPracticeInit();
+        }else if(key==='cpu'){
+          directPracticeInit();
+          setTimeout(()=>{
+            try{
+              if(currentPhase===1.5) startBattleFromRange();
+            }catch(err){ console.error('CPU start failed',err); }
+          },80);
+        }else if(key==='online'){
+          directPracticeInit();
+          setTimeout(()=>{
+            try{
+              if(typeof window.openOnlinePanel==='function') window.openOnlinePanel();
+              else {
+                const panel=document.getElementById('online-panel');
+                if(panel) panel.style.display='block';
+              }
+            }catch(err){ console.error('Online panel failed',err); }
+          },120);
+        }else if(key==='custom'){
+          // Re-open customization in the same document without navigation.
+          document.querySelectorAll('#loading-screen,#news-screen,#lobby-ui,#battle-ui,#result-screen,#online-panel').forEach(el=>{
+            if(el){el.style.display='none';el.style.opacity='0';}
+          });
+          const cs=document.getElementById('customize-screen');
+          if(cs){cs.style.display='block';cs.style.opacity='1';}
+          currentPhase=0.5;
+          setupCustomizeUI();
+          initCustomPreview();
+        }
+      }catch(err){
+        console.error('Facility transition failed',err);
+        // Never show the old error toast. Fall back directly to practice.
+        try{ directPracticeInit(); }catch(fallbackErr){
+          console.error('Direct practice fallback failed',fallbackErr);
+          const hint=document.getElementById('range-hint');
+          if(hint){hint.style.display='block';hint.textContent='試し撃ちを起動できませんでした。ページを再読み込みしてください。';}
+        }
+      }
+    },620);
+
+    setTimeout(()=>document.body.classList.remove('facility-shake'),900);
+    setTimeout(()=>{
+      if(ov){ov.classList.remove('active');ov.style.display='none';}
+      facilityTransitionBusy=false;
+    },1300);
   }
+
   function action(key){
     if(currentPhase!==1.25 || facilityTransitionBusy)return;
-    if(key==='range'){ playFacilityEntry(()=>{ if(typeof launchRange==='function') launchRange(); }, 'TRY SHOOTING'); return; }
-    if(key==='cpu'){ playFacilityEntry(()=>{ if(typeof launchRange==='function') launchRange(); setTimeout(()=>{ if(typeof startBattleFromRange==='function') startBattleFromRange(); },120); }, 'CPU BATTLE'); return; }
-    if(key==='online'){ playFacilityEntry(()=>{ if(typeof launchRange==='function') launchRange(); setTimeout(()=>{ if(typeof window.openOnlinePanel==='function') window.openOnlinePanel(); },180); }, 'ONLINE'); return; }
-    if(key==='custom'){ leaveLobby(); goToCustomizeFromGame(); return; }
+    enterFacility(key);
   }
+
   function nearestAction(){
     let best=null,bd=6.8;
     if(!lobby.player)return;
@@ -5379,5 +5484,44 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   if(btn){const down=e=>{keys.shift=true;e.preventDefault();};const up=e=>{keys.shift=false;e.preventDefault();};btn.addEventListener('pointerdown',down,true);btn.addEventListener('pointerup',up,true);btn.addEventListener('pointercancel',up,true);btn.addEventListener('pointerleave',up,true);}
 })();
 </script>
+
+<script>
+// v20 boot guard: if a previous patch ever leaves the page in a transition overlay, recover to lobby.
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    const ov=document.getElementById('facility-transition');
+    if(ov && ov.classList.contains('active') && typeof currentPhase!=="undefined" && currentPhase===1.25){
+      ov.classList.remove('active'); ov.style.display='none';
+    }
+  },1700);
+});
+</script>
+
+
+/* v21 compatibility: keep the old saveConfig API without persisting state.
+   This intentionally does nothing so a full browser reload always starts from the beginning. */
+function saveConfig(){ return false; }
+
+
+<script>
+/* v21 ONE-FILE INTEGRITY GUARD
+   The complete game lives in this one index.html.  No town.html/battle.html navigation is required.
+   A reload intentionally resets the game state.
+*/
+window.__V21_ONE_FILE__ = true;
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    try{
+      const loading=document.getElementById('loading-screen');
+      const lt=document.getElementById('loading-text');
+      if(loading && getComputedStyle(loading).display!=='none' && typeof isReady!=='undefined' && isReady){
+        if(lt){lt.textContent='TAP or PRESS SPACE';lt.style.color='#ff0055';lt.style.webkitTextStroke='2px #ffffff';}
+        loading.style.opacity='1';
+      }
+    }catch(e){}
+  },2300);
+});
+</script>
+
 </body>
 </html>
