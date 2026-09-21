@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: splatoon-online-v19
-    runtime: node
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    healthCheckPath: /
