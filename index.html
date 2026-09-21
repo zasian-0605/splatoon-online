@@ -4911,3 +4911,291 @@ ${roomText(m.players)}`;
   window.__V15={startLobbyPhase,leaveLobby,action};
 })();
 </script>
+
+<script>
+/* v28 FUN PACK - 既存v27の安定版を壊さず遊びごたえを増やす追加レイヤー */
+(function(){
+  'use strict';
+
+  const state={
+    practiceTargets:[], targetLoop:0, targetHits:0, practiceStart:0, practiceBest:0,
+    combo:0, comboUntil:0, event:'', eventUntil:0, handledEvents:{},
+    bannerUntil:0, initialized:false, lastShotFx:0
+  };
+
+  function el(id){return document.getElementById(id);}
+  function addStyle(){
+    if(el('v28-style')) return;
+    const s=document.createElement('style');s.id='v28-style';
+    s.textContent=`
+      #v28-hud{position:absolute;left:18px;top:110px;z-index:18;color:#fff;font-family:Arial Black,Meiryo,sans-serif;text-shadow:2px 2px #000;pointer-events:none;display:none}
+      #v28-combo{font-size:28px;font-weight:900;letter-spacing:1px;color:#e3ff00;opacity:0;transform:translateX(-12px) scale(.9);transition:.16s}
+      #v28-combo.show{opacity:1;transform:none}
+      #v28-challenge{margin-top:6px;background:rgba(10,0,40,.75);border:2px solid #fff;border-radius:10px;padding:8px 11px;font:700 12px/1.45 Arial,Meiryo,sans-serif;min-width:205px}
+      #v28-event{position:absolute;left:50%;top:17%;transform:translate(-50%,-50%) scale(.82);z-index:19;color:#fff;background:rgba(47,5,156,.92);border:4px solid #e3ff00;border-radius:16px;padding:12px 22px;text-align:center;font:900 24px/1.2 Impact,Arial Black,sans-serif;letter-spacing:1px;opacity:0;pointer-events:none;transition:.16s;box-shadow:0 0 28px rgba(227,255,0,.65)}
+      #v28-event.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+      #v28-hit{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%) scale(.7);z-index:19;font:900 26px Arial Black,sans-serif;color:#fff;text-shadow:2px 2px #000;opacity:0;pointer-events:none}
+      #v28-hit.show{animation:v28Hit .32s ease-out}
+      @keyframes v28Hit{0%{opacity:1;transform:translate(-50%,-50%) scale(.7)}55%{opacity:1;transform:translate(-50%,-50%) scale(1.18)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.35)}}
+      #v28-target-info{position:absolute;right:18px;top:112px;z-index:18;color:#fff;background:rgba(0,0,0,.58);border:2px solid rgba(255,255,255,.7);border-radius:10px;padding:8px 10px;font:700 11px/1.45 Arial,Meiryo,sans-serif;display:none;pointer-events:none;text-align:right}
+      #v28-danger{position:absolute;inset:0;z-index:17;pointer-events:none;display:none;border:0 solid rgba(255,0,85,.8)}
+      #v28-danger.show{display:block;animation:v28Danger .65s ease-in-out infinite alternate}
+      @keyframes v28Danger{from{box-shadow:inset 0 0 0 rgba(255,0,85,0)}to{box-shadow:inset 0 0 45px rgba(255,0,85,.48)}}
+      #v28-go{font:900 72px Impact,Arial Black,sans-serif;color:#e3ff00;text-shadow:5px 5px #2f059c;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.75);opacity:0;z-index:50;pointer-events:none}
+      #v28-go.show{animation:v28Go .9s cubic-bezier(.2,.9,.3,1)}
+      @keyframes v28Go{0%{opacity:0;transform:translate(-50%,-50%) scale(.4) rotate(-7deg)}25%{opacity:1}75%{opacity:1;transform:translate(-50%,-50%) scale(1.05) rotate(2deg)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.2)}}
+      .v28-target-ring{position:relative}
+    `;
+    document.head.appendChild(s);
+  }
+  function addHud(){
+    if(el('v28-hud')) return;
+    const h=document.createElement('div');h.id='v28-hud';
+    h.innerHTML='<div id="v28-combo">COMBO ×0</div><div id="v28-challenge"></div>';
+    document.body.appendChild(h);
+    const ev=document.createElement('div');ev.id='v28-event';document.body.appendChild(ev);
+    const hit=document.createElement('div');hit.id='v28-hit';document.body.appendChild(hit);
+    const ti=document.createElement('div');ti.id='v28-target-info';document.body.appendChild(ti);
+    const dg=document.createElement('div');dg.id='v28-danger';document.body.appendChild(dg);
+    const go=document.createElement('div');go.id='v28-go';document.body.appendChild(go);
+  }
+  function showEvent(text,duration=2600){
+    const e=el('v28-event'); if(!e)return;
+    e.innerHTML=text;e.classList.remove('show');void e.offsetWidth;e.classList.add('show');
+    state.eventUntil=performance.now()+duration;
+    setTimeout(()=>{if(performance.now()>=state.eventUntil)e.classList.remove('show');},duration+60);
+  }
+  function showHit(text='HIT!'){
+    const h=el('v28-hit');if(!h)return;h.textContent=text;h.classList.remove('show');void h.offsetWidth;h.classList.add('show');
+  }
+  function updateHud(){
+    const inBattle=(typeof currentPhase!=='undefined' && (currentPhase===1.5||currentPhase===2));
+    const h=el('v28-hud'), ti=el('v28-target-info'), dg=el('v28-danger');
+    if(h) h.style.display=inBattle?'block':'none';
+    if(ti) ti.style.display=(currentPhase===1.5&&state.practiceTargets.length)?'block':'none';
+    if(!inBattle){if(dg)dg.classList.remove('show');return;}
+    if(typeof playerFighter!=='undefined' && playerFighter){
+      if(playerFighter.hp<=25 && playerFighter.alive) dg?.classList.add('show'); else dg?.classList.remove('show');
+    }
+    const combo=el('v28-combo');
+    if(combo){
+      combo.textContent=`COMBO ×${state.combo}`;
+      combo.classList.toggle('show',state.combo>1 && performance.now()<state.comboUntil);
+    }
+    const c=el('v28-challenge');
+    if(c&&currentPhase===1.5){
+      const elapsed=Math.max(0,(performance.now()-state.practiceStart)/1000);
+      const remain=Math.max(0,30-elapsed);
+      c.innerHTML=`🎯 TARGET RUSH<br>30秒で ${state.targetHits}/15 ヒット<br>残り ${remain.toFixed(1)}秒`;
+    } else if(c&&currentPhase===2){
+      c.innerHTML=`🔥 バトルFEVER<br>${state.event?state.event:'通常ルール'}<br>連続ヒットでSPボーナス`;
+    }
+    if(ti){ti.innerHTML=`🎯 練習ターゲット ${state.targetHits}/15<br>黄色リングを狙え！`}
+  }
+
+  function makeTargetMesh(i){
+    const g=new THREE.Group();
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(.62,.72,.28,10),new THREE.MeshLambertMaterial({color:0x263142}));base.position.y=.14;g.add(base);
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.46,.52,1.55,10),new THREE.MeshLambertMaterial({color:0x7b8798}));body.position.y=1.02;g.add(body);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.40,.09,6,14),new THREE.MeshBasicMaterial({color:0xe3ff00}));ring.rotation.x=Math.PI/2;ring.position.y=1.1;g.add(ring);
+    const bull=new THREE.Mesh(new THREE.CircleGeometry(.25,12),new THREE.MeshBasicMaterial({color:0xff0055}));bull.rotation.x=-Math.PI/2;bull.position.set(0,1.56,.37);g.add(bull);
+    g.userData.homeX=-18+(i%3)*18;g.userData.homeZ=-14+Math.floor(i/3)*14;g.userData.phase=i*.8;g.userData.hp=1;g.userData.index=i;
+    g.position.set(g.userData.homeX,0,g.userData.homeZ);
+    return g;
+  }
+  function clearTargets(){
+    for(const t of state.practiceTargets){if(t?.group?.parent)scene.remove(t.group);}
+    state.practiceTargets.length=0;
+    if(state.targetLoop){clearTimeout(state.targetLoop);state.targetLoop=0;}
+  }
+  function ensureTargets(){
+    if(typeof scene==='undefined'||!scene||typeof currentPhase==='undefined')return;
+    if(currentPhase!==1.5){clearTargets();return;}
+    if(state.practiceTargets.length)return;
+    state.practiceStart=performance.now();state.targetHits=0;state.combo=0;
+    const n=6;
+    for(let i=0;i<n;i++){
+      const g=makeTargetMesh(i);scene.add(g);
+      state.practiceTargets.push({group:g,active:true,respawnAt:0,phase:i*.8,idx:i,hitCount:0});
+    }
+    scheduleTargetLoop();
+    showEvent('🎯 TARGET RUSH<br><span style="font-size:15px">30秒で15ヒット！</span>',2800);
+  }
+  function scheduleTargetLoop(){
+    if(state.targetLoop)return;
+    const tick=()=>{
+      state.targetLoop=0;
+      if(typeof currentPhase==='undefined'||currentPhase!==1.5||!state.practiceTargets.length)return;
+      const now=performance.now();
+      for(const t of state.practiceTargets){
+        if(!t.group)continue;
+        if(!t.active){
+          if(now>=t.respawnAt){t.active=true;t.group.visible=true;t.group.userData.hp=1;}
+          continue;
+        }
+        const u=t.group.userData;
+        t.group.position.x=u.homeX+Math.sin(now*.0012+u.phase)*4.5;
+        t.group.position.z=u.homeZ+Math.cos(now*.0010+u.phase)*2.5;
+        t.group.rotation.y=now*.0015+u.phase;
+        t.group.position.y=.08+Math.sin(now*.003+u.phase)*.06;
+      }
+      if((now-state.practiceStart)>=30000){
+        const score=state.targetHits;state.practiceBest=Math.max(state.practiceBest,score);
+        showEvent(score>=15?'🏆 TARGET RUSH CLEAR!':'TIME UP!<br><span style="font-size:15px">あと少し！もう一回！</span>',2600);
+        state.practiceStart=performance.now()+999999;
+      }
+      updateHud();
+      state.targetLoop=setTimeout(tick,80);
+    };
+    state.targetLoop=setTimeout(tick,80);
+  }
+  function registerTargetHit(target){
+    if(!target?.active)return;
+    target.active=false;target.respawnAt=performance.now()+900;target.group.visible=false;
+    state.targetHits++;state.combo++;state.comboUntil=performance.now()+1800;
+    if(typeof playerFighter!=='undefined'&&playerFighter){playerFighter.specialGauge=Math.min(100,(playerFighter.specialGauge||0)+2.5);}
+    showHit(state.combo>=3?`HIT! ×${state.combo}`:'HIT!');
+    if(state.targetHits===5||state.targetHits===10||state.targetHits===15)showEvent(`🔥 ${state.targetHits} HITS!<br><span style="font-size:15px">SP + BONUS</span>`,1700);
+    updateHud();
+  }
+
+  /* 通常弾：飛翔中に練習ターゲットへ当たったらヒット扱い */
+  if(typeof updateBullets==='function'){
+    const oldUpdateBullets=updateBullets;
+    updateBullets=function(delta){
+      oldUpdateBullets(delta);
+      if(typeof currentPhase==='undefined'||currentPhase!==1.5||!state.practiceTargets.length)return;
+      for(let i=bullets.length-1;i>=0;i--){
+        const b=bullets[i];if(!b?.mesh?.parent||b.team!=='A')continue;
+        for(const t of state.practiceTargets){
+          if(!t.active)continue;
+          const dx=b.mesh.position.x-t.group.position.x;
+          const dy=b.mesh.position.y-(t.group.position.y+1.0);
+          const dz=b.mesh.position.z-t.group.position.z;
+          if(dx*dx+dy*dy+dz*dz<1.0){
+            registerTargetHit(t);
+            if(b.mesh.parent)scene.remove(b.mesh);
+            bullets.splice(i,1);
+            break;
+          }
+        }
+      }
+    };
+  }
+
+  /* ペイント射撃に軽いコンボ演出を付与（AIには付けない） */
+  if(typeof tryShoot==='function'){
+    const oldTryShoot=tryShoot;
+    tryShoot=function(f,aim,now){
+      const before=(f?.isPlayer&&typeof currentPhase!=='undefined'&&currentPhase===2)?(f.specialGauge||0):null;
+      oldTryShoot(f,aim,now);
+      if(f?.isPlayer&&currentPhase===2&&before!==null&&now-state.lastShotFx>35){
+        state.lastShotFx=now;state.combo=Math.min(20,state.combo+1);state.comboUntil=now+1100;
+        if(state.combo%5===0)f.specialGauge=Math.min(100,f.specialGauge+3);
+        showHit(state.combo%5===0?'INK FEVER!':'');
+      }
+    };
+  }
+
+  /* チャージャー射撃もコンボ対象 */
+  if(typeof fireChargerShot==='function'){
+    const oldCharger=fireChargerShot;
+    fireChargerShot=function(f,a,frac){
+      oldCharger(f,a,frac);
+      if(f?.isPlayer&&currentPhase===2){state.combo=Math.min(20,state.combo+1);state.comboUntil=performance.now()+1300;showHit(frac>.88?'FULL CHARGE!':'CHARGE HIT!');}
+    };
+  }
+
+  /* 発射の気持ちよさ：プレイヤーだけ微小な反動＋発光 */
+  if(typeof spawnBullet==='function'){
+    const oldSpawn=spawnBullet;
+    spawnBullet=function(f,dir,opts){
+      oldSpawn(f,dir,opts);
+      if(f?.isPlayer&&typeof scene!=='undefined'&&scene){
+        const p=f.pos.clone();p.y+=1.25;p.addScaledVector(dir,.7);
+        const flash=new THREE.Mesh(new THREE.SphereGeometry(.20,7,5),new THREE.MeshBasicMaterial({color:f.team==='A'?teamAHex:teamBHex,transparent:true,opacity:.9}));
+        flash.position.copy(p);scene.add(flash);setTimeout(()=>{if(flash.parent)scene.remove(flash);},70);
+        try{if(typeof camera!=='undefined'&&camera){camera.rotation.z=(Math.random()-.5)*.008;setTimeout(()=>{if(camera)camera.rotation.z=0;},70);}}catch(e){}
+      }
+    };
+  }
+
+  /* 低HPで少し緊張感 */
+  if(typeof updatePlayerMovement==='function'){
+    const oldMove=updatePlayerMovement;
+    updatePlayerMovement=function(delta){
+      oldMove(delta);
+      updateHud();
+    };
+  }
+
+  /* 試し撃ち開始を検知。v27の街→元の範囲開始関数にも対応 */
+  function maybePractice(){setTimeout(()=>{if(typeof currentPhase!=='undefined'&&currentPhase===1.5)ensureTargets();},180);}
+  if(window.__V15?.action){
+    const oldAction=window.__V15.action;
+    window.__V15.action=function(key){oldAction(key);if(key==='range')maybePractice();};
+    window.__V15.actionV28=window.__V15.action;
+  }
+
+  /* CPU戦開始演出 */
+  if(typeof startBattleFromRange==='function'){
+    const oldBattle=startBattleFromRange;
+    startBattleFromRange=function(){
+      oldBattle();
+      if(typeof currentPhase!=='undefined'&&currentPhase===2){
+        state.combo=0;state.handledEvents={};
+        const go=el('v28-go');if(go){go.textContent='3... 2... 1... GO!';go.classList.remove('show');void go.offsetWidth;go.classList.add('show');}
+        showEvent('⚡ BATTLE FEVER<br><span style="font-size:15px">塗って・当てて・SPを回せ！</span>',2300);
+      }
+    };
+  }
+
+  /* バトル中の時間イベント。既存ルールは壊さず、SP/速度だけ少し盛り上げる */
+  function eventTick(){
+    if(typeof currentPhase==='undefined'){updateHud();return;}
+    if(currentPhase!==1.5 && state.practiceTargets.length) clearTargets();
+    if(currentPhase===1.5 && !state.practiceTargets.length) ensureTargets();
+    if(currentPhase!==2||!battleActive||typeof battleTimer==='undefined'){
+      updateHud();return;
+    }
+    if(!state.handledEvents.intro){
+      state.handledEvents.intro=1;
+      const go=el('v28-go');if(go){go.textContent='3... 2... 1... GO!';go.classList.remove('show');void go.offsetWidth;go.classList.add('show');}
+      showEvent('⚡ BATTLE FEVER<br><span style="font-size:15px">塗って・当てて・SPを回せ！</span>',2300);
+    }
+    const t=Math.ceil(battleTimer);
+    if(t<=120&&t>116&&!state.handledEvents.e120){
+      state.handledEvents.e120=1;state.event='INK RUSH';state.eventUntil=performance.now()+15000;
+      showEvent('🔥 INK RUSH<br><span style="font-size:14px">15秒間、SPがたまりやすい！</span>',2600);
+    }
+    if(t<=60&&t>56&&!state.handledEvents.e60){
+      state.handledEvents.e60=1;state.event='CLUTCH TIME';state.eventUntil=performance.now()+12000;
+      if(typeof playerFighter!=='undefined'&&playerFighter)playerFighter.speedBoostUntil=performance.now()+12000;
+      showEvent('⚡ CLUTCH TIME<br><span style="font-size:14px">12秒間、移動スピードUP!</span>',2600);
+    }
+    if(t<=30&&t>26&&!state.handledEvents.e30){
+      state.handledEvents.e30=1;state.event='FINAL SPLASH';
+      showEvent('💥 FINAL SPLASH<br><span style="font-size:14px">残り30秒！</span>',2400);
+    }
+    if(typeof playerFighter!=='undefined'&&playerFighter&&state.event==='INK RUSH'&&performance.now()<state.eventUntil){
+      playerFighter.specialGauge=Math.min(100,(playerFighter.specialGauge||0)+0.018);
+    }
+    if(typeof playerFighter!=='undefined'&&playerFighter&&state.event==='FINAL SPLASH'&&t>0){
+      /* 小さな常時SPボーナスだけ。既存の攻撃処理は変えない */
+      if(Math.random()<.12)playerFighter.specialGauge=Math.min(100,playerFighter.specialGauge+.12);
+    }
+    updateHud();
+  }
+  let lastTick=0;
+  function loopTick(){
+    const now=performance.now();
+    if(now-lastTick>120){lastTick=now;eventTick();}
+    requestAnimationFrame(loopTick);
+  }
+
+  addStyle();addHud();
+  requestAnimationFrame(loopTick);
+  window.__V28={state,ensureTargets,clearTargets,showEvent};
+})();
+</script>
+
