@@ -3,6 +3,14 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
 
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options':'nosniff',
+  'X-Frame-Options':'DENY',
+  'Referrer-Policy':'strict-origin-when-cross-origin',
+  'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
+  'Content-Security-Policy':"default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+};
+
 const PORT = Number(process.env.PORT || 3000);
 const INDEX = path.join(__dirname, "index.html");
 
@@ -77,13 +85,10 @@ function tryMakeRoom() {
 const httpServer = http.createServer((req, res) => {
   let reqPath = decodeURIComponent((req.url || "/").split("?")[0]);
   if (reqPath === "/") reqPath = "/index.html";
-  const relativePath = reqPath.replace(/^\/+/, "");
-  const allowedFiles = new Set(["index.html", "game.js", "server.js", "package.json", "render.yaml", "README.md"]);
-  if (!allowedFiles.has(relativePath)) {
-    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" });
-    return res.end("Not found");
+  const file = path.join(__dirname, reqPath.replace(/^\/+/, ""));
+  if (!file.startsWith(__dirname)) {
+    res.writeHead(403); return res.end("Forbidden");
   }
-  const file = path.join(__dirname, relativePath);
 
   fs.readFile(file, (err, data) => {
     if (err) {
@@ -95,19 +100,10 @@ const httpServer = http.createServer((req, res) => {
       : ext === ".js" ? "text/javascript; charset=utf-8"
       : ext === ".css" ? "text/css; charset=utf-8"
       : "application/octet-stream";
-    const headers = {
+    res.writeHead(200, {
       "Content-Type": type,
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "DENY",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-    };
-    if (req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production') {
-      headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
-    }
-    res.writeHead(200, headers);
+      "Cache-Control": "no-store"
+    });
     res.end(data);
   });
 });
