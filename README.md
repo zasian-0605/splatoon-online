@@ -1,20 +1,15 @@
-# Webインクバトル（GitHub / Render 用）
+# スプラ3風 Webオンライン v25
 
-ブラウザで動くWebゲームのソースコードです。
+分割前に動作していた1ファイル版をベースに戻した安定版です。
+ゲーム本体は `index.html` 1ファイルに入っています。
+オンライン通信には `server.js` が必要です。
 
-## ファイル
-- index.html：ゲーム本体
-- server.js：Renderで動かすHTTP / WebSocketサーバー
-- package.json：Node.js依存関係
-- render.yaml：Render設定
+## 構成
+- index.html：街・試し撃ち・CPU・オンライン・カスタマイズ・バトル・結果画面
+- server.js：WebSocketオンラインサーバー
+- package.json
+- render.yaml
 
 ## Render
-Build Command：`npm install`
-Start Command：`npm start`
-Node.js：18以上
-
-## 安全性について
-- 実行ファイルやバイナリは同梱していません。
-- ブラウザの任意の保存先からWebSocketへ接続する機能は使いません。
-- オンライン接続先は、ゲームを開いているWebサイト自身です。
-- オンライン通信にはWebSocketを使用します。
+Build Command: `npm install`
+Start Command: `npm start`

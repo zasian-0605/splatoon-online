@@ -3,10 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="referrer" content="strict-origin-when-cross-origin">
-<meta http-equiv="X-Content-Type-Options" content="nosniff">
-<meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
-<title>スプラ3風 Webオンライン - クリーン版</title>
+<title>スプラ3風 Webオンライン v25 - 安定版（分割前ベース）</title>
+<script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
@@ -166,27 +164,8 @@ body.pointer-lock-ready{cursor:none !important;}
 .v6-gear-effects{font:12px/1.55 sans-serif;color:#e3ff00;margin-top:8px;}
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
-
-/* v26: clear weapon recognition */
-#weapon-visual-card{
-  display:flex;align-items:center;gap:10px;margin-top:8px;padding:9px 10px;
-  background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
-  border:2px solid rgba(255,255,255,.28);border-radius:10px;
-}
-#weapon-visual-icon{
-  width:52px;height:52px;flex:none;display:flex;align-items:center;justify-content:center;
-  border-radius:12px;background:#111;color:#fff;font-size:29px;font-weight:900;
-  border:2px solid #e3ff00;box-shadow:3px 3px 0 rgba(0,0,0,.55);
-}
-#weapon-visual-copy{display:flex;flex-direction:column;min-width:0}
-#weapon-visual-copy strong{font-size:15px;line-height:1.1}
-#weapon-visual-kind{margin-top:4px;font:900 10px/1.2 Arial,Meiryo,sans-serif;color:#e3ff00}
-.v26-stat-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
-.v26-stat{padding:4px 6px;border-radius:999px;background:rgba(0,0,0,.40);border:1px solid rgba(255,255,255,.18);font:800 10px/1 Arial,Meiryo,sans-serif;color:#fff}
-.v26-category-shooter{font-family:Arial Black,Meiryo,sans-serif}
-
 </style>
-<meta name="game-version" content="v26-stage-ink-quality"></head>
+<meta name="game-version" content="v25-clean-rollback"></head>
 <body>
 
 <div id="loading-screen">
@@ -217,10 +196,6 @@ body.pointer-lock-ready{cursor:none !important;}
 <select id="select-outfit" style="width:100%;padding:8px;background:#222;color:#fff;border:2px solid #e3ff00;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;"></select></div>
 <div class="custom-group"><span class="custom-label">ブキ（カテゴリごとに個性あり）</span>
 <select id="select-weapon" style="width:100%;padding:8px;background:#222;color:#fff;border:2px solid #ff0055;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;"></select>
-<div id="weapon-visual-card">
-  <div id="weapon-visual-icon">●</div>
-  <div id="weapon-visual-copy"><strong id="weapon-visual-name">スプラシューター</strong><span id="weapon-visual-kind">シューター</span></div>
-</div>
 <div id="weapon-info"></div></div>
 <div class="custom-group"><span class="custom-label">アタマギア</span>
 <div class="opt-btns" id="grp-gear">
@@ -300,7 +275,7 @@ body.pointer-lock-ready{cursor:none !important;}
       <button id="online-start">マッチング開始</button>
       <button id="online-cancel">戻る</button>
     </div>
-    <div id="online-note">このゲームは現在表示しているWebサイトのオンラインサーバーだけに接続します。ブラウザだけで遊べるWeb版。試し撃ち・CPU 4vs4・オンライン8人を搭載。オンライン時だけ通信サーバーを使います。</div>
+    <div id="online-note">ブラウザだけで遊べるWeb版。試し撃ち・CPU 4vs4・オンライン8人を搭載。オンライン時だけ通信サーバーを使います。</div>
   </div>
 </div>
 
@@ -3153,7 +3128,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function openOnlinePanel(){
     document.getElementById('online-panel').style.display='flex';
     setOnlineStatus('サーバーに接続します…');
-    const url=(location.protocol==='http:'||location.protocol==='https:') ? onlineUrl() : '';
+    const savedWs=localStorage.getItem('splatoonWs');
+    const url=savedWs || (location.protocol==='file:' ? '' : onlineUrl());
     try{
       if(!url){ setOnlineStatus('オンラインは公開Web版のURLから利用してください。試し撃ち・CPU対戦はそのまま遊べます。'); return; }
       onlineSocket=new WebSocket(url);
@@ -3880,6 +3856,23 @@ ${roomText(m.players)}`;
     paintGround(m.x,m.z,m.radius,displayColorForPlayer(m.id),{mult:m.mult||1,remote:true});
   });
 
+  /* Existing onmessage is closed over inside openOnlinePanel, so intercept WebSocket constructor messages. */
+  const NativeWS=window.WebSocket;
+  window.WebSocket=function(url, protocols){
+    const ws=protocols?new NativeWS(url,protocols):new NativeWS(url);
+    const oldAdd=ws.addEventListener.bind(ws);
+    ws.addEventListener=function(type,listener,opts){
+      if(type==='message'){
+        const wrapped=function(ev){
+          try{ const m=JSON.parse(ev.data); if(m.type==='queue'){setQueueCount(m.count||0);} if(m.type==='matchFound'){setQueueCount(8);} if(m.type==='paint'&&m.id){ev=new MessageEvent('message',{data:JSON.stringify(Object.assign({},m,{colorHex:displayColorForPlayer(m.id)}))});} }catch{} listener.call(ws,ev); };
+        return oldAdd(type,wrapped,opts);
+      }
+      return oldAdd(type,listener,opts);
+    };
+    return ws;
+  };
+  window.WebSocket.CONNECTING=NativeWS.CONNECTING;window.WebSocket.OPEN=NativeWS.OPEN;window.WebSocket.CLOSING=NativeWS.CLOSING;window.WebSocket.CLOSED=NativeWS.CLOSED;
+
   /* ---------- Better remote creation: own chosen color stays own ---------- */
   const oldEnsureRemote=window.ensureRemoteFighter;
   if(typeof oldEnsureRemote==='function'){
@@ -4218,9 +4211,8 @@ ${roomText(m.players)}`;
   function mapPoint(ctx,size,x,z){
     const pad=10;
     const usable=size-pad*2;
-    const sx=window.__V26_STAGE_HALF_X||18, sz=window.__V26_STAGE_HALF_Z||45;
-    return {x:pad+((x+sx)/(sx*2))*usable,
-            y:pad+((z+sz)/(sz*2))*usable};
+    return {x:pad+((x+STAGE_HALF)/(STAGE_HALF*2))*usable,
+            y:pad+((z+STAGE_HALF)/(STAGE_HALF*2))*usable};
   }
 
   function drawMap(ctx,size){
@@ -4410,8 +4402,8 @@ ${roomText(m.players)}`;
     const nx=(x-pad/760)/usable;
     const nz=(y-pad/760)/usable;
     return {
-      x:-(window.__V26_STAGE_HALF_X||18)+Math.max(0,Math.min(1,nx))*(window.__V26_STAGE_HALF_X||18)*2,
-      z:-(window.__V26_STAGE_HALF_Z||45)+Math.max(0,Math.min(1,nz))*(window.__V26_STAGE_HALF_Z||45)*2
+      x:-STAGE_HALF+Math.max(0,Math.min(1,nx))*STAGE_HALF*2,
+      z:-STAGE_HALF+Math.max(0,Math.min(1,nz))*STAGE_HALF*2
     };
   }
 
@@ -4456,328 +4448,6 @@ ${roomText(m.players)}`;
   };
 
   window.__V11={startSuperJump,openFullMap,getJumpState:()=>jumpState};
-})();
-</script>
-
-
-<script>
-/* =====================================================================
-   FINAL GAMEPLAY PASS v28
-   - Hold Shift for squid form; releasing Shift always returns to human form.
-   - Normal shots no longer paint a straight flight trail.
-   - Ink is painted mainly on impact, with controlled footprints.
-   - Every ranged weapon gets an explicit maximum range.
-   - Projectile count and lifetime are capped for stable gameplay.
-   - Charger uses its own range limit and hitscan path.
-   - Stage painting stays mapped to the actual 36 x 90 battle floor.
-   ===================================================================== */
-(function(){
-  'use strict';
-  const STAGE_X=18, STAGE_Z=45;
-  const MAX_ACTIVE_BULLETS=34;
-  const RANGE_DEFAULT={shooter:28,blaster:20,maneuver:25,slosher:22};
-  const RANGE_BY_NAME={
-    'スプラシューター':27,'.52ガロン':23,'N-ZAP85':25,'プライムシューター':31,'.96ガロンデコ':29,
-    'ノヴァブラスター':17,'クラッシュブラスター':16,'ラピッドブラスター':29,'Rブラスターエリート':20,
-    'スパッタリー':21,'デュアルスイーパー':29,'ケルビン525':22,
-    'バケツスロッシャー':22,'ヒッセン':20,'オーバーフロッシャー':25,'エクスプロッシャー':33
-  };
-  const CHARGER_RANGE={'スプラチャージャー':55,'リッター4K':68,'14式竹筒銃':47};
-
-  weaponList.forEach(w=>{
-    if(w.category==='roller') w.maxRange=Math.max(2.2,(w.swingRange||3.0)+0.8);
-    else if(w.category==='charger') w.maxRange=CHARGER_RANGE[w.name]||55;
-    else if(w.category==='wiper') w.maxRange=w.slashRange||4.5;
-    else w.maxRange=RANGE_BY_NAME[w.name]||RANGE_DEFAULT[w.category]||24;
-    /* Slightly calmer fire rates; damage/identity stay unchanged. */
-    if(w.category==='shooter'||w.category==='maneuver'||w.category==='blaster'||w.category==='slosher'){
-      w.rate=Math.round((w.rate||100)*1.08);
-    }
-  });
-
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const colorCss=h=>'#'+(Number(h)||0).toString(16).padStart(6,'0');
-
-  /* --- Squid state -------------------------------------------------- */
-  function squidState(){return !!keys.shift;}
-  window.__FINAL_GAMEPLAY={get squid(){return squidState();}};
-
-  window.addEventListener('keydown',(e)=>{
-    if(currentPhase!==1.5&&currentPhase!==2)return;
-    if(e.code==='ShiftLeft'||e.code==='ShiftRight'){
-      keys.shift=true;
-      e.preventDefault();
-    }
-  },true);
-
-  window.addEventListener('keyup',(e)=>{
-    if(e.code==='ShiftLeft'||e.code==='ShiftRight'){
-      keys.shift=false;
-    }
-  },true);
-
-  // A released Shift always returns to human form.
-  // Reset on focus loss too, so Shift can never remain stuck.
-  window.addEventListener('blur',()=>{
-    keys.w=keys.a=keys.s=keys.d=keys.space=false;
-    keys.shift=false;
-  });
-
-  /* Make the visual state unambiguous. */
-  const baseAnim=updateFighterAnimation;
-  updateFighterAnimation=function(f,moving,isSquid){
-    baseAnim(f,moving,!!isSquid);
-    if(!f||!f.squid)return;
-    if(isSquid){
-      f.human.visible=false;
-      f.squid.visible=true;
-      f.squid.scale.set(moving?1.06:1.0, moving?.92:1.0, moving?1.06:1.0);
-    }else{
-      f.human.visible=true;
-      f.squid.visible=false;
-    }
-  };
-
-  /* Replace the final player movement override so squid logic is always the same. */
-  updatePlayerMovement=function(delta){
-    const f=playerFighter;if(!f||!f.alive)return;
-    setupFighterEconomy(f);
-    const now=performance.now();
-    const isSquid=squidState();
-    f.squid_mode=isSquid;
-
-    const ownInk=onFighterInk(f);
-    if(isSquid && now>(f.inkRegenBlockedUntil||0)){
-      const gp=f.gearProfile||gearProfile(f);
-      f.ink=Math.min(100,f.ink+(ownInk?34:7)*delta*(gp.inkRegen||1));
-      if(ownInk&&f.hp<f.maxHp)f.hp=Math.min(f.maxHp,f.hp+10*delta*(gp.inkRegen||1));
-    }else if(now>(f.inkRegenBlockedUntil||0)){
-      const gp=f.gearProfile||gearProfile(f);
-      f.ink=Math.min(100,f.ink+3.2*delta*(gp.inkRegen||1));
-    }
-
-    const gp=f.gearProfile||gearProfile(f);
-    let speedMult=isSquid?(ownInk?1.9:.58):1;
-    if(!isSquid&&isShooting&&f.weapon.category!=='maneuver')speedMult*=.62;
-    if(f.weapon.category==='maneuver'&&isShooting) speedMult*=1.12;
-    speedMult*=gp.move||1;
-    if(isSquid)speedMult*=gp.swim||1;
-    if(now<(f.speedBoostUntil||0))speedMult*=1.5;
-
-    const moveDir=new THREE.Vector3();
-    if(keys.w)moveDir.z-=1;if(keys.s)moveDir.z+=1;if(keys.a)moveDir.x-=1;if(keys.d)moveDir.x+=1;
-    let moving=false;
-    if(moveDir.lengthSq()>0){
-      moveDir.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
-      playerVelocity.x=moveDir.x*15*speedMult;
-      playerVelocity.z=moveDir.z*15*speedMult;
-      moving=true;
-    }else{
-      playerVelocity.x*=.78;playerVelocity.z*=.78;
-    }
-    f._moving=moving;
-
-    if(!isSquid){
-      f.human.rotation.y=yaw+Math.PI;
-      if(f.weapon.category==='roller'&&isShooting)doRollerAction(f,now,moving);
-      else if(f.weapon.category==='wiper'&&isShooting){
-        if(!f.wiperChargeStart)f.wiperChargeStart=now;
-        const frac=Math.min(1,(now-f.wiperChargeStart)/(f.weapon.chargeTime||600));
-        const g=document.getElementById('charge-gauge');g.style.display='block';g.style.setProperty('--pct',Math.round(frac*100));
-        if(frac>=1){doWiperSlash(f,1);f.wiperChargeStart=now;}
-      }else if(f.weapon.category==='charger'){
-        const g=document.getElementById('charge-gauge');
-        if(f.isCharging){const frac=Math.min(1,(now-f.chargeStart)/(f.weapon.chargeTime||900));g.style.display='block';g.style.setProperty('--pct',Math.round(frac*100));}
-      }else if(isShooting){
-        const d=new THREE.Vector3();camera.getWorldDirection(d);tryShoot(f,d,now);
-      }
-    }else{
-      f.wiperChargeStart=0;f.isCharging=false;f.spinnerCharging=false;f.spinnerFiring=false;
-      document.getElementById('charge-gauge').style.display='none';
-    }
-
-    const climbing=tryMoveWithCollision(f,playerVelocity,delta,isSquid);
-    if(keys.space&&!isSquid&&canJump&&!climbing){playerVelocity.y=10;canJump=false;sfx('jump');}
-    if(!climbing)playerVelocity.y-=30*delta;else playerVelocity.y=4.5;
-    f.pos.y+=playerVelocity.y*delta;
-    const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
-    const restY=(isSquid&&ownInk)?floorY-.35:floorY;
-    if(f.pos.y<=restY){f.pos.y=restY;playerVelocity.y=0;canJump=true;}
-    updateFighterAnimation(f,moving,isSquid);
-    f.root.rotation.y=isSquid?yaw:f.human.rotation.y;
-  };
-
-  /* --- Range-aware shooter ----------------------------------------- */
-  tryShoot=function(f,aimDir,now){
-    const w=f.weapon;
-    if(!w||!f.alive||w.category==='charger'||w.category==='roller'||w.category==='wiper')return;
-    if(now-f.lastShot<(w.rate||120))return;
-    const cost=inkCost(f,w.inkCost||1);if(!consumeInk(f,cost))return;
-    f.lastShot=now;
-    const d=aimDir.clone().normalize();
-    const spread=w.spread||.04;
-    d.x+=(Math.random()-.5)*spread;d.y+=(Math.random()-.5)*spread;d.z+=(Math.random()-.5)*spread;d.normalize();
-    const base={speed:w.speed||28,damage:w.damage||25,gravity:w.category==='slosher'?26:18,life:w.life||1.2,maxRange:w.maxRange,paintRadius:w.paintRadius||1};
-    if(w.category==='blaster'){
-      Object.assign(base,{radius:.24,explosive:true,explosionRadius:w.explosionRadius||2.4,splashDamage:w.splashDamage||35,paintRadius:(w.paintRadius||1)*.95});
-    }else if(w.category==='slosher'){
-      d.y+=.55;d.normalize();Object.assign(base,{radius:.27,explosive:true,explosionRadius:w.explosionRadius||2.0,splashDamage:(w.damage||45)*.5,paintRadius:(w.paintRadius||1)*.92});
-    }else{
-      Object.assign(base,{radius:.12,paintRadius:(w.paintRadius||1)*.8});
-    }
-    spawnBullet(f,d,base);
-    f.specialGauge=Math.min(100,f.specialGauge+.9*(f.gearProfile?.specialGain||1));
-    sfx('shoot');
-  };
-
-  /* --- Bullet storage with actual range tracking ------------------- */
-  const baseSpawn=spawnBullet;
-  spawnBullet=function(f,dir,opts){
-    const o=Object.assign({},opts);
-    o.maxRange=Number.isFinite(o.maxRange)?o.maxRange:(f.weapon?.maxRange||25);
-    o.life=Math.min(Number(o.life)||1.2,o.maxRange/Math.max(1,Number(o.speed)||25)+.12);
-    if(bullets.length>=MAX_ACTIVE_BULLETS){
-      const old=bullets.shift();
-      if(old?.mesh?.parent)scene.remove(old.mesh);
-    }
-    baseSpawn(f,dir,o);
-    const b=bullets[bullets.length-1];
-    if(b){
-      b.maxRange=o.maxRange;b.travelled=0;b.prevPosition=b.mesh.position.clone();
-      b._finalNoTrail=true;
-    }
-  };
-
-  /* --- No flight paint trail. Impact paint only. ------------------- */
-  updateBullets=function(delta){
-    for(let i=bullets.length-1;i>=0;i--){
-      const b=bullets[i];
-      if(!b?.mesh){bullets.splice(i,1);continue;}
-      const prev=b.mesh.position.clone();
-      b.velocity.y-=b.gravity*delta;
-      b.mesh.position.addScaledVector(b.velocity,delta);
-      b.age=(b.age||0)+delta;
-      b.travelled=(b.travelled||0)+prev.distanceTo(b.mesh.position);
-
-      let hitFighter=null;
-      for(let k=0;k<fighters.length;k++){
-        const fi=fighters[k];
-        if(!fi.alive||fi.team===b.team||fi.id===b.fromId)continue;
-        const dy=b.mesh.position.y-(fi.pos.y+.9);
-        if(Math.abs(dy)<1.3){
-          const dx=b.mesh.position.x-fi.pos.x,dz=b.mesh.position.z-fi.pos.z;
-          if(dx*dx+dz*dz<.75*.75){hitFighter=fi;break;}
-        }
-      }
-
-      const wall=getBlockingWall(b.mesh.position.x,b.mesh.position.z,b.mesh.position.y);
-      const groundH=getSupportHeight(b.mesh.position.x,b.mesh.position.z,b.mesh.position.y);
-      const col=b.team==='A'?teamAHex:teamBHex;
-      const expired=b.travelled>=b.maxRange||b.age>=b.life;
-
-      if(hitFighter){
-        if(b.explosive){
-          explodeAt(b.mesh.position.clone(),b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
-          applyDamage(hitFighter,Math.max(1,(b.damage||0)-(b.splashDamage||0)),null);
-        }else applyDamage(hitFighter,b.damage,null);
-        for(let p=0;p<3;p++)spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
-      }else if(wall){
-        if(b.explosive)explodeAt(b.mesh.position.clone(),b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
-        else paintWallSurface(wall,b.mesh.position.clone(),col,b.team,Math.min(1.6,b.paintRadius||1));
-        paintWallSurface(wall,b.mesh.position.clone(),col,b.team,Math.min(1.6,b.paintRadius||1));
-        for(let p=0;p<3;p++)spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
-      }else if(b.mesh.position.y<=groundH||expired){
-        const px=clamp(b.mesh.position.x,-STAGE_X,STAGE_X),pz=clamp(b.mesh.position.z,-STAGE_Z,STAGE_Z);
-        if(b.explosive)explodeAt(new THREE.Vector3(px,groundH+.05,pz),b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
-        else paintGround(px,pz,b.paintRadius||.7,col,{shot:true});
-        for(let p=0;p<3;p++)spawnParticle(px,groundH+.05,pz,col);
-      }else{b.prevPosition=b.mesh.position.clone();continue;}
-
-      if(b.mesh.parent)scene.remove(b.mesh);
-      bullets.splice(i,1);
-    }
-
-    for(let i=particles.length-1;i>=0;i--){
-      const p=particles[i];p.v.y-=30*delta;p.mesh.position.addScaledVector(p.v,delta);p.age+=delta;
-      if(p.mesh.position.y<=0||p.age>1.4){scene.remove(p.mesh);particles.splice(i,1);}
-    }
-  };
-
-  /* --- Charger range: fixed, per weapon, no long paint line. ------- */
-  fireChargerShot=function(f,aimDir,chargeFrac){
-    const w=f.weapon;if(!w||!f.alive)return;
-    const cost=inkCost(f,Math.max(2.5,(w.inkCost||8)*.9));if(!consumeInk(f,cost))return;
-    const damage=(w.tapDamage||30)+((w.fullDamage||120)-(w.tapDamage||30))*clamp(chargeFrac,0,1);
-    const origin=f.pos.clone();origin.y+=1.2;
-    const dir=aimDir.clone().normalize();
-    const maxDist=w.maxRange||55,step=.35,col=f.team==='A'?teamAHex:teamBHex;
-    let hitFighter=null,hitPoint=null,hitBlock=null,traveled=0;
-    while(traveled<maxDist){
-      traveled+=step;
-      const p=origin.clone().addScaledVector(dir,traveled);
-      for(const o of fighters){
-        if(!o.alive||o.team===f.team)continue;
-        const dy=p.y-(o.pos.y+.9);
-        if(Math.abs(dy)<1.25){const dx=p.x-o.pos.x,dz=p.z-o.pos.z;if(dx*dx+dz*dz<.68*.68){hitFighter=o;hitPoint=p.clone();break;}}
-      }
-      if(hitFighter)break;
-      const wall=getBlockingWall(p.x,p.z,p.y);if(wall){hitBlock=wall;hitPoint=p.clone();break;}
-      const gh=getSupportHeight(p.x,p.z,p.y);if(p.y<=gh){hitPoint=p.clone();break;}
-    }
-    if(!hitPoint)hitPoint=origin.clone().addScaledVector(dir,maxDist);
-    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,origin.distanceTo(hitPoint),6),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.7}));
-    beam.position.copy(origin).add(hitPoint).multiplyScalar(.5);beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);scene.add(beam);setTimeout(()=>scene.remove(beam),90);
-    if(hitFighter)applyDamage(hitFighter,Math.round(damage),null);
-    else if(hitBlock)paintWallSurface(hitBlock,hitPoint,col,f.team,Math.min(1.4,w.paintRadius||1));
-    else paintGround(clamp(hitPoint.x,-STAGE_X,STAGE_X),clamp(hitPoint.z,-STAGE_Z,STAGE_Z),Math.min(1.2,w.paintRadius||1),col,{shot:true});
-    f.specialGauge=Math.min(100,f.specialGauge+5+chargeFrac*5);
-    sfx('shoot');
-  };
-
-  /* Mobile squid button: hold while touching, release to become human. */
-  const squidBtn=document.getElementById('btn-squid');
-  if(squidBtn){
-    const press=(e)=>{
-      if(currentPhase!==1.5&&currentPhase!==2)return;
-      e.preventDefault();
-      keys.shift=true;
-      if(e.pointerId!=null && squidBtn.setPointerCapture){try{squidBtn.setPointerCapture(e.pointerId);}catch(_){}}
-    };
-    const release=(e)=>{
-      e.preventDefault();
-      keys.shift=false;
-      if(e.pointerId!=null && squidBtn.releasePointerCapture){try{squidBtn.releasePointerCapture(e.pointerId);}catch(_){}}
-    };
-    squidBtn.addEventListener('pointerdown',press,true);
-    squidBtn.addEventListener('pointerup',release,true);
-    squidBtn.addEventListener('pointercancel',release,true);
-    squidBtn.addEventListener('pointerleave',(e)=>{
-      if(e.buttons===0) keys.shift=false;
-    },true);
-  }
-
-  /* Clearer instructions. */
-  function setFinalInstructions(){
-    const e=document.getElementById('instructions');
-    if(e)e.innerHTML='【PC】WASD:移動 / マウス:視点 / 左クリック:攻撃 / 右クリック:サブ / Shift長押し:イカ（離すと人） / Space:ジャンプ<br>弾は着弾地点だけ塗る。武器ごとに射程が違います。';
-  }
-  const oldRange=startRangePhase;
-  startRangePhase=function(){oldRange();setTimeout(setFinalInstructions,20);};
-  const oldBattle=startBattleFromRange;
-  startBattleFromRange=function(){oldBattle();setTimeout(setFinalInstructions,20);};
-
-  /* Weapon HUD now shows an explicit range value. */
-  const oldUpdateWeaponInfo=updateWeaponInfo;
-  updateWeaponInfo=function(){
-    try{
-      const w=weaponList[playerConfig.weapon]||weaponList[0];
-      const meta=(typeof CATEGORY_META!=='undefined'?CATEGORY_META:null);
-      const range=w.maxRange||w.swingRange||w.slashRange||'-';
-      const info=document.getElementById('weapon-info');
-      if(info)info.innerHTML=`<div class="v26-stat-row"><span class="v26-stat">射程 ${Number(range).toFixed?.(1)||range}</span><span class="v26-stat">塗り ${Number(w.paintRadius||w.paintFan||0).toFixed(1)}</span><span class="v26-stat">インク ${Number(w.inkCost||0).toFixed(1)}</span></div><div style="margin-top:6px">${w.sub} ／ ${w.special}</div>`;
-    }catch(e){oldUpdateWeaponInfo();}
-  };
-  setTimeout(()=>{try{updateWeaponInfo();}catch(e){}},60);
 })();
 </script>
 
@@ -5307,49 +4977,6 @@ ${roomText(m.players)}`;
     addVending(-8,-3,0x00d4ff);addVending(8,3,0xffa63d);
     addBillboard(0,-39);
     addOverpass();
-
-    /* v26 hub polish: clear four-way plaza, weapon displays, and route lighting. */
-    const pathDefs=[
-      {x:-11,z:-6,w:9,d:.26,c:0xe3ff00},
-      {x:11,z:-6,w:9,d:.26,c:0xff0055},
-      {x:-11,z:6,w:9,d:.26,c:0x9900ff},
-      {x:11,z:6,w:9,d:.26,c:0x00d4ff}
-    ];
-    pathDefs.forEach(p=>box(p.x,.06,p.z,p.w,.035,p.d,p.c));
-    for(const p of [[-5.0,-1.8,0xe3ff00],[5.0,-1.8,0xff0055],[-5.0,1.8,0x9900ff],[5.0,1.8,0x00d4ff]]){
-      cyl(p[0],.08,p[1],.55,.10,p[2],24);
-      cyl(p[0],.19,p[1],.30,.08,0x15131e,20);
-    }
-    // Weapon-showcase plinths near the southern weapon district.
-    for(let i=0;i<5;i++){
-      const x=13+i*2.1, z=-13.3;
-      cyl(x,.06,z,.46,.18,0x3d4656,18);
-      cyl(x,.25,z,.28,.08,accent[i%accent.length],18,{emissive:accent[i%accent.length],emissiveIntensity:.7});
-      box(x,.33,z,.10,.75,.10,0xaab4c5);
-    }
-    sign(23,-13.0,-13.9,8.6,1.25,'WEAPON LAB',0xff0055);
-    // Central wayfinding tower / plaza landmark.
-    for(let i=0;i<4;i++){
-      const a=i*Math.PI/2;
-      const gx=Math.cos(a)*6.6,gz=Math.sin(a)*6.6;
-      cyl(gx,.12,gz,.34,.22,accent[i],20,{emissive:accent[i],emissiveIntensity:.7});
-      box(gx,.34,gz,.10,1.15,.10,0xd6dbe5);
-    }
-    // Low seating around the plaza, deliberately not registered as obstacles.
-    for(const p of [[-7.0,0],[7.0,0],[0,-7.0],[0,7.0]]){
-      box(p[0],.12,p[1],2.4,.32,.55,0x6c5e54);
-    }
-    // Colored entrance headers directly above each facility route.
-    [
-      {x:-22,z:-15,text:'RANGE',c:0xe3ff00},
-      {x:22,z:-15,text:'CPU',c:0xff0055},
-      {x:-22,z:16,text:'CUSTOM',c:0x9900ff},
-      {x:22,z:16,text:'ONLINE',c:0x00d4ff}
-    ].forEach(g=>{
-      box(g.x,4.9,g.z,9.2,.22,.35,g.c,{emissive:g.c,emissiveIntensity:.65});
-      sign(g.x,5.35,g.z,g.text.length>5?7.2:5.8,1.0,g.text,g.c);
-    });
-
     // POIs
     poi(-22,-13,'range','試し撃ち場');
     poi(22,-13,'cpu','CPU対戦');
@@ -5541,402 +5168,3 @@ ${roomText(m.players)}`;
   window.__V15={startLobbyPhase,leaveLobby,action};
 })();
 </script>
-
-
-<script>
-/* =====================================================================
-   v26 QUALITY / STAGE + INK + WEAPON + LOBBY PASS
-   - 36x90 stage is mapped with correct rectangular world coordinates.
-   - Turf painting is small, organic and weapon-sensitive.
-   - Rebuilds the battle stage into a cleaner competitive layout.
-   - Adds stronger weapon/category recognition in HUD and customization.
-   - Adds a more structured city hub presentation without external assets.
-   ===================================================================== */
-(function(){
-  'use strict';
-
-  const VX=18, VZ=45;
-  window.__V26_STAGE_HALF_X=VX;
-  window.__V26_STAGE_HALF_Z=VZ;
-
-  const CATEGORY_META={
-    shooter:{icon:'●',label:'シューター',cls:'shooter'},
-    blaster:{icon:'◆',label:'ブラスター',cls:'blaster'},
-    charger:{icon:'╱',label:'チャージャー',cls:'charger'},
-    roller:{icon:'◈',label:'ローラー／筆',cls:'roller'},
-    maneuver:{icon:'≋',label:'マニューバー',cls:'maneuver'},
-    slosher:{icon:'▽',label:'スロッシャー',cls:'slosher'},
-    wiper:{icon:'⚔',label:'ワイパー',cls:'wiper'},
-    spinner:{icon:'◎',label:'スピナー',cls:'spinner'}
-  };
-
-  function cssHex(n){return '#'+(Number(n)||0).toString(16).padStart(6,'0');}
-  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-
-  /* ---------------------------------------------------------------
-     Rectangular world -> paint canvas
-     --------------------------------------------------------------- */
-  const v26WorldToCanvas = function(x,z){
-    const u=(clamp(x,-VX,VX)+VX)/(VX*2);
-    const v=(clamp(z,-VZ,VZ)+VZ)/(VZ*2);
-    return {cx:u*paintCanvas.width,cy:v*paintCanvas.height};
-  };
-  worldToCanvas=v26WorldToCanvas;
-
-  /* ---------------------------------------------------------------
-     Paint engine: small splats, controlled overlap.
-     --------------------------------------------------------------- */
-  const paintBaseMaterial = paintTexture;
-  if (paintBaseMaterial){
-    try{paintBaseMaterial.encoding=THREE.sRGBEncoding;}catch(e){}
-    paintBaseMaterial.needsUpdate=true;
-  }
-
-  function drawBlob(cx,cy,r){
-    const x=clamp(cx,0,paintCanvas.width), y=clamp(cy,0,paintCanvas.height);
-    const radius=Math.max(1,r);
-    const rings=3;
-    for(let ring=0;ring<rings;ring++){
-      const count=7+ring*2;
-      const ringR=radius*(ring===0?.45:ring===1?.72:1);
-      paintCtx.beginPath();
-      for(let i=0;i<count;i++){
-        const a=(i/count)*Math.PI*2;
-        const wobble=0.78+Math.random()*0.32;
-        const rr=ringR*wobble;
-        const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr;
-        if(i===0) paintCtx.moveTo(px,py); else paintCtx.lineTo(px,py);
-      }
-      paintCtx.closePath();
-      paintCtx.fill();
-    }
-    const drops=Math.min(5,Math.max(2,Math.round(radius/13)));
-    for(let i=0;i<drops;i++){
-      const a=Math.random()*Math.PI*2, d=radius*(1.1+Math.random()*.65), sr=radius*(.10+Math.random()*.16);
-      paintCtx.beginPath(); paintCtx.arc(x+Math.cos(a)*d,y+Math.sin(a)*d,sr,0,Math.PI*2); paintCtx.fill();
-    }
-  }
-
-  paintGround=function(x,z,radius,colorHex,opts={}){
-    if(currentPhase!==1.5 && currentPhase!==2) return;
-    if(!Number.isFinite(x)||!Number.isFinite(z)||!Number.isFinite(radius)) return;
-    if(x<-VX-1||x>VX+1||z<-VZ-1||z>VZ+1) return;
-
-    const safeR=clamp(radius,.08,3.2);
-    const isTrail=!!opts.trail;
-    const isRoll=!!opts.roller;
-    const isWiper=!!opts.wiper;
-    const isBomb=!!opts.bomb || safeR>=1.65;
-    let drawR;
-    if(isTrail) drawR=clamp(safeR*.42,.07,.22);
-    else if(isWiper) drawR=clamp(safeR*.74,.22,.72);
-    else if(isRoll) drawR=clamp(safeR*.82,.30,1.75);
-    else if(isBomb) drawR=clamp(safeR*.82,.55,2.35);
-    else drawR=clamp(safeR*.58,.16,.78);
-
-    const uv=v26WorldToCanvas(x,z);
-    paintCtx.fillStyle=cssHex(colorHex);
-    drawBlob(uv.cx,uv.cy,(drawR/(VX*2))*paintCanvas.width);
-    paintTexture.needsUpdate=true;
-
-    /* Preserve online paint replication while keeping the visual stamp local. */
-    if(onlineActive && onlineSocket && onlineSocket.readyState===1 && !opts.remote && !opts.noNetwork){
-      const now=performance.now();
-      if(!paintGround._netLast || now-paintGround._netLast>70){
-        paintGround._netLast=now;
-        const netRadius=clamp(safeR,.08,2.8);
-        try{
-          onlineSocket.send(JSON.stringify({
-            type:'paint',roomId:onlineRoomId,x:clamp(x,-17.25,17.25),z:clamp(z,-43.25,43.25),
-            radius:netRadius
-          }));
-        }catch(e){}
-      }
-    }
-  };
-
-  /* Starting turf: use the exact stage rectangle, not the old square transform. */
-  function resetV26Paint(){
-    paintCtx.fillStyle='#505463';
-    paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
-    const a=teamAHex,b=teamBHex;
-    const left=-VX,right=VX;
-    const topA=-44.5,bottomA=-30.0;
-    const topB=30.0,bottomB=44.5;
-    function rect(x0,z0,x1,z1,c){
-      const p0=v26WorldToCanvas(x0,z0),p1=v26WorldToCanvas(x1,z1);
-      paintCtx.fillStyle=cssHex(c);
-      paintCtx.fillRect(p0.cx,p0.cy,p1.cx-p0.cx,p1.cy-p0.cy);
-    }
-    rect(left+.55,topA,right-.55,bottomA,a);
-    rect(left+.55,topB,right-.55,bottomB,b);
-    paintTexture.needsUpdate=true;
-  }
-
-  /* ---------------------------------------------------------------
-     Cleaner battle stage. Everything the player can stand on stays
-     on the paintable ground; cover is low and readable.
-     --------------------------------------------------------------- */
-  const originalBuildStage=buildStage;
-  buildStage=function(){
-    if(stageGroup)scene.remove(stageGroup);
-    stageGroup=new THREE.Group();
-    scene.add(stageGroup);
-    collidableBlocks=[];
-    waypoints=[];
-    decals.forEach(d=>{if(d&&d.mesh)scene.remove(d.mesh);});
-    decals=[];
-    bullets.forEach(b=>{if(b&&b.mesh&&b.mesh.parent)scene.remove(b.mesh);});
-    bullets=[];
-    subsList.forEach(s=>{if(s&&s.mesh&&s.mesh.parent)scene.remove(s.mesh);});
-    subsList=[];
-    resetV26Paint();
-
-    const ground=new THREE.Mesh(
-      new THREE.PlaneGeometry(VX*2,VZ*2,1,1),
-      new THREE.MeshLambertMaterial({map:paintTexture})
-    );
-    ground.rotation.x=-Math.PI/2;
-    ground.position.y=.001;
-    stageGroup.add(ground);
-
-    function block(x,z,w,h,d,c,opts={}){
-      return addBlock(x,0,z,w,h,d,c,Object.assign({climbable:false},opts));
-    }
-
-    /* Outer rim */
-    block(-19,0,1.2,1.8,88,0x252b38);
-    block(19,0,1.2,1.8,88,0x252b38);
-    block(0,-45,36,1.8,1.2,0x252b38);
-    block(0,45,36,1.8,1.2,0x252b38);
-
-    /* Spawn decks */
-    block(0,-38,28,.18,10,0x646b7a);
-    block(0,38,28,.18,10,0x646b7a);
-
-    /* Three-lane rhythm: side cover, center cover, intentional openings. */
-    const covers=[
-      [-11,-28,6,2.0,2.8], [11,-28,6,2.0,2.8],
-      [-11,-15,4,1.6,2.5], [11,-15,4,1.6,2.5],
-      [-12,-3,6,2.3,2.8], [12,-3,6,2.3,2.8],
-      [-10,10,4,1.6,2.5], [10,10,4,1.6,2.5],
-      [-11,24,6,2.0,2.8], [11,24,6,2.0,2.8],
-      [-5,-7,3.5,1.4,2.0], [5,7,3.5,1.4,2.0],
-      [-5,17,3.5,1.6,2.0], [5,-19,3.5,1.6,2.0]
-    ];
-    covers.forEach((c,i)=>block(c[0],c[1],c[2],c[3],c[4],[0x566273,0x616e7d,0x4d596a][i%3]));
-
-    /* Low lane dividers: not tall enough to trap the player. */
-    [-5.7,5.7].forEach(x=>{
-      [-34,-24,-12,0,12,24,34].forEach(z=>{
-        block(x,z,0.9,1.45,6.0,0x434d5c);
-      });
-    });
-
-    /* Central contest area */
-    block(0,-8,6.2,1.0,2.5,0x6b7786);
-    block(0,8,6.2,1.0,2.5,0x6b7786);
-    block(-3.7,0,3.2,1.4,3.2,0x778392);
-    block(3.7,0,3.2,1.4,3.2,0x778392);
-
-    /* Painted-center guide strips */
-    waypoints.push(
-      {x:-13,z:-33},{x:0,z:-33},{x:13,z:-33},
-      {x:-13,z:-18},{x:0,z:-18},{x:13,z:-18},
-      {x:-13,z:-6},{x:0,z:-6},{x:13,z:-6},
-      {x:-13,z:7},{x:0,z:7},{x:13,z:7},
-      {x:-13,z:19},{x:0,z:19},{x:13,z:19},
-      {x:-13,z:33},{x:0,z:33},{x:13,z:33}
-    );
-
-    /* Spawn ring markers and lane accents */
-    const accentMatA=new THREE.MeshBasicMaterial({color:teamAHex,transparent:true,opacity:.65});
-    const accentMatB=new THREE.MeshBasicMaterial({color:teamBHex,transparent:true,opacity:.65});
-    for(const z of [-40,-36,36,40]){
-      const g=new THREE.Mesh(new THREE.TorusGeometry(2.7,.10,8,24),z<0?accentMatA:accentMatB);
-      g.rotation.x=Math.PI/2;g.position.set(0,.035,z);stageGroup.add(g);
-    }
-    [ -12,0,12 ].forEach((x,i)=>{
-      const g=new THREE.Mesh(new THREE.BoxGeometry(4,.05,.28),new THREE.MeshBasicMaterial({color:0xd8dce5,transparent:true,opacity:.55}));
-      g.position.set(x,.035,-25);stageGroup.add(g);
-      const g2=g.clone();g2.position.z=25;stageGroup.add(g2);
-    });
-
-    spawnPointA=new THREE.Vector3(0,0,-38);
-    spawnPointB=new THREE.Vector3(0,0,38);
-    stageBuilt=true;
-    try{resetV26Paint();}catch(e){}
-  };
-
-  /* Correct collision limits to the visual stage. */
-  clampStageXY=function(x,z){
-    return {x:clamp(x,-17.25,17.25),z:clamp(z,-43.25,43.25)};
-  };
-
-  /* ---------------------------------------------------------------
-     Turf count: report only actual team coverage, plus neutral.
-     --------------------------------------------------------------- */
-  computeTurf=function(){
-    sampleCtx.clearRect(0,0,96,96);
-    sampleCtx.drawImage(paintCanvas,0,0,96,96);
-    const data=sampleCtx.getImageData(0,0,96,96).data;
-    const aC=new THREE.Color(teamAHex), bC=new THREE.Color(teamBHex);
-    let a=0,b=0,neutral=0;
-    for(let i=0;i<data.length;i+=4){
-      const r=data[i]/255,g=data[i+1]/255,bl=data[i+2]/255;
-      const da=(r-aC.r)**2+(g-aC.g)**2+(bl-aC.b)**2;
-      const db=(r-bC.r)**2+(g-bC.g)**2+(bl-bC.b)**2;
-      if(da<.095 && da<db) a++; else if(db<.095 && db<da) b++; else neutral++;
-    }
-    const total=a+b+neutral || 1;
-    turfPct.a=Math.round(a/total*100);
-    turfPct.b=Math.round(b/total*100);
-    const barA=document.getElementById('turf-a'),barB=document.getElementById('turf-b');
-    if(barA&&barB){
-      const painted=a+b;
-      const pA=painted?Math.round(a/painted*100):50;
-      const pB=100-pA;
-      barA.style.width=(painted?Math.max(2,pA):0)+'%';
-      barB.style.width=(painted?Math.max(2,pB):0)+'%';
-      barA.title=`A ${turfPct.a}% / B ${turfPct.b}% / 未塗装 ${100-turfPct.a-turfPct.b}%`;
-      barB.title=barA.title;
-    }
-  };
-
-  /* ---------------------------------------------------------------
-     Stronger weapon recognition in customization + battle HUD.
-     --------------------------------------------------------------- */
-  const oldWeaponInfo=window.updateWeaponInfo;
-  window.updateWeaponInfo=function(){
-    const w=weaponList[playerConfig.weapon]||weaponList[0];
-    const meta=CATEGORY_META[w.category]||CATEGORY_META.shooter;
-    const icon=document.getElementById('weapon-visual-icon');
-    const name=document.getElementById('weapon-visual-name');
-    const kind=document.getElementById('weapon-visual-kind');
-    const info=document.getElementById('weapon-info');
-    if(icon){
-      icon.textContent=meta.icon;
-      icon.style.background=cssHex(w.color||0x222222);
-      icon.style.borderColor=cssHex(w.color||teamAHex);
-      icon.style.textShadow='2px 2px 0 #000';
-    }
-    if(name)name.textContent=w.name;
-    if(kind)kind.textContent=meta.label;
-    if(info){
-      const range=w.slashRange||w.swingRange||w.speed||0;
-      const paint=w.paintRadius||w.paintFan||0;
-      info.innerHTML=`<div class="v26-stat-row">
-        <span class="v26-stat">威力 ${w.fullDamage||w.damage||w.swingDamage||w.chargedDamage||'-'}</span>
-        <span class="v26-stat">射程 ${Number(range).toFixed(1)}</span>
-        <span class="v26-stat">塗り ${Number(paint).toFixed(1)}</span>
-      </div>
-      <div style="margin-top:6px">サブ：${w.sub}　／　SP：${w.special}</div>`;
-    }else if(typeof oldWeaponInfo==='function'){
-      oldWeaponInfo();
-    }
-  };
-
-  const oldEnsureHud=window.ensureHud;
-  if(typeof oldEnsureHud==='function'){
-    window.ensureHud=function(){
-      oldEnsureHud();
-      if(!playerFighter)return;
-      const el=document.getElementById('weapon-hud');
-      if(!el)return;
-      const w=playerFighter.weapon||weaponList[0],meta=CATEGORY_META[w.category]||CATEGORY_META.shooter;
-      el.innerHTML=`<span style="display:inline-flex;align-items:center;gap:7px">
-        <b style="display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;border-radius:9px;background:${cssHex(w.color)};border:2px solid #fff;font-size:20px;text-shadow:2px 2px #000">${meta.icon}</b>
-        <span><span class="weapon-name">${w.name}</span><br><span class="weapon-kind">${meta.label}</span></span>
-      </span>`;
-    };
-  }
-
-  /* Make the actual projectile and paint footprint less oversized. */
-  const _spawnBulletV26=spawnBullet;
-  spawnBullet=function(fighter,dir,opts){
-    const o=Object.assign({},opts);
-    const cat=fighter?.weapon?.category||'shooter';
-    o.visRadius = cat==='blaster'?0.20:cat==='slosher'?0.22:cat==='charger'?0.14:0.13;
-    if(Number.isFinite(o.paintRadius)){
-      const mult=cat==='blaster'?.92:cat==='slosher'?.96:cat==='charger'?.78:.82;
-      o.paintRadius*=mult;
-    }
-    _spawnBulletV26(fighter,dir,o);
-    const b=bullets[bullets.length-1];
-    if(b){
-      b._v26Cat=cat;b._v26Prev=b.mesh.position.clone();b._v26Trail=0;
-      b._v26TrailEvery=cat==='charger'?.055:cat==='blaster'?.14:.18;
-      b._v26TrailRadius=cat==='charger'?.08:cat==='blaster'?.07:.055;
-    }
-  };
-
-  /* Wrapper around the current bullet update: only tiny trail drips. */
-  const _updateBulletsV26=updateBullets;
-  updateBullets=function(delta){
-    for(const b of bullets){b._v26Trail=(b._v26Trail||0)+delta;}
-    _updateBulletsV26(delta);
-    for(const b of bullets){
-      if(!b?.mesh?.parent)continue;
-      if((b._v26Trail||0)<(b._v26TrailEvery||.18))continue;
-      const prev=b._v26Prev||b.mesh.position.clone(),cur=b.mesh.position;
-      const dist=prev.distanceTo(cur);
-      if(dist>.05){
-        const steps=Math.min(4,Math.max(1,Math.ceil(dist/.8)));
-        for(let i=1;i<=steps;i++){
-          const p=prev.clone().lerp(cur,i/steps);
-          paintGround(p.x,p.z,b._v26TrailRadius||.055,b.team==='A'?teamAHex:teamBHex,{trail:true,noNetwork:true});
-        }
-      }
-      b._v26Prev=cur.clone();b._v26Trail=0;
-    }
-  };
-
-  /* ---------------------------------------------------------------
-     Lobby polish: use the exported V15 controls but add a richer UI
-     card and route hints, without changing the existing navigation.
-     --------------------------------------------------------------- */
-  function injectLobbyPolish(){
-    const ui=document.getElementById('lobby-ui');
-    if(!ui||document.getElementById('v26-lobby-strip'))return;
-    const strip=document.createElement('div');
-    strip.id='v26-lobby-strip';
-    strip.innerHTML=`
-      <div class="v26-lobby-center-title">BANDARU CENTRAL <span>PLAZA</span></div>
-      <div class="v26-lobby-route a">試し撃ち</div>
-      <div class="v26-lobby-route b">CPU BATTLE</div>
-      <div class="v26-lobby-route c">ONLINE</div>
-      <div class="v26-lobby-route d">CUSTOMIZE</div>`;
-    ui.appendChild(strip);
-
-    const style=document.createElement('style');
-    style.textContent=`
-      #v26-lobby-strip{position:absolute;inset:0;pointer-events:none;font-family:Arial Black,Meiryo,sans-serif}
-      .v26-lobby-center-title{position:absolute;left:50%;top:74%;transform:translate(-50%,-50%) skewX(-8deg);
-        padding:8px 16px;background:rgba(10,10,18,.72);border:3px solid #fff;border-radius:10px;
-        color:#fff;font-size:clamp(13px,2vw,20px);box-shadow:5px 5px 0 rgba(0,0,0,.4)}
-      .v26-lobby-center-title span{color:#e3ff00}
-      .v26-lobby-route{position:absolute;padding:5px 8px;border-radius:999px;border:2px solid #fff;
-        background:rgba(16,14,24,.70);font:900 10px/1 Arial,Meiryo,sans-serif;text-shadow:1px 1px 0 #000}
-      .v26-lobby-route.a{left:27%;top:66%;color:#e3ff00}.v26-lobby-route.b{left:57%;top:66%;color:#ff4b74}
-      .v26-lobby-route.c{left:58%;top:36%;color:#59d8ff}.v26-lobby-route.d{left:27%;top:36%;color:#d58bff}
-    `;
-    document.head.appendChild(style);
-  }
-
-  const originalLobbyStart=window.startLobbyPhase;
-  if(typeof originalLobbyStart==='function'){
-    window.startLobbyPhase=function(){
-      originalLobbyStart();
-      setTimeout(injectLobbyPolish,0);
-    };
-  }
-
-  /* Initial HUD refresh hooks */
-  document.getElementById('select-weapon')?.addEventListener('change',()=>setTimeout(()=>window.updateWeaponInfo?.(),0));
-  setTimeout(()=>window.updateWeaponInfo?.(),0);
-
-  /* Let normal stage launcher keep working with the rebuilt stage. */
-  window.__V26={stageHalfX:VX,stageHalfZ:VZ,resetPaint:resetV26Paint,rebuildStage:buildStage};
-})();
-</script>
-

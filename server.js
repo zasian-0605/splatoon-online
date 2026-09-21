@@ -3,14 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
 
-const SECURITY_HEADERS = {
-  'X-Content-Type-Options':'nosniff',
-  'X-Frame-Options':'DENY',
-  'Referrer-Policy':'strict-origin-when-cross-origin',
-  'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
-  'Content-Security-Policy':"default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
-};
-
 const PORT = Number(process.env.PORT || 3000);
 const INDEX = path.join(__dirname, "index.html");
 
@@ -119,8 +111,7 @@ wss.on("connection", (ws) => {
     team: null,
     weaponId: 0,
     spawn: { x: 0, y: 0, z: 0 },
-    lastStateAt: 0,
-    lastPaintAt: 0
+    lastStateAt: 0
   };
   sockets.set(ws, player);
 
@@ -166,8 +157,8 @@ wss.on("connection", (ws) => {
         y: Number(msg.y) || 0,
         z: Number(msg.z) || 0,
         yaw: Number(msg.yaw) || 0,
-        hp: Math.max(0, Math.min(120, Number.isFinite(Number(msg.hp)) ? Number(msg.hp) : 0)),
-        ink: Math.max(0, Math.min(100, Number.isFinite(Number(msg.ink)) ? Number(msg.ink) : 0)),
+        hp: Math.max(0, Math.min(120, Number(msg.hp) || 0)),
+        ink: Math.max(0, Math.min(100, Number(msg.ink) || 0)),
         alive: msg.alive !== false,
         squid: !!msg.squid,
         moving: !!msg.moving,
@@ -177,18 +168,10 @@ wss.on("connection", (ws) => {
     }
 
     if (msg.type === "paint") {
-      const now = Date.now();
-      // Paint packets are intentionally capped so a client cannot flood the room.
-      if (now - player.lastPaintAt < 35) return;
-      player.lastPaintAt = now;
-
-      let x = Number(msg.x), z = Number(msg.z), radius = Number(msg.radius);
+      const x = Number(msg.x), z = Number(msg.z), radius = Number(msg.radius);
       if (![x, z, radius].every(Number.isFinite)) return;
-      x = Math.max(-17.25, Math.min(17.25, x));
-      z = Math.max(-43.25, Math.min(43.25, z));
-      radius = Math.max(0.08, Math.min(2.8, radius));
-
-      // Team/color are server-chosen; clients cannot send a fake team.
+      if (radius < 0.2 || radius > 8) return;
+      // Team/color are server-chosen; clients are not allowed to send a fake team.
       const colorHex = player.team === "A" ? 0xe3ff00 : 0xff2255;
       broadcastRoom(room, {
         type: "paint",
