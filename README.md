@@ -1,9 +1,15 @@
-# Splatoon-like Web v31（ロビー復旧安定版）
+# スプラ3風 Webオンライン v25
 
-v27の安定版を基準に復元し、対戦開始時のチーム集合スポーンだけを安全に追加した版です。
+分割前に動作していた1ファイル版をベースに戻した安定版です。
+ゲーム本体は `index.html` 1ファイルに入っています。
+オンライン通信には `server.js` が必要です。
 
-- index.html: ゲーム本体
-- server.js: オンライン用WebSocketサーバー
-- package.json / render.yaml: Render用
+## 構成
+- index.html：街・試し撃ち・CPU・オンライン・カスタマイズ・バトル・結果画面
+- server.js：WebSocketオンラインサーバー
+- package.json
+- render.yaml
 
-重要: v30/v28の追加レイヤーはこの版には入れていません。
+## Render
+Build Command: `npm install`
+Start Command: `npm start`
