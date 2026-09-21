@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>自作インクバトル Webゲーム v21 - Complete One File</title>
+<title>自作インクバトル Webゲーム v24 - Complete One File - Facility + Loading Fix</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -201,7 +201,7 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
 </style>
 </head>
 <body>
-<!-- v21 COMPLETE: lobby + practice + CPU + online + customize + results + stage gimmicks are all inside this one HTML file. -->
+<!-- v24 COMPLETE: lobby + practice + CPU + online + customize + results + stage gimmicks are all inside this one HTML file. -->
 <div id="facility-transition" aria-hidden="true">
   <div class="ft-bg"></div>
   <div class="ft-wave ft-wave-a"></div>
@@ -2551,6 +2551,13 @@ setTimeout(()=>{
   const lt = document.getElementById('loading-text');
   lt.textContent = 'TAP or PRESS SPACE';
   lt.style.color = '#ff0055'; lt.style.webkitTextStroke = '2px #ffffff'; lt.style.animationDuration = '0.5s';
+  // Do not leave the player stranded on the loading screen. A click/Space can
+  // still advance immediately, and otherwise the game moves on automatically.
+  setTimeout(()=>{
+    if(currentPhase===0 && isReady){
+      try{ startCustomizePhase(); }catch(err){ console.error('Auto start failed',err); }
+    }
+  }, 350);
 }, 2000);
 
 window.addEventListener('keydown', handleAdvanceEvent);
@@ -5220,16 +5227,21 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
         // All facility entries use the same reliable in-page battle initializer.
         // This avoids the old chain of wrapped startRangePhase functions.
         if(key==='range'){
-          directPracticeInit();
+          // Use the original, already-proven same-page practice initializer.
+          // Do NOT change location, do NOT reload, and do NOT call the lobby wrapper.
+          if(typeof launchRange==='function') launchRange();
+          else throw new Error('Practice launcher is missing');
         }else if(key==='cpu'){
-          directPracticeInit();
+          if(typeof launchRange==='function') launchRange();
+          else throw new Error('Practice launcher is missing');
           setTimeout(()=>{
             try{
               if(currentPhase===1.5) startBattleFromRange();
             }catch(err){ console.error('CPU start failed',err); }
           },80);
         }else if(key==='online'){
-          directPracticeInit();
+          if(typeof launchRange==='function') launchRange();
+          else throw new Error('Practice launcher is missing');
           setTimeout(()=>{
             try{
               if(typeof window.openOnlinePanel==='function') window.openOnlinePanel();
@@ -5252,11 +5264,14 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
         }
       }catch(err){
         console.error('Facility transition failed',err);
-        // Never show the old error toast. Fall back directly to practice.
-        try{ directPracticeInit(); }catch(fallbackErr){
-          console.error('Direct practice fallback failed',fallbackErr);
+        // Last-resort in-page retry. Never reload the document.
+        try{
+          if(typeof launchRange==='function') launchRange();
+          else directPracticeInit();
+        }catch(retryErr){
+          console.error('In-page practice retry failed',retryErr);
           const hint=document.getElementById('range-hint');
-          if(hint){hint.style.display='block';hint.textContent='試し撃ちを起動できませんでした。ページを再読み込みしてください。';}
+          if(hint){hint.style.display='block';hint.textContent='試し撃ちを起動中…';}
         }
       }
     },620);
@@ -5265,6 +5280,11 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     setTimeout(()=>{
       if(ov){ov.classList.remove('active');ov.style.display='none';}
       facilityTransitionBusy=false;
+      // Safety net: if the practice launcher somehow left us in the lobby/loading state,
+      // start the original in-page practice initializer immediately.
+      if(key==='range' && currentPhase!==1.5){
+        try{ if(typeof launchRange==='function') launchRange(); }catch(e){ console.error('Practice safety net failed',e); }
+      }
     },1300);
   }
 
@@ -5497,18 +5517,17 @@ window.addEventListener('load',()=>{
 });
 </script>
 
-
-/* v21 compatibility: keep the old saveConfig API without persisting state.
-   This intentionally does nothing so a full browser reload always starts from the beginning. */
+<script>
+/* v24 compatibility: keep the old saveConfig API without persisting state. */
 function saveConfig(){ return false; }
-
+</script>
 
 <script>
-/* v21 ONE-FILE INTEGRITY GUARD
+/* v24 ONE-FILE INTEGRITY GUARD
    The complete game lives in this one index.html.  No town.html/battle.html navigation is required.
    A reload intentionally resets the game state.
 */
-window.__V21_ONE_FILE__ = true;
+window.__V24_ONE_FILE__ = true;
 window.addEventListener('load',()=>{
   setTimeout(()=>{
     try{
