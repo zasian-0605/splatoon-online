@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>スプラ3風 Webオンライン v32 - v25基準・安定版</title>
+<title>スプラ3風 Webオンライン v26 - 安定版（分割前ベース）</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -165,7 +165,7 @@ body.pointer-lock-ready{cursor:none !important;}
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
 </style>
-<meta name="game-version" content="v32-v25-base"></head>
+<meta name="game-version" content="v26-clean-rollback"></head>
 <body>
 
 <div id="loading-screen">
@@ -322,8 +322,8 @@ let battleTimer=180;
 let battleActive=false;
 let turfPct = {a:0,b:0};
 
-const STAGE_HALF_X = 30;
-const STAGE_HALF_Z = 75;
+const STAGE_HALF_X = 48;
+const STAGE_HALF_Z = 80;
 // Legacy scalar kept for older UI calculations; stage mapping uses X/Z halves above.
 const STAGE_HALF = STAGE_HALF_Z;
 const CLIMB_THRESHOLD = 55;
@@ -906,16 +906,13 @@ function buildPlayerModelGroup(cfg){
       addBox(weaponGroup,.16,.10,.16,dark,0,-r*2.0,0);
       addSubdividedBox(weaponGroup,.22,.14,.50,glow,0,-r*2.35,0);
     } else if(selectedWeapon.category==='maneuver'){
-      // マニューバー：二丁を左右に開いた未来的ブラスター
-      const side=0.23;
-      [[-side,0],[side,0]].forEach(([sx])=>{
-        const g=new THREE.Group(); g.position.x=sx; weaponGroup.add(g);
-        addSubdividedBox(g,.16,.16,.42,c,0,0,0,0, sx<0?-.10:.10,0);
-        addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
-        addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
-        addBox(g,.11,.26,.11,dark,0,-.20,-.02);
-      });
-      addBox(weaponGroup,.34,.07,.12,metal,0,.05,-.12);
+      // マニューバーは「1丁」を作る。外側で右手・左手に1丁ずつ置くので合計2丁。
+      const g=new THREE.Group(); weaponGroup.add(g);
+      addSubdividedBox(g,.16,.16,.42,c,0,0,0);
+      addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
+      addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
+      addBox(g,.11,.26,.11,dark,0,-.20,-.02);
+      addBox(g,.20,.07,.12,metal,0,.05,-.12);
     } else if(selectedWeapon.category==='slosher'){
       // スロッシャー：明確なバケツ形状＋液体チャンバー＋長い柄
       const bucket=new THREE.Group(); bucket.rotation.z=Math.PI/2; weaponGroup.add(bucket);
@@ -1164,15 +1161,17 @@ function buildStage(){
   decals.forEach(d=>scene.remove(d.mesh));
   decals = [];
 
-  // v12 stage: tall rectangle, fully walkable/paintable floor, three clear routes.
-  // World: X = -18..18, Z = -45..45.
-  const STAGE_W = 60;
-  const STAGE_D = 150;
+  // v33: wide, flat rectangular arena. No ramps, platforms, or unreachable holes.
+  const STAGE_W = 96;
+  const STAGE_D = 160;
   const halfW = STAGE_W/2;
   const halfD = STAGE_D/2;
-  const SX = STAGE_W / 36;
-  const SZ = STAGE_D / 90;
-  const addStageBlock = (x,y,z,w,h,d,color,opts={}) => addBlock(x*SX,y,z*SZ,w*SX,h,d*SZ,color,opts);
+
+  const waterMat = new THREE.MeshLambertMaterial({color:0x176b83, transparent:true, opacity:.92});
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+14, STAGE_D+14, 1, 1), waterMat);
+  water.rotation.x = -Math.PI/2;
+  water.position.y = -0.28;
+  stageGroup.add(water);
 
   const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
   const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
@@ -1180,7 +1179,7 @@ function buildStage(){
   ground.rotation.x = -Math.PI/2;
   stageGroup.add(ground);
 
-  // Reset paint and give both teams a broad, separated home zone.
+  // Reset paint and create clearly separated home zones.
   paintCtx.fillStyle = '#555566';
   paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
   function paintRectWorld(x0,z0,x1,z1,colorHex){
@@ -1190,86 +1189,35 @@ function buildStage(){
     paintCtx.fillStyle=hexToCss(colorHex);
     paintCtx.fillRect(x,y,w,h);
   }
-  paintRectWorld(-28,-74,28,-52,teamAHex);
-  paintRectWorld(-28,52,28,74,teamBHex);
+  paintRectWorld(-45,-79,45,-61,teamAHex);
+  paintRectWorld(-45,61,45,79,teamBHex);
   paintTexture.needsUpdate = true;
 
-  spawnPointA = new THREE.Vector3(0,0,-64);
-  spawnPointB = new THREE.Vector3(0,0, 64);
+  spawnPointA = new THREE.Vector3(0,0,-68);
+  spawnPointB = new THREE.Vector3(0,0, 68);
 
-  // Broad spawn pads, deliberately far apart.
-  addStageBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
-  addStageBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
-
-  // Three routes: left / center / right.
-  // Left and right stay low. The center route is elevated and connected by stairs.
-  const routeXs = [-12,0,12];
-  routeXs.forEach(x=>{
-    waypoints.push({x,z:-30});
-    waypoints.push({x,z:-10});
-    waypoints.push({x,z:10});
-    waypoints.push({x,z:30});
-  });
-
-  // Low lane cover. Openings between covers keep each route flowing.
-  const lowCovers = [
-    {x:-12,z:-25,w:7,d:3,h:2.4}, {x:-12,z:-12,w:5,d:3,h:1.5}, {x:-12,z:4,w:7,d:3,h:2.8}, {x:-12,z:22,w:5,d:3,h:1.8},
-    {x:12,z:-25,w:7,d:3,h:2.4},  {x:12,z:-12,w:5,d:3,h:1.5}, {x:12,z:4,w:7,d:3,h:2.8},  {x:12,z:22,w:5,d:3,h:1.8},
-    {x:-6,z:-5,w:3,d:5,h:1.8}, {x:6,z:11,w:3,d:5,h:2.2},
-    {x:-6,z:21,w:3,d:4,h:2.0}, {x:6,z:-21,w:3,d:4,h:2.0}
+  // Only a few broad box walls. Every wall is paintable by paintWallSurface().
+  const walls = [
+    {x:-22,z:-28,w:18,h:2.8,d:2.4},
+    {x: 22,z:-18,w:16,h:3.2,d:2.4},
+    {x:-16,z:  0,w:22,h:2.6,d:2.4},
+    {x: 18,z:  8,w:18,h:3.0,d:2.4},
+    {x:-25,z: 30,w:18,h:2.8,d:2.4},
+    {x: 25,z: 31,w:18,h:2.8,d:2.4},
+    {x:  0,z:-42,w:20,h:2.4,d:2.2},
+    {x:  0,z: 42,w:20,h:2.4,d:2.2}
   ];
-  lowCovers.forEach(c=>addStageBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
+  walls.forEach((w,i)=>addBlock(w.x,0,w.z,w.w,w.h,w.d,[0x596775,0x48596c,0x647386][i%3],{climbable:false}));
 
-  // Mid dividers separate the three lanes but leave deliberate choke/opening points.
-  // Height is low enough to read as cover, not an impassable wall.
-  [-6,6].forEach(x=>{
-    [-32,-18,-2,14,28].forEach(z=>addStageBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
-  });
+  // Simple navigation points for CPU opponents.
+  const pts=[
+    [-34,-50], [0,-50], [34,-50],
+    [-34,-20], [0,-10], [34,-5],
+    [-34,18], [0,24], [34,18],
+    [-34,52], [0,52], [34,52]
+  ];
+  waypoints = pts.map(([x,z])=>({x,z}));
 
-  // Center high route: long raised path.
-  addStageBlock(0,3,-14,8,3.0,20,0x657789);
-  addStageBlock(0,3, 14,8,3.0,20,0x657789);
-  addStageBlock(0,3,  0,8,3.0,10,0x718396);
-  waypoints.push({x:0,z:-14,y:3});
-  waypoints.push({x:0,z:0,y:3});
-  waypoints.push({x:0,z:14,y:3});
-
-  // Stair ramps at both ends of the high route, made from short steps.
-  [-1,1].forEach(dir=>{
-    for(let i=0;i<8;i++){
-      const z = dir * (23 + i*0.9);
-      const h = 0.45 + (7-i)*0.32;
-      addStageBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
-    }
-  });
-
-  // Two raised side platforms create additional vertical options without cluttering the stage.
-  [
-    {x:-12,z:14,w:6,d:8,h:2.2},
-    {x:12,z:-14,w:6,d:8,h:2.2}
-  ].forEach(p=>{
-    addStageBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
-    waypoints.push({x:p.x,z:p.z,y:p.h});
-  });
-
-  // Connect left <-> center and center <-> right at two clear crossover points.
-  // These bridges are low, wide and paintable.
-  [-8,8].forEach(z=>{
-    addStageBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
-    addStageBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
-    waypoints.push({x:-6,z});
-    waypoints.push({x:6,z});
-  });
-
-  // Center observation block for another height change.
-  addStageBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
-  waypoints.push({x:0,z:0,y:6});
-
-  // Expand route coordinates together with the enlarged rectangular stage.
-  waypoints = waypoints.map(p => ({...p, x:p.x*SX, z:p.z*SZ}));
-
-  // Keep the outer edge visually clear. No water, pits, or non-paintable holes.
-  // Movement itself is clamped to the rectangular playable area in collision code.
   stageBuilt = true;
 }
 
@@ -2359,31 +2307,34 @@ function updatePlayerMovement(delta){
 }
 
 function clampStageXY(x,z){
-  return {
-    x:Math.max(-29.25,Math.min(29.25,x)),
-    z:Math.max(-74.25,Math.min(74.25,z))
-  };
+  return {x, z};
 }
 
 function tryMoveWithCollision(f, vel, delta, isSquid){
   const rawNx = f.pos.x + vel.x*delta;
   const rawNz = f.pos.z + vel.z*delta;
-  const clamped = clampStageXY(rawNx,rawNz);
-  const nx = clamped.x;
-  const nz = clamped.z;
+
+  // The arena is surrounded by water. Crossing the edge means falling in.
+  if(Math.abs(rawNx) > STAGE_HALF_X || Math.abs(rawNz) > STAGE_HALF_Z){
+    f.pos.x = rawNx;
+    f.pos.z = rawNz;
+    if(f.alive) killFighter(f);
+    return false;
+  }
+
+  const nx = rawNx, nz = rawNz;
   const wall = getBlockingWall(nx, nz, f.pos.y);
   if(wall){
     const isMine = wall.paintTeam===f.team && wall.paintLevel>=CLIMB_THRESHOLD && wall.climbable;
-    if(isSquid && isMine && (vel.x!==0||vel.z!==0)){
-      return true;
-    }
+    if(isSquid && isMine && (vel.x!==0||vel.z!==0)) return true;
     const wallX = getBlockingWall(nx, f.pos.z, f.pos.y);
     const wallZ = getBlockingWall(f.pos.x, nz, f.pos.y);
     if(!wallX) f.pos.x = nx;
     if(!wallZ) f.pos.z = nz;
     return false;
   }
-  f.pos.x = nx; f.pos.z = nz;
+  f.pos.x = nx;
+  f.pos.z = nz;
   return false;
 }
 
@@ -4466,6 +4417,252 @@ ${roomText(m.players)}`;
 })();
 </script>
 
+
+<script>
+/* ================================================================
+   v33 STABLE GAME PATCH
+   - Base: v25 working version
+   - Large flat paintable stage + water edge
+   - Squid toggle without requiring ink; safe ink sampling
+   - E in practice/battle always returns to the lobby
+   - Maneuverer: one weapon in each hand (not four)
+   - Shooting + jump = short slide
+   - Enemy charge is never shown on the local charge HUD
+   - Team grouped spawn at battle start
+   ================================================================ */
+(function(){
+  'use strict';
+
+  // -------- Safe ink sampling: cache getImageData to avoid hitching/freezes --------
+  const inkProbeCache = new WeakMap();
+  const originalOnFighterInk = onFighterInk;
+  onFighterInk = function(f){
+    try{
+      const now=performance.now();
+      const cached=inkProbeCache.get(f);
+      if(cached && now-cached.t<90) return cached.value;
+      const {cx,cy}=worldToCanvas(f.pos.x,f.pos.z);
+      if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height){ inkProbeCache.set(f,{t:now,value:false}); return false; }
+      const d=paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data;
+      const tc=new THREE.Color(f.team==='A'?teamAHex:teamBHex);
+      const r=d[0]/255,g=d[1]/255,b=d[2]/255;
+      const value=((r-tc.r)**2+(g-tc.g)**2+(b-tc.b)**2)<0.07;
+      inkProbeCache.set(f,{t:now,value});
+      return value;
+    }catch(e){
+      // Never let ink sampling stop the game loop.
+      return false;
+    }
+  };
+
+  // -------- Stable squid state --------
+  let squidOn=false;
+  let lastShiftStamp=0;
+  const baseKeyDownHandler = null;
+  window.addEventListener('keydown',(e)=>{
+    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
+    if(currentPhase!==1.5 && currentPhase!==2) return;
+    if(e.repeat || performance.now()-lastShiftStamp<120) return;
+    lastShiftStamp=performance.now();
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    squidOn=!squidOn;
+    keys.shift=squidOn;
+  },true);
+  window.addEventListener('keyup',(e)=>{
+    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
+    if(currentPhase!==1.5 && currentPhase!==2) return;
+    // Toggle mode: releasing Shift does NOT cancel squid mode.
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  },true);
+
+  // Tablet squid button toggles the same mode.
+  const squidButton=document.getElementById('btn-squid');
+  if(squidButton){
+    squidButton.addEventListener('pointerdown',(e)=>{
+      if(currentPhase!==1.5 && currentPhase!==2) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      squidOn=!squidOn;
+      keys.shift=squidOn;
+    },true);
+  }
+
+  // Replace the final movement function with a stable v25-derived version.
+  // It keeps the existing economy, weapon handling and animation, but never
+  // requires own-ink just to transform into a squid.
+  const previousMovement = updatePlayerMovement;
+  updatePlayerMovement = function(delta){
+    const f=playerFighter;
+    if(!f || !f.alive) return;
+    try{
+      const now=performance.now();
+      const isSquid=!!squidOn;
+      setupFighterEconomy(f);
+      regenPlayer(f,delta,isSquid);
+      f.squid_mode=isSquid;
+      const ownInk=isSquid && f.ink>0 && onFighterInk(f);
+      const gp=f.gearProfile||gearProfile(f);
+      const isJetpack=f.jetpackUntil && now<f.jetpackUntil;
+      let speedMult=isSquid?(ownInk?1.85:.72):1.0;
+      if(!isSquid && isShooting && f.weapon.category!=='maneuver') speedMult*=.62;
+      if(f.weapon.category==='maneuver' && isShooting) speedMult*=1.12;
+      if(f.weapon.category==='roller' && isShooting) speedMult*=1.03;
+      speedMult*=gp.move;
+      if(isSquid) speedMult*=gp.swim;
+      if(now<f.speedBoostUntil) speedMult*=1.5;
+      if(isJetpack) speedMult=1;
+
+      const moveDir=new THREE.Vector3();
+      if(keys.w)moveDir.z-=1;if(keys.s)moveDir.z+=1;if(keys.a)moveDir.x-=1;if(keys.d)moveDir.x+=1;
+      let moving=false;
+      if(moveDir.lengthSq()>0){
+        moveDir.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
+        playerVelocity.x=moveDir.x*15*speedMult;
+        playerVelocity.z=moveDir.z*15*speedMult;
+        moving=true;
+        if(!isSquid&&!isShooting)f.human.rotation.y=Math.atan2(playerVelocity.x,playerVelocity.z);
+      }else{
+        playerVelocity.x*=.78;playerVelocity.z*=.78;
+      }
+      f._moving=moving;
+
+      if(!isSquid){
+        f.human.rotation.y=yaw+Math.PI;
+        if(f.weapon.category==='roller' && isShooting) doRollerAction(f,now,moving);
+        else if(f.weapon.category==='wiper' && isShooting){
+          if(!f.wiperChargeStart)f.wiperChargeStart=now;
+          const frac=Math.min(1,(now-f.wiperChargeStart)/f.weapon.chargeTime);
+          const gauge=document.getElementById('charge-gauge');
+          if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
+          if(frac>=1){doWiperSlash(f,1);f.wiperChargeStart=now;}
+        }else if(f.weapon.category==='charger'){
+          const gauge=document.getElementById('charge-gauge');
+          // Local player only.
+          if(gauge){
+            if(f.isCharging){
+              const frac=Math.min(1,(now-f.chargeStart)/f.weapon.chargeTime);
+              gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));
+            }else gauge.style.display='none';
+          }
+        }else if(isShooting){
+          const d=new THREE.Vector3();camera.getWorldDirection(d);tryShoot(f,d,now);
+        }
+      }else{
+        f.wiperChargeStart=0;f.isCharging=false;f.spinnerCharging=false;f.spinnerFiring=false;
+        const gauge=document.getElementById('charge-gauge');if(gauge)gauge.style.display='none';
+      }
+
+      // Normal jump.
+      const climbing=tryMoveWithCollision(f,playerVelocity,delta,isSquid);
+      if(isJetpack){playerVelocity.y=0;f.pos.y=Math.max(f.pos.y,3.2);}
+      else{
+        if(keys.space&&canJump&&!climbing){playerVelocity.y=10;canJump=false;try{sfx('jump');}catch(e){}}
+        if(!climbing)playerVelocity.y-=30*delta;
+        f.pos.y+=playerVelocity.y*delta;
+      }
+      const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
+      const restY=(isSquid&&ownInk)?floorY-.35:floorY;
+      if(!isJetpack&&f.pos.y<=restY){f.pos.y=restY;playerVelocity.y=0;canJump=true;}
+
+      updateFighterAnimation(f,moving,isSquid);
+      f.root.rotation.y=isSquid?yaw:f.human.rotation.y;
+    }catch(err){
+      // If an optional animation/effect ever fails, keep the character and camera alive.
+      try{
+        f.squid_mode=!!squidOn;
+        updateFighterAnimation(f,!!f._moving,!!squidOn);
+      }catch(e){}
+    }
+  };
+
+  // -------- Maneuverer jump-slide --------
+  let spaceWasDown=false;
+  let slideUntil=0;
+  let slideDir=new THREE.Vector3(0,0,-1);
+  const movementWithSlide = updatePlayerMovement;
+  updatePlayerMovement = function(delta){
+    const f=playerFighter;
+    const beforeSpace=spaceWasDown;
+    movementWithSlide(delta);
+    if(!f || !f.alive) { spaceWasDown=!!keys.space; return; }
+    const now=performance.now();
+    const trigger=f.weapon?.category==='maneuver' && isShooting && !!keys.space && !beforeSpace;
+    if(trigger){
+      slideUntil=now+230;
+      const hv=new THREE.Vector3(playerVelocity.x,0,playerVelocity.z);
+      if(hv.lengthSq()>0.05) slideDir.copy(hv.normalize());
+      else{
+        slideDir.set(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0),yaw).normalize();
+      }
+      try{sfx('jump');}catch(e){}
+      showToast('スライド！');
+    }
+    if(now<slideUntil){
+      const burst=30*(delta*0.016<0.00001?0.001:1);
+      f.pos.x += slideDir.x*burst*delta;
+      f.pos.z += slideDir.z*burst*delta;
+      playerVelocity.y=Math.max(playerVelocity.y,4.0);
+    }
+    spaceWasDown=!!keys.space;
+  };
+
+  // -------- Team grouped spawn --------
+  const originalStartBattle=startBattleFromRange;
+  startBattleFromRange=function(){
+    originalStartBattle();
+    if(currentPhase!==2 || !playerFighter)return;
+    const offsets=[-5.4,-1.8,1.8,5.4];
+    fighters.filter(f=>f.team==='A').slice(0,4).forEach((f,i)=>{
+      f.pos.set(spawnPointA.x+offsets[i],0,spawnPointA.z);
+      f.root.position.copy(f.pos); f.root.visible=true; f.alive=true; f.hp=f.maxHp;
+    });
+    fighters.filter(f=>f.team==='B').slice(0,4).forEach((f,i)=>{
+      f.pos.set(spawnPointB.x+offsets[i],0,spawnPointB.z);
+      f.root.position.copy(f.pos); f.root.visible=true; f.alive=true; f.hp=f.maxHp;
+    });
+    squidOn=false;keys.shift=false;playerFighter.squid_mode=false;
+  };
+
+  // -------- E always returns to the lobby from practice/battle/results --------
+  function returnToLobby(){
+    try{if(document.pointerLockElement)document.exitPointerLock();}catch(e){}
+    battleActive=false;
+    try{bullets.forEach(b=>scene.remove(b.mesh));}catch(e){}
+    bullets=[];
+    try{subsList.forEach(b=>scene.remove(b.mesh));}catch(e){}
+    subsList=[];
+    try{particles.forEach(p=>scene.remove(p.mesh));}catch(e){}
+    particles=[];
+    fighters.forEach(f=>{try{f.root.visible=false;}catch(e){}});
+    if(playerFighter)playerFighter.root.visible=false;
+    fighters=playerFighter?[playerFighter]:[];
+    squidOn=false;keys.shift=false;
+    const rs=document.getElementById('result-screen');if(rs)rs.style.display='none';
+    const rh=document.getElementById('range-hint');if(rh)rh.style.display='none';
+    if(typeof window.startLobbyPhase==='function') window.startLobbyPhase();
+  }
+  window.addEventListener('keydown',(e)=>{
+    if(e.code!=='KeyE')return;
+    if(currentPhase!==1.5 && currentPhase!==2 && currentPhase!==3)return;
+    e.preventDefault();e.stopImmediatePropagation();returnToLobby();
+  },true);
+
+  // -------- Enemy charge HUD lockdown --------
+  setInterval(()=>{
+    try{
+      const g=document.getElementById('charge-gauge');
+      if(!g)return;
+      const local=!!(playerFighter && (currentPhase===1.5||currentPhase===2) && playerFighter.weapon?.category==='charger' && playerFighter.isCharging && !playerFighter.squid_mode);
+      if(!local)g.style.display='none';
+    }catch(e){}
+  },80);
+
+  // Paintable-wall guarantee: walls never become permanently unpaintable.
+  collidableBlocks.forEach(b=>{if(b && b.h>=1.3)b.climbable=false;});
+})();
+</script>
+
 </body>
 </html>
 
@@ -4936,7 +5133,11 @@ ${roomText(m.players)}`;
   }
   function npc(x,z,col,phase){
     const g=new THREE.Group();
-    const body=new THREE.Mesh(new THREE.CapsuleGeometry(.5,1.05,4,8),mat(col));body.position.y=1.1;g.add(body);
+    const body=new THREE.Group();
+    const bodyCore=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,1.0,8),mat(col)); bodyCore.position.y=1.05; body.add(bodyCore);
+    const bodyTop=new THREE.Mesh(new THREE.SphereGeometry(.5,8,6),mat(col)); bodyTop.position.y=1.55; body.add(bodyTop);
+    const bodyBottom=new THREE.Mesh(new THREE.SphereGeometry(.5,8,6),mat(col)); bodyBottom.position.y=.55; body.add(bodyBottom);
+    g.add(body);
     const head=new THREE.Mesh(new THREE.SphereGeometry(.52,8,6),mat(0xe6c8ba));head.position.y=2.35;g.add(head);
     const bag=new THREE.Mesh(new THREE.BoxGeometry(.7,.55,.28),mat(accent[(Math.abs(x+z)|0)%accent.length]));bag.position.set(0,1.25,-.52);g.add(bag);
     g.position.set(x,0,z);add(g);
@@ -5181,131 +5382,5 @@ ${roomText(m.players)}`;
   };
 
   window.__V15={startLobbyPhase,leaveLobby,action};
-})();
-</script>
-
-
-<script>
-/* ================================================================
-   v32 SAFE PATCH
-   基準: v25（ロビー/ラジオ/施設/試し撃ちが動いていた版）
-   追加: イカ化の確実化 + 対戦開始時のチーム集合スポーン
-   既存のロビー遷移・ニュース・試し撃ち本体は変更しない。
-   ================================================================ */
-(function(){
-  'use strict';
-
-  // -------------------- Squid input --------------------
-  let squidLatched = false;
-  let squidTouchHeld = false;
-
-  function setSquidRequest(on){
-    squidLatched = !!on;
-    if(typeof keys!=='undefined') keys.shift = !!on || squidTouchHeld;
-  }
-
-  // Desktop: Shift toggles squid on/off. This sits in capture phase so the
-  // original v25 key handlers cannot make the mode immediately disappear.
-  window.addEventListener('keydown', function(e){
-    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
-    if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
-    if(e.repeat) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    squidLatched = !squidLatched;
-    if(typeof keys!=='undefined') keys.shift = squidLatched || squidTouchHeld;
-  }, true);
-
-  window.addEventListener('keyup', function(e){
-    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
-    if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    if(typeof keys!=='undefined') keys.shift = squidLatched || squidTouchHeld;
-  }, true);
-
-  const squidButton=document.getElementById('btn-squid');
-  if(squidButton){
-    squidButton.addEventListener('pointerdown', function(e){
-      if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
-      e.preventDefault();e.stopImmediatePropagation();
-      squidTouchHeld=true;
-      if(typeof keys!=='undefined') keys.shift=true;
-    }, true);
-    squidButton.addEventListener('pointerup', function(e){
-      e.preventDefault();e.stopImmediatePropagation();
-      squidTouchHeld=false;
-      if(typeof keys!=='undefined') keys.shift=squidLatched;
-    }, true);
-    squidButton.addEventListener('pointercancel', function(){
-      squidTouchHeld=false;
-      if(typeof keys!=='undefined') keys.shift=squidLatched;
-    }, true);
-    squidButton.addEventListener('click', function(e){
-      if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
-      e.preventDefault();
-    }, true);
-  }
-
-  // Replace only the final public movement function. It uses the v25 movement
-  // code internally, but forces a stable squid_mode value even if the browser
-  // fires Shift keyup during pointer/focus changes.
-  const baseMove = (typeof updatePlayerMovement==='function') ? updatePlayerMovement : null;
-  if(baseMove){
-    updatePlayerMovement = function(delta){
-      if(typeof playerFighter!=='undefined' && playerFighter){
-        playerFighter.squid_mode = !!((typeof keys!=='undefined' && keys.shift) || squidLatched || squidTouchHeld);
-      }
-      return baseMove(delta);
-    };
-  }
-
-  // -------------------- Team grouped spawn --------------------
-  const baseBattle = (typeof startBattleFromRange==='function') ? startBattleFromRange : null;
-  if(baseBattle){
-    startBattleFromRange = function(){
-      baseBattle();
-      if(typeof currentPhase==='undefined' || currentPhase!==2 || typeof playerFighter==='undefined' || !playerFighter) return;
-      const offsets=[-2.7,-0.9,0.9,2.7];
-      const baseA=(typeof spawnPointA!=='undefined' ? spawnPointA : new THREE.Vector3(0,0,-38));
-      const baseB=(typeof spawnPointB!=='undefined' ? spawnPointB : new THREE.Vector3(0,0,38));
-      const teamA=fighters.filter(f=>f.team==='A');
-      const teamB=fighters.filter(f=>f.team==='B');
-      teamA.slice(0,4).forEach((f,i)=>{
-        f.pos.set(baseA.x+offsets[i],0,baseA.z);
-        f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;
-        f.root.rotation.y=0;
-      });
-      teamB.slice(0,4).forEach((f,i)=>{
-        f.pos.set(baseB.x+offsets[i],0,baseB.z);
-        f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;
-        f.root.rotation.y=Math.PI;
-      });
-      playerFighter.squid_mode=false;
-      if(typeof keys!=='undefined') keys.shift=false;
-      squidLatched=false;squidTouchHeld=false;
-    };
-  }
-
-  // Small confirmation label near the existing instructions.
-  const style=document.createElement('style');
-  style.textContent=`
-    #v32-squid-state{position:absolute;left:14px;bottom:78px;z-index:16;padding:6px 10px;border-radius:8px;background:rgba(12,0,35,.72);border:2px solid #e3ff00;color:#fff;font:900 12px/1.1 Arial Black,Meiryo,sans-serif;display:none;pointer-events:none;text-shadow:1px 1px #000}
-    #v32-squid-state.on{background:rgba(47,5,156,.92);box-shadow:0 0 14px rgba(227,255,0,.55)}
-  `;
-  document.head.appendChild(style);
-  const badge=document.createElement('div');badge.id='v32-squid-state';badge.textContent='🦑 SQUID OFF';document.body.appendChild(badge);
-
-  function refreshBadge(){
-    if(typeof currentPhase==='undefined') return;
-    const active=(currentPhase===1.5||currentPhase===2);
-    badge.style.display=active?'block':'none';
-    const on=!!squidLatched || !!squidTouchHeld;
-    badge.textContent=on?'🦑 SQUID ON':'🦑 SQUID OFF';
-    badge.classList.toggle('on',on);
-  }
-  setInterval(refreshBadge,120);
-
-  window.__V32={setSquidRequest: setSquidRequest, get squid(){return squidLatched||squidTouchHeld;}};
 })();
 </script>
