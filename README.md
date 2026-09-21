@@ -1,15 +1,10 @@
-# スプラ3風 Webオンライン v25
+# スプラ3風 Webオンライン v32
 
-分割前に動作していた1ファイル版をベースに戻した安定版です。
-ゲーム本体は `index.html` 1ファイルに入っています。
-オンライン通信には `server.js` が必要です。
+v25（ロビー・ラジオ・施設・試し撃ちが動いていた版）を基準にした安定版。
 
-## 構成
-- index.html：街・試し撃ち・CPU・オンライン・カスタマイズ・バトル・結果画面
-- server.js：WebSocketオンラインサーバー
-- package.json
-- render.yaml
+追加変更は最小限：
+- Shiftでイカ化を確実に切り替え
+- 画面上にSQUID ON/OFF表示
+- CPU対戦開始時に味方/敵をそれぞれ同じスポーン地点へ集合
 
-## Render
-Build Command: `npm install`
-Start Command: `npm start`
+本体はindex.htmlの1ファイル。オンライン通信だけserver.jsを使用。

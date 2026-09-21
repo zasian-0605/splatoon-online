@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>スプラ3風 Webオンライン v25 - 安定版（分割前ベース）</title>
+<title>スプラ3風 Webオンライン v32 - v25基準・安定版</title>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -165,7 +165,7 @@ body.pointer-lock-ready{cursor:none !important;}
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
 </style>
-<meta name="game-version" content="v25-clean-rollback"></head>
+<meta name="game-version" content="v32-v25-base"></head>
 <body>
 
 <div id="loading-screen">
@@ -322,7 +322,10 @@ let battleTimer=180;
 let battleActive=false;
 let turfPct = {a:0,b:0};
 
-const STAGE_HALF = 45;
+const STAGE_HALF_X = 30;
+const STAGE_HALF_Z = 75;
+// Legacy scalar kept for older UI calculations; stage mapping uses X/Z halves above.
+const STAGE_HALF = STAGE_HALF_Z;
 const CLIMB_THRESHOLD = 55;
 
 const newsLines = [
@@ -1025,8 +1028,8 @@ sampleCanvas.width = 96; sampleCanvas.height = 96;
 const sampleCtx = sampleCanvas.getContext('2d');
 
 function worldToCanvas(x,z){
-  const u = (x + STAGE_HALF) / (STAGE_HALF*2);
-  const v = (z + STAGE_HALF) / (STAGE_HALF*2);
+  const u = (x + STAGE_HALF_X) / (STAGE_HALF_X*2);
+  const v = (z + STAGE_HALF_Z) / (STAGE_HALF_Z*2);
   return { cx: u*paintCanvas.width, cy: v*paintCanvas.height };
 }
 
@@ -1163,10 +1166,13 @@ function buildStage(){
 
   // v12 stage: tall rectangle, fully walkable/paintable floor, three clear routes.
   // World: X = -18..18, Z = -45..45.
-  const STAGE_W = 36;
-  const STAGE_D = 90;
+  const STAGE_W = 60;
+  const STAGE_D = 150;
   const halfW = STAGE_W/2;
   const halfD = STAGE_D/2;
+  const SX = STAGE_W / 36;
+  const SZ = STAGE_D / 90;
+  const addStageBlock = (x,y,z,w,h,d,color,opts={}) => addBlock(x*SX,y,z*SZ,w*SX,h,d*SZ,color,opts);
 
   const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
   const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
@@ -1184,16 +1190,16 @@ function buildStage(){
     paintCtx.fillStyle=hexToCss(colorHex);
     paintCtx.fillRect(x,y,w,h);
   }
-  paintRectWorld(-16,-44,16,-31,teamAHex);
-  paintRectWorld(-16,31,16,44,teamBHex);
+  paintRectWorld(-28,-74,28,-52,teamAHex);
+  paintRectWorld(-28,52,28,74,teamBHex);
   paintTexture.needsUpdate = true;
 
-  spawnPointA = new THREE.Vector3(0,0,-38);
-  spawnPointB = new THREE.Vector3(0,0, 38);
+  spawnPointA = new THREE.Vector3(0,0,-64);
+  spawnPointB = new THREE.Vector3(0,0, 64);
 
   // Broad spawn pads, deliberately far apart.
-  addBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
-  addBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
+  addStageBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
+  addStageBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
 
   // Three routes: left / center / right.
   // Left and right stay low. The center route is elevated and connected by stairs.
@@ -1212,18 +1218,18 @@ function buildStage(){
     {x:-6,z:-5,w:3,d:5,h:1.8}, {x:6,z:11,w:3,d:5,h:2.2},
     {x:-6,z:21,w:3,d:4,h:2.0}, {x:6,z:-21,w:3,d:4,h:2.0}
   ];
-  lowCovers.forEach(c=>addBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
+  lowCovers.forEach(c=>addStageBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
 
   // Mid dividers separate the three lanes but leave deliberate choke/opening points.
   // Height is low enough to read as cover, not an impassable wall.
   [-6,6].forEach(x=>{
-    [-32,-18,-2,14,28].forEach(z=>addBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
+    [-32,-18,-2,14,28].forEach(z=>addStageBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
   });
 
   // Center high route: long raised path.
-  addBlock(0,3,-14,8,3.0,20,0x657789);
-  addBlock(0,3, 14,8,3.0,20,0x657789);
-  addBlock(0,3,  0,8,3.0,10,0x718396);
+  addStageBlock(0,3,-14,8,3.0,20,0x657789);
+  addStageBlock(0,3, 14,8,3.0,20,0x657789);
+  addStageBlock(0,3,  0,8,3.0,10,0x718396);
   waypoints.push({x:0,z:-14,y:3});
   waypoints.push({x:0,z:0,y:3});
   waypoints.push({x:0,z:14,y:3});
@@ -1233,7 +1239,7 @@ function buildStage(){
     for(let i=0;i<8;i++){
       const z = dir * (23 + i*0.9);
       const h = 0.45 + (7-i)*0.32;
-      addBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
+      addStageBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
     }
   });
 
@@ -1242,22 +1248,25 @@ function buildStage(){
     {x:-12,z:14,w:6,d:8,h:2.2},
     {x:12,z:-14,w:6,d:8,h:2.2}
   ].forEach(p=>{
-    addBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
+    addStageBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
     waypoints.push({x:p.x,z:p.z,y:p.h});
   });
 
   // Connect left <-> center and center <-> right at two clear crossover points.
   // These bridges are low, wide and paintable.
   [-8,8].forEach(z=>{
-    addBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
-    addBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
+    addStageBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
+    addStageBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
     waypoints.push({x:-6,z});
     waypoints.push({x:6,z});
   });
 
   // Center observation block for another height change.
-  addBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
+  addStageBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
   waypoints.push({x:0,z:0,y:6});
+
+  // Expand route coordinates together with the enlarged rectangular stage.
+  waypoints = waypoints.map(p => ({...p, x:p.x*SX, z:p.z*SZ}));
 
   // Keep the outer edge visually clear. No water, pits, or non-paintable holes.
   // Movement itself is clamped to the rectangular playable area in collision code.
@@ -2351,8 +2360,8 @@ function updatePlayerMovement(delta){
 
 function clampStageXY(x,z){
   return {
-    x:Math.max(-17.25,Math.min(17.25,x)),
-    z:Math.max(-43.25,Math.min(43.25,z))
+    x:Math.max(-29.25,Math.min(29.25,x)),
+    z:Math.max(-74.25,Math.min(74.25,z))
   };
 }
 
@@ -2583,6 +2592,10 @@ function animate3D(){
   document.getElementById('btn-special').classList.toggle('sp-ready',specialReady);
   const wh=document.getElementById('weapon-hud');
   if(wh) wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${playerFighter.weapon.name}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]}　/　サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?'　★ READY':''}</div>`;
+  // The charge gauge is local-only. Enemy/AI charge states never appear on the player's HUD.
+  const sharedChargeGauge=document.getElementById('charge-gauge');
+  const localCharging=!!(playerFighter && playerFighter.alive && !playerFighter.squid_mode && (playerFighter.isCharging || playerFighter.wiperChargeStart || playerFighter.spinnerCharging));
+  if(sharedChargeGauge && !localCharging) sharedChargeGauge.style.display='none';
 
   if(currentPhase===2){
     turfTick += delta;
@@ -2748,25 +2761,27 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const mult = opts.mult || 1;
     const baseR = Math.max(.45, radius*1.18*mult);
     const {cx,cy}=worldToCanvas(x,z);
-    const cr=(baseR/(STAGE_HALF*2))*paintCanvas.width;
+    const crX=(baseR/(STAGE_HALF_X*2))*paintCanvas.width;
+    const crY=(baseR/(STAGE_HALF_Z*2))*paintCanvas.height;
     paintCtx.save();
     paintCtx.fillStyle=hexToCss(colorHex);
-    // Main soft stamp
+    // Main soft stamp, kept circular in world space on the wide rectangular map.
     paintCtx.beginPath();
-    paintCtx.arc(cx,cy,cr,0,Math.PI*2);
+    paintCtx.ellipse(cx,cy,crX,crY,0,0,Math.PI*2);
     paintCtx.fill();
     // Several organic satellites => much better coverage
     const n = Math.max(3, Math.min(10, Math.round(radius*1.7)));
     for(let i=0;i<n;i++){
       const a=i*2.399963 + (x*0.03+z*0.07);
-      const rr=cr*(.25+.65*((i%5)/4));
-      const px=cx+Math.cos(a)*rr*.85, py=cy+Math.sin(a)*rr*.85;
-      paintCtx.beginPath(); paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
+      const rrX=crX*(.25+.65*((i%5)/4));
+      rrY=crY*(.25+.65*((i%5)/4));
+      const px=cx+Math.cos(a)*rrX*.85, py=cy+Math.sin(a)*rrY*.85;
+      paintCtx.beginPath(); paintCtx.ellipse(px,py,crX*(.32+.12*(i%3)),crY*(.32+.12*(i%3)),0,0,Math.PI*2); paintCtx.fill();
     }
     // short trail segment when requested (roller/brush/wiper)
     if(opts.to){
       const to=worldToCanvas(opts.to.x,opts.to.z);
-      paintCtx.lineWidth=Math.max(2,cr*1.5);
+      paintCtx.lineWidth=Math.max(2,Math.min(crX,crY)*1.5);
       paintCtx.lineCap='round';
       paintCtx.beginPath(); paintCtx.moveTo(cx,cy); paintCtx.lineTo(to.cx,to.cy); paintCtx.stroke();
     }
@@ -3793,10 +3808,10 @@ ${roomText(m.players)}`;
     if(f.spinnerCharging){
       const frac=Math.min(1,(now-f.spinnerChargeStart)/w.chargeTime);
       const gauge=document.getElementById('charge-gauge');
-      gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));
+      if(f.isPlayer){ gauge.style.display='block'; gauge.style.setProperty('--pct',Math.round(frac*100)); }
       if(frac<1)return;
       f.spinnerCharging=false;f.spinnerFiring=true;f.spinnerShotsLeft=w.burstShots;f.spinnerNextShot=now;
-      gauge.style.display='none';
+      if(f.isPlayer) gauge.style.display='none';
     }
     if(f.spinnerFiring && f.spinnerShotsLeft>0 && now>=f.spinnerNextShot){
       if(!consumeInk(f,w.inkCost)) { f.spinnerFiring=false; f.spinnerShotsLeft=0; return; }
@@ -4211,8 +4226,8 @@ ${roomText(m.players)}`;
   function mapPoint(ctx,size,x,z){
     const pad=10;
     const usable=size-pad*2;
-    return {x:pad+((x+STAGE_HALF)/(STAGE_HALF*2))*usable,
-            y:pad+((z+STAGE_HALF)/(STAGE_HALF*2))*usable};
+    return {x:pad+((x+STAGE_HALF_X)/(STAGE_HALF_X*2))*usable,
+            y:pad+((z+STAGE_HALF_Z)/(STAGE_HALF_Z*2))*usable};
   }
 
   function drawMap(ctx,size){
@@ -4402,8 +4417,8 @@ ${roomText(m.players)}`;
     const nx=(x-pad/760)/usable;
     const nz=(y-pad/760)/usable;
     return {
-      x:-STAGE_HALF+Math.max(0,Math.min(1,nx))*STAGE_HALF*2,
-      z:-STAGE_HALF+Math.max(0,Math.min(1,nz))*STAGE_HALF*2
+      x:-STAGE_HALF_X+Math.max(0,Math.min(1,nx))*STAGE_HALF_X*2,
+      z:-STAGE_HALF_Z+Math.max(0,Math.min(1,nz))*STAGE_HALF_Z*2
     };
   }
 
@@ -5166,5 +5181,131 @@ ${roomText(m.players)}`;
   };
 
   window.__V15={startLobbyPhase,leaveLobby,action};
+})();
+</script>
+
+
+<script>
+/* ================================================================
+   v32 SAFE PATCH
+   基準: v25（ロビー/ラジオ/施設/試し撃ちが動いていた版）
+   追加: イカ化の確実化 + 対戦開始時のチーム集合スポーン
+   既存のロビー遷移・ニュース・試し撃ち本体は変更しない。
+   ================================================================ */
+(function(){
+  'use strict';
+
+  // -------------------- Squid input --------------------
+  let squidLatched = false;
+  let squidTouchHeld = false;
+
+  function setSquidRequest(on){
+    squidLatched = !!on;
+    if(typeof keys!=='undefined') keys.shift = !!on || squidTouchHeld;
+  }
+
+  // Desktop: Shift toggles squid on/off. This sits in capture phase so the
+  // original v25 key handlers cannot make the mode immediately disappear.
+  window.addEventListener('keydown', function(e){
+    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
+    if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
+    if(e.repeat) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    squidLatched = !squidLatched;
+    if(typeof keys!=='undefined') keys.shift = squidLatched || squidTouchHeld;
+  }, true);
+
+  window.addEventListener('keyup', function(e){
+    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
+    if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(typeof keys!=='undefined') keys.shift = squidLatched || squidTouchHeld;
+  }, true);
+
+  const squidButton=document.getElementById('btn-squid');
+  if(squidButton){
+    squidButton.addEventListener('pointerdown', function(e){
+      if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
+      e.preventDefault();e.stopImmediatePropagation();
+      squidTouchHeld=true;
+      if(typeof keys!=='undefined') keys.shift=true;
+    }, true);
+    squidButton.addEventListener('pointerup', function(e){
+      e.preventDefault();e.stopImmediatePropagation();
+      squidTouchHeld=false;
+      if(typeof keys!=='undefined') keys.shift=squidLatched;
+    }, true);
+    squidButton.addEventListener('pointercancel', function(){
+      squidTouchHeld=false;
+      if(typeof keys!=='undefined') keys.shift=squidLatched;
+    }, true);
+    squidButton.addEventListener('click', function(e){
+      if(typeof currentPhase==='undefined' || (currentPhase!==1.5 && currentPhase!==2)) return;
+      e.preventDefault();
+    }, true);
+  }
+
+  // Replace only the final public movement function. It uses the v25 movement
+  // code internally, but forces a stable squid_mode value even if the browser
+  // fires Shift keyup during pointer/focus changes.
+  const baseMove = (typeof updatePlayerMovement==='function') ? updatePlayerMovement : null;
+  if(baseMove){
+    updatePlayerMovement = function(delta){
+      if(typeof playerFighter!=='undefined' && playerFighter){
+        playerFighter.squid_mode = !!((typeof keys!=='undefined' && keys.shift) || squidLatched || squidTouchHeld);
+      }
+      return baseMove(delta);
+    };
+  }
+
+  // -------------------- Team grouped spawn --------------------
+  const baseBattle = (typeof startBattleFromRange==='function') ? startBattleFromRange : null;
+  if(baseBattle){
+    startBattleFromRange = function(){
+      baseBattle();
+      if(typeof currentPhase==='undefined' || currentPhase!==2 || typeof playerFighter==='undefined' || !playerFighter) return;
+      const offsets=[-2.7,-0.9,0.9,2.7];
+      const baseA=(typeof spawnPointA!=='undefined' ? spawnPointA : new THREE.Vector3(0,0,-38));
+      const baseB=(typeof spawnPointB!=='undefined' ? spawnPointB : new THREE.Vector3(0,0,38));
+      const teamA=fighters.filter(f=>f.team==='A');
+      const teamB=fighters.filter(f=>f.team==='B');
+      teamA.slice(0,4).forEach((f,i)=>{
+        f.pos.set(baseA.x+offsets[i],0,baseA.z);
+        f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;
+        f.root.rotation.y=0;
+      });
+      teamB.slice(0,4).forEach((f,i)=>{
+        f.pos.set(baseB.x+offsets[i],0,baseB.z);
+        f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;
+        f.root.rotation.y=Math.PI;
+      });
+      playerFighter.squid_mode=false;
+      if(typeof keys!=='undefined') keys.shift=false;
+      squidLatched=false;squidTouchHeld=false;
+    };
+  }
+
+  // Small confirmation label near the existing instructions.
+  const style=document.createElement('style');
+  style.textContent=`
+    #v32-squid-state{position:absolute;left:14px;bottom:78px;z-index:16;padding:6px 10px;border-radius:8px;background:rgba(12,0,35,.72);border:2px solid #e3ff00;color:#fff;font:900 12px/1.1 Arial Black,Meiryo,sans-serif;display:none;pointer-events:none;text-shadow:1px 1px #000}
+    #v32-squid-state.on{background:rgba(47,5,156,.92);box-shadow:0 0 14px rgba(227,255,0,.55)}
+  `;
+  document.head.appendChild(style);
+  const badge=document.createElement('div');badge.id='v32-squid-state';badge.textContent='🦑 SQUID OFF';document.body.appendChild(badge);
+
+  function refreshBadge(){
+    if(typeof currentPhase==='undefined') return;
+    const active=(currentPhase===1.5||currentPhase===2);
+    badge.style.display=active?'block':'none';
+    const on=!!squidLatched || !!squidTouchHeld;
+    badge.textContent=on?'🦑 SQUID ON':'🦑 SQUID OFF';
+    badge.classList.toggle('on',on);
+  }
+  setInterval(refreshBadge,120);
+
+  window.__V32={setSquidRequest: setSquidRequest, get squid(){return squidLatched||squidTouchHeld;}};
 })();
 </script>
