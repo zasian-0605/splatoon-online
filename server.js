@@ -54,8 +54,8 @@ function tryMakeRoom() {
       p.team = i < 4 ? "A" : "B";
       const spawnIndex = i % 4;
       p.spawn = p.team === "A"
-        ? { x: (spawnIndex - 1.5) * 3.2, y: 0, z: -37 }
-        : { x: (spawnIndex - 1.5) * 3.2, y: 0, z: 37 };
+        ? { x: (spawnIndex - 1.5) * 3.2, y: 0, z: -60 }
+        : { x: (spawnIndex - 1.5) * 3.2, y: 0, z: 60 };
       room.players.set(p.id, p);
     });
     rooms.set(roomId, room);
