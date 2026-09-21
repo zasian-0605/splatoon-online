@@ -26,8 +26,8 @@ function assignTeams(players){
     p.team = i < Math.ceil(players.length/2) ? "A" : "B";
     const teamIndex = players.slice(0,i+1).filter(x=>x.team===p.team).length-1;
     p.spawn = p.team==='A'
-      ? {x:(teamIndex-1.5)*3.2,y:0,z:-60}
-      : {x:(teamIndex-1.5)*3.2,y:0,z:60};
+      ? {x:(teamIndex-1.5)*3.2,y:0,z:-38}
+      : {x:(teamIndex-1.5)*3.2,y:0,z:38};
   });
 }
 function startRoom(){
@@ -47,22 +47,25 @@ function startRoom(){
   return true;
 }
 
+// Only the game page is public. (Previously every file in the folder - server.js, package.json ... - could be downloaded.)
+const PUBLIC_FILES={"/":"index.html","/index.html":"index.html"};
 const httpServer=http.createServer((req,res)=>{
-  let reqPath=decodeURIComponent((req.url||"/").split("?")[0]);
-  if(reqPath==="/") reqPath="/index.html";
-  if(reqPath.includes('..')){res.writeHead(403);return res.end('Forbidden');}
-  const file=path.join(ROOT,reqPath.replace(/^\/+/,""));
-  if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
-  fs.readFile(file,(err,data)=>{
-    if(err){res.writeHead(404,{"Content-Type":"text/plain; charset=utf-8"});return res.end("Not found");}
-    const ext=path.extname(file).toLowerCase();
-    const type=ext==='.html'?"text/html; charset=utf-8":ext==='.js'?"text/javascript; charset=utf-8":ext==='.css'?"text/css; charset=utf-8":ext==='.json'?"application/json; charset=utf-8":"application/octet-stream";
-    res.writeHead(200,{"Content-Type":type,"Cache-Control":"no-store"});res.end(data);
+  let reqPath="/";
+  try{ reqPath=decodeURIComponent((req.url||"/").split("?")[0]); }catch{ res.writeHead(400);return res.end("Bad request"); }
+  if(reqPath==="/healthz"){res.writeHead(200,{"Content-Type":"text/plain"});return res.end("ok");}
+  if(req.method!=="GET" && req.method!=="HEAD"){res.writeHead(405);return res.end("Method not allowed");}
+  const name=PUBLIC_FILES[reqPath];
+  if(!name){res.writeHead(404,{"Content-Type":"text/plain; charset=utf-8"});return res.end("Not found");}
+  fs.readFile(path.join(ROOT,name),(err,data)=>{
+    if(err){res.writeHead(500,{"Content-Type":"text/plain; charset=utf-8"});return res.end("index.html is missing on the server");}
+    res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store"});
+    res.end(req.method==="HEAD"?undefined:data);
   });
 });
 
-const wss=new WebSocketServer({server:httpServer});
+const wss=new WebSocketServer({server:httpServer,maxPayload:16*1024});
 wss.on('connection',ws=>{
+  ws.isAlive=true; ws.on('pong',()=>{ws.isAlive=true;});
   const player={id:`Player_${String(nextPlayerNo++).padStart(2,'0')}`,ws,roomId:null,team:null,weaponId:0,spawn:{x:0,y:0,z:0},ready:false,lastStateAt:0};
   sockets.set(ws,player);
   send(ws,{type:'hello',id:player.id,queueCount:queue.length});
@@ -102,7 +105,6 @@ wss.on('connection',ws=>{
     if(msg.type==='state'){
       const now=Date.now();if(now-player.lastStateAt<28)return;player.lastStateAt=now;
       player.weaponId=Number.isFinite(msg.weaponId)?msg.weaponId:player.weaponId;
-      for(const p of room.players.values()) p.lastKnownState=msg.id===p.id?msg:null;
       broadcast([...room.players.values()],{type:'state',id:player.id,team:player.team,x:Number(msg.x)||0,y:Number(msg.y)||0,z:Number(msg.z)||0,yaw:Number(msg.yaw)||0,hp:Math.max(0,Math.min(120,Number(msg.hp)||0)),ink:Math.max(0,Math.min(100,Number(msg.ink)||0)),alive:msg.alive!==false,squid:!!msg.squid,moving:!!msg.moving,weaponId:player.weaponId},player);
       return;
     }
@@ -115,6 +117,16 @@ wss.on('connection',ws=>{
       return;
     }
 
+    if(msg.type==='hit'){
+      // Damage relay: the shooter's client reports a hit, the victim's client applies it.
+      const target=room.players.get(String(msg.target||""));
+      const dmg=Number(msg.damage);
+      if(!target||target===player||target.team===player.team||!Number.isFinite(dmg)||dmg<=0) return;
+      if(Date.now()<room.startsAt) return;
+      send(target.ws,{type:'hit',from:player.id,damage:Math.min(200,dmg)});
+      return;
+    }
+
     if(msg.type==='endMatch'){
       broadcast([...room.players.values()],{type:'matchEnd'});
       rooms.delete(room.id);
@@ -122,6 +134,7 @@ wss.on('connection',ws=>{
     }
   });
 
+  ws.on('error',()=>{});
   ws.on('close',()=>{
     removeFromQueue(player);
     if(player.roomId){
@@ -132,6 +145,14 @@ wss.on('connection',ws=>{
     broadcastQueue();
   });
 });
+
+// Heartbeat: Render's proxy drops idle WebSockets (e.g. while waiting in the queue).
+setInterval(()=>{
+  for(const ws of wss.clients){
+    if(ws.isAlive===false){ try{ws.terminate();}catch{} continue; }
+    ws.isAlive=false; try{ws.ping();}catch{}
+  }
+},25000);
 
 setInterval(()=>{
   const now=Date.now();

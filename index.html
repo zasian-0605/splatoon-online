@@ -3,9 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>自作インクバトル Webゲーム v24 - Complete One File - Facility + Loading Fix</title>
-<script src="https://cdn.tailwindcss.com"></script>
-
+<title>自作インクバトル Webゲーム v25</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 body{margin:0;overflow:hidden;background-color:#e3ff00;font-family:"Impact","Arial Black",sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;}
@@ -260,7 +258,7 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
   <div id="lobby-brand"><div class="small">ORIGINAL WEB CITY</div><div class="big">BANDARU CENTRAL</div></div>
   <div id="lobby-menu">
     <div id="lobby-menu-title">ロビー</div>
-    <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
+    <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。<br>（マウスが消えてボタンを押せない時は Esc を押すとカーソルが出ます）</div>
     <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">🟨 南西：試し撃ち　🟥 南東：CPU　🟦 北西：カスタム　🟪 北東：オンライン</div>
     <button class="lobby-btn" data-lobby-action="range">🎯 試し撃ち場 <span class="k">1 / E</span></button>
     <button class="lobby-btn" data-lobby-action="cpu">⚔ CPU 4vs4 <span class="k">2</span></button>
@@ -304,7 +302,7 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
 <div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div></div>
 <div id="special-ready">SPECIAL READY!</div>
 <div id="death-location-marker">💀 ここでやられた</div>
-<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">試し撃ち場に戻る</button></div>
+<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">ロビーに戻る</button></div>
 
 
 <div id="online-panel">
@@ -328,6 +326,11 @@ let currentPhase = 0; // 0 loading,0.5 customize,1 news,1.5 range,2 battle,3 res
 let isReady = false;
 let hasSeenNews = false;
 let stageBuilt = false;
+
+/* ---- v25: state shared between the separate <script> patch blocks.
+   (They used to be `let` inside one IIFE, so later blocks threw ReferenceError.) ---- */
+var onlineSocket = null, onlineActive = false, onlineRoomId = null, onlinePlayerId = null, onlineTeam = null;
+var setBattleCursor = function(hidden){ document.body.style.cursor = hidden ? 'none' : ''; };
 
 let inkTime = 0;
 let inkAnimationFrameId = null;
@@ -385,6 +388,7 @@ const newsLines = [
 {name:"全員",text:"ほな さいならー！"}
 ];
 let currentLineIndex=0;
+let newsFinishing=false;
 let typeWriterInterval=null;
 let isTyping=false;
 
@@ -520,7 +524,7 @@ function resizeInkCanvas(){
     customCamera.updateProjectionMatrix();
     customRenderer.setSize(window.innerWidth, window.innerHeight);
   }
-  if((currentPhase===1.5||currentPhase===2||currentPhase===3) && camera && renderer){
+  if(camera && renderer){
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -553,7 +557,10 @@ function handleAdvanceEvent(e){
   if(e.type==='keydown' && e.code!=='Space' && e.code!=='Enter') return;
   if(!isReady) return;
   if(currentPhase===0){ startCustomizePhase(); }
-  else if(currentPhase===1){ showNextLine(); }
+  else if(currentPhase===1){
+    const ns=document.getElementById('news-screen');
+    if(ns && ns.style.display==='block') showNextLine();
+  }
 }
 
 /* =========================================================
@@ -573,7 +580,18 @@ function startCustomizePhase(){
   }, 800);
 }
 
+function disposeCustomPreview(){
+  if(customAnimFrameId){ cancelAnimationFrame(customAnimFrameId); customAnimFrameId=null; }
+  if(customRenderer){
+    try{ customRenderer.dispose(); }catch(e){}
+    try{ customRenderer.forceContextLoss && customRenderer.forceContextLoss(); }catch(e){}
+    if(customRenderer.domElement && customRenderer.domElement.parentNode) customRenderer.domElement.parentNode.removeChild(customRenderer.domElement);
+  }
+  customRenderer=null; customScene=null; customCamera=null; customPreviewGroup=null;
+}
+
 function initCustomPreview(){
+  disposeCustomPreview(); // re-entering the screen must not leak WebGL contexts / animation loops
   const container = document.getElementById('customize-preview');
   container.innerHTML='';
   customScene = new THREE.Scene();
@@ -594,6 +612,7 @@ function initCustomPreview(){
   updateCustomPlayerModel();
 
   function renderPreview(){
+    if(!customRenderer) return;
     customAnimFrameId = requestAnimationFrame(renderPreview);
     if(customPreviewGroup) customPreviewGroup.root.rotation.y += 0.008;
     customRenderer.render(customScene, customCamera);
@@ -632,7 +651,10 @@ function updateWeaponInfo(){
     `【${categoryLabel[w.category]}】\n${stat}\nサブ:${w.sub} / スペシャル:${w.special}`;
 }
 
+let customizeUIBound = false;
 function setupCustomizeUI(){
+  const firstBind = !customizeUIBound;
+  customizeUIBound = true;
   const selectOutfit = document.getElementById('select-outfit');
   selectOutfit.innerHTML='';
   outfitList.forEach(item=>{
@@ -641,7 +663,7 @@ function setupCustomizeUI(){
     selectOutfit.appendChild(opt);
   });
   selectOutfit.value = playerConfig.outfit;
-  selectOutfit.addEventListener('change',(e)=>{ playerConfig.outfit=parseInt(e.target.value); updateCustomPlayerModel(); });
+  if(firstBind) selectOutfit.addEventListener('change',(e)=>{ playerConfig.outfit=parseInt(e.target.value); updateCustomPlayerModel(); });
 
   const selectWeapon = document.getElementById('select-weapon');
   selectWeapon.innerHTML='';
@@ -651,7 +673,7 @@ function setupCustomizeUI(){
     selectWeapon.appendChild(opt);
   });
   selectWeapon.value = playerConfig.weapon;
-  selectWeapon.addEventListener('change',(e)=>{ playerConfig.weapon=parseInt(e.target.value); updateCustomPlayerModel(); updateWeaponInfo(); });
+  if(firstBind) selectWeapon.addEventListener('change',(e)=>{ playerConfig.weapon=parseInt(e.target.value); updateCustomPlayerModel(); updateWeaponInfo(); });
   updateWeaponInfo();
 
   const renderHairButtons = ()=>{
@@ -676,6 +698,12 @@ function setupCustomizeUI(){
 
   const bindGroup = (id,key)=>{
     const container = document.getElementById(id);
+    // keep the highlighted button in sync with the saved config when the screen is re-opened
+    container.querySelectorAll('.opt-btn').forEach(btn=>{
+      const v = btn.getAttribute('data-val');
+      btn.classList.toggle('active', String(playerConfig[key])===v);
+    });
+    if(!firstBind) return;
     container.querySelectorAll('.opt-btn').forEach(btn=>{
       btn.addEventListener('click',(e)=>{
         e.stopPropagation();
@@ -694,9 +722,9 @@ function setupCustomizeUI(){
   bindGroup('grp-color','color');
   bindGroup('grp-gear','gear');
 
-  document.getElementById('btn-confirm').addEventListener('click',(e)=>{
+  if(firstBind) document.getElementById('btn-confirm').addEventListener('click',(e)=>{
     e.stopPropagation();
-    cancelAnimationFrame(customAnimFrameId);
+    disposeCustomPreview();
     document.getElementById('customize-screen').style.display='none';
     teamAHex = inkColorPalette[playerConfig.color];
     teamBHex = (playerConfig.color===1) ? 0x00e5ff : 0xff2255;
@@ -1947,11 +1975,6 @@ window.addEventListener('keydown',(e)=>{
       goToCustomizeFromGame();
     }
   }
-  if(e.code==='KeyP'){
-    if(currentPhase===1.5 || currentPhase===2){
-      showToast('オンライン対戦(PvP)はまだ準備中です！');
-    }
-  }
   if(e.code==='KeyO'){
     if(currentPhase===1.5){
       startBattleFromRange();
@@ -1993,6 +2016,7 @@ function goToCustomizeFromGame(){
 function startNewsPhase(){
   currentPhase=1;
   currentLineIndex=0;
+  newsFinishing=false;
   const ns=document.getElementById('news-screen');
   ns.style.display='block';
   setTimeout(()=>{ns.style.opacity=1;},50);
@@ -2008,11 +2032,14 @@ function showNextLine(){
     return;
   }
   if(currentLineIndex>=newsLines.length){
+    if(newsFinishing) return;          // extra taps while fading out must not start the town twice
+    newsFinishing=true;
     const ns=document.getElementById('news-screen');
     ns.style.opacity=0;
     setTimeout(()=>{
       ns.style.display='none';
       hasSeenNews=true;
+      newsFinishing=false;
       startRangePhase();
     },800);
     return;
@@ -2676,27 +2703,32 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const mult = opts.mult || 1;
     const baseR = Math.max(.45, radius*1.18*mult);
     const {cx,cy}=worldToCanvas(x,z);
-    const cr=(baseR/(STAGE_HALF*2))*paintCanvas.width;
+    // The paint canvas is square but the stage is 56 x 140, so draw in *world units*
+    // (scale the context) - otherwise every splat becomes a 2.5x longer oval along Z.
+    const bd = window.__BATTLE_BOUNDS || {halfW:28,halfD:70};
+    const sx = paintCanvas.width/(bd.halfW*2), sy = paintCanvas.height/(bd.halfD*2);
     paintCtx.save();
     paintCtx.fillStyle=hexToCss(colorHex);
-    // Main soft stamp
+    paintCtx.translate(cx,cy);
+    paintCtx.scale(sx,sy);
+    // Main stamp
     paintCtx.beginPath();
-    paintCtx.arc(cx,cy,cr,0,Math.PI*2);
+    paintCtx.arc(0,0,baseR,0,Math.PI*2);
     paintCtx.fill();
     // Several organic satellites => much better coverage
     const n = Math.max(3, Math.min(10, Math.round(radius*1.7)));
     for(let i=0;i<n;i++){
       const a=i*2.399963 + (x*0.03+z*0.07);
-      const rr=cr*(.25+.65*((i%5)/4));
-      const px=cx+Math.cos(a)*rr*.85, py=cy+Math.sin(a)*rr*.85;
-      paintCtx.beginPath(); paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
+      const rr=baseR*(.25+.65*((i%5)/4));
+      const px=Math.cos(a)*rr*.85, py=Math.sin(a)*rr*.85;
+      paintCtx.beginPath(); paintCtx.arc(px,py,baseR*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
     }
     // short trail segment when requested (roller/brush/wiper)
     if(opts.to){
-      const to=worldToCanvas(opts.to.x,opts.to.z);
-      paintCtx.lineWidth=Math.max(2,cr*1.5);
+      paintCtx.strokeStyle=hexToCss(colorHex);
+      paintCtx.lineWidth=Math.max(.12,baseR*1.5);
       paintCtx.lineCap='round';
-      paintCtx.beginPath(); paintCtx.moveTo(cx,cy); paintCtx.lineTo(to.cx,to.cy); paintCtx.stroke();
+      paintCtx.beginPath(); paintCtx.moveTo(0,0); paintCtx.lineTo(opts.to.x-x,opts.to.z-z); paintCtx.stroke();
     }
     paintCtx.restore();
     paintTexture.needsUpdate=true;
@@ -3044,7 +3076,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
 
   /* ---------- Online state ---------- */
-  let onlineSocket=null, onlineActive=false, onlineRoomId=null, onlinePlayerId=null, onlineTeam=null;
+  onlineSocket=null; onlineActive=false; onlineRoomId=null; onlinePlayerId=null; onlineTeam=null; // (declared globally with `var`)
   const remoteMap=new Map();
 
   function setOnlineStatus(t){const e=document.getElementById('online-status');if(e)e.textContent=t;}
@@ -3053,10 +3085,20 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function onlineUrl(){ return (location.protocol==='https:'?'wss://':'ws://') + location.host; }
 
+  function isOnlinePanelOpen(){
+    const pn=document.getElementById('online-panel');
+    return !!pn && pn.style.display!=='none' && pn.style.display!=='';
+  }
   function openOnlinePanel(){
+    // The mouse must be free to click the panel buttons.
+    try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
+    try{ if(window.__V10 && window.__V10.releaseLock) window.__V10.releaseLock(); }catch(e){}
+    // A previous socket (e.g. from an earlier match) must not stay open in the background.
+    if(onlineSocket){ try{ onlineSocket.onclose=null; onlineSocket.close(); }catch(e){} onlineSocket=null; }
+    onlineActive=false;
     document.getElementById('online-panel').style.display='flex';
     setOnlineStatus('サーバーに接続します…');
-    const savedWs=localStorage.getItem('splatoonWs');
+    let savedWs=null; try{ savedWs=localStorage.getItem('splatoonWs'); }catch(e){}
     const url=savedWs || (location.protocol==='file:' ? '' : onlineUrl());
     try{
       if(!url){ setOnlineStatus('オンラインは公開Web版のURLから利用してください。試し撃ち・CPU対戦はそのまま遊べます。'); return; }
@@ -3067,11 +3109,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       };
       onlineSocket.onmessage=(ev)=>{
         let m;try{m=JSON.parse(ev.data);}catch{return;}
-        if(m.type==="queue"){setOnlineStatus(`マッチング中… ${m.count}/8人`); const r=document.getElementById('online-room'); if(r) r.textContent=`8人揃うまで待機中… 現在 ${m.count}/8人`;}
+        if(m.type==="queue"){setOnlineStatus(`マッチング待機中… ${m.count}/8人（2人以上・全員READYで開始）`);}
         if(m.type==="matchFound"){
           onlineActive=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;
-          setOnlineStatus(`マッチング中… 8/8人 → ${m.team}チーム`);
-          document.getElementById('online-room').textContent=`8/8人
+          setOnlineStatus(`対戦開始！ ${(m.players||[]).length}人 → ${m.team}チーム`);
+          document.getElementById('online-room').textContent=`${(m.players||[]).length}人
 ${roomText(m.players)}`;
           startOnlineBattle(m);
         }
@@ -3079,10 +3121,11 @@ ${roomText(m.players)}`;
         if(m.type==="state"){applyRemoteState(m);}
         if(m.type==="paint"){ const localColor=window.__V6?.displayColorForPlayer?.(m.id); paintGround(m.x,m.z,m.radius,localColor??m.colorHex,{mult:m.mult||1,remote:true}); }
         if(m.type==="serverToast"){showToast(m.text);}
+        if(m.type==="hit"&&onlineActive&&playerFighter&&playerFighter.alive){ applyDamage(playerFighter,Number(m.damage)||0,remoteMap.get(m.from)||null); }
         if(m.type==="matchEnd" && onlineActive){onlineActive=false;endBattle();}
       };
-      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。公開Web版のURLから開いているか確認してください。');
-      onlineSocket.onclose=()=>{if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}};
+      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。公開Web版のURLから開いているか確認してください。（Renderの無料枠は起動に30〜60秒かかることがあります）');
+      onlineSocket.onclose=()=>{ if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');} else if(isOnlinePanelOpen()) setOnlineStatus('サーバーとの接続が切れました。「戻る」→ もう一度オンラインへ'); };
     }catch(e){setOnlineStatus('WebSocket開始に失敗しました');}
   }
   function hideOnlinePanel(){
@@ -3107,6 +3150,7 @@ ${roomText(m.players)}`;
     me.pos=me.root.position;
     teamAHex=inkColorPalette[playerConfig.color];
     teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
+    if(typeof resetBattleField==='function') resetBattleField();
     battleTimer=180; battleActive=true; currentPhase=2;
     document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block'; updateTeamLifeStrip(); document.getElementById('kill-feed').innerHTML='';
     document.getElementById('range-hint').style.display='none';
@@ -3169,7 +3213,7 @@ ${roomText(m.players)}`;
   document.getElementById('online-start').addEventListener('click',()=>{audioInit();if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',name:'player'}));setOnlineStatus('マッチング中… 1/8人'); const r=document.getElementById('online-room'); if(r)r.textContent='2人以上集まり、全員が準備OKになると開始します。';}});
   document.getElementById('online-cancel').addEventListener('click',closeOnlinePanel);
   window.addEventListener('keydown',(e)=>{
-    if(e.code==='KeyP' && currentPhase===1.5){openOnlinePanel();}
+    if(e.code==='KeyP' && currentPhase===1.5 && !isOnlinePanelOpen()){window.openOnlinePanel();}
   });
 
   /* ---------- UI: gear list text ---------- */
@@ -3241,6 +3285,13 @@ ${roomText(m.players)}`;
   const oldDoPlayerSubThrow=doPlayerSubThrow;
   doPlayerSubThrow=function(){oldDoPlayerSubThrow();};
 
+  /* ---- v25: these helpers live inside this IIFE, but the following <script> blocks call them
+     as globals (regenPlayer / consumeInk / setupFighterEconomy / gearProfile / sfx ...).
+     Without this export every frame threw "ReferenceError" => the practice field never rendered. ---- */
+  Object.assign(window,{
+    gearProfile, setupFighterEconomy, consumeInk, regenPlayer, doRollerAction, doWiperSlash,
+    sfx, inkCost, openOnlinePanel, closeOnlinePanel
+  });
 })();
 
 // === Projectile visual pass: larger ink orbs + continuous falling ink trail ===
@@ -3772,10 +3823,7 @@ ${roomText(m.players)}`;
   /* Patch existing online socket message handler by wrapping openOnlinePanel. */
   const _oldOpenOnline=openOnlinePanel;
   openOnlinePanel=function(){
-    _oldOpenOnline();
-    setQueueCount(1);
-    const start=document.getElementById('online-start');
-    if(start)start.textContent='マッチング開始';
+    _oldOpenOnline();   // (status/labels are handled by the v19 ready-UI)
   };
 
   /* ---------- Patch remote paint + matchFound color roster ---------- */
@@ -4043,18 +4091,24 @@ ${roomText(m.players)}`;
   let mapFrame=0;
 
   function battleScreen(){ return currentPhase===1.5 || currentPhase===2; }
+  // Any overlay the player has to click on: the cursor must stay visible & the mouse must not be locked.
+  function uiOpen(){
+    const on=document.getElementById('online-panel'), rs=document.getElementById('result-screen');
+    return !!((on&&on.style.display&&on.style.display!=='none') || (full&&full.style.display==='flex') || (rs&&rs.style.display==='flex'));
+  }
   function setCursorHard(hidden){
+    if(hidden && uiOpen()) hidden=false;
+    // (the html.battle-cursor-hidden CSS rule hides the cursor everywhere; no per-element inline styles are needed,
+    //  and they used to stay behind and keep the cursor invisible on the menus)
+    document.querySelectorAll('[style*="cursor"]').forEach(el=>el.style.removeProperty('cursor'));
     root.classList.toggle('battle-cursor-hidden',!!hidden);
     document.body.classList.toggle('pointer-lock-ready',!!hidden);
     document.body.style.setProperty('cursor',hidden?'none':'auto','important');
     if(renderer?.domElement) renderer.domElement.style.setProperty('cursor',hidden?'none':'auto','important');
-    if(hidden){
-      document.querySelectorAll('*').forEach(el=>el.style.setProperty('cursor','none','important'));
-    }
   }
 
   function requestLock(){
-    if(!battleScreen() || !renderer?.domElement) return;
+    if(!battleScreen() || !renderer?.domElement || uiOpen()) return;
     pointerLockWanted=true;
     setCursorHard(true);
     try{
@@ -4211,7 +4265,11 @@ ${roomText(m.players)}`;
     if(e.code==='KeyM' && battleScreen()){
       e.preventDefault();
       if(full.style.display==='flex') full.style.display='none';
-      else full.style.display='flex';
+      else{
+        full.style.display='flex';
+        // the map is clicked with the mouse (super jump) -> release the pointer lock
+        try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(err){}
+      }
       setCursorHard(true);
     }
     if(e.code==='Escape' && full.style.display==='flex'){
@@ -4232,6 +4290,7 @@ ${roomText(m.players)}`;
     }else{
       if(full) full.style.display='none';
       if(mini) mini.style.display='none';
+      if(root.classList.contains('battle-cursor-hidden')) setCursorHard(false);
     }
   },250);
 
@@ -4312,7 +4371,7 @@ ${roomText(m.players)}`;
   function openFullMap(){
     if(!inBattle() || !full) return;
     full.style.display='flex';
-    if(window.__V10?.requestLock) window.__V10.requestLock();
+    try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(err){}   // map needs a free mouse
   }
   if(mapBtn) mapBtn.addEventListener('pointerdown',(e)=>{
     e.preventDefault();
@@ -4375,7 +4434,7 @@ ${roomText(m.players)}`;
     oldEndBattleV11();
   };
 
-  window.__V11={startSuperJump,openFullMap,getJumpState:()=>jumpState};
+  window.__V11={startSuperJump,openFullMap,getJumpState:()=>jumpState,update:updateSuperJump,cancel:()=>{jumpState=null;}};
 })();
 </script>
 
@@ -4462,11 +4521,12 @@ ${roomText(m.players)}`;
     if(e)e.textContent=onlineJoined?`準備状態：${onlineReady?'✅ READY':'⏳ 未準備'}`:'準備状態：未参加';
     if(b){b.textContent=onlineJoined?(onlineReady?'準備を解除':'準備OK'):'参加して準備OK';b.classList.toggle('ready-on',onlineReady);}
   }
+  let readySocket=null;
   function attachReadyListener(){
-    if(readyListenerInstalled)return;
     const ws=onlineSocket;
     if(!ws||!ws.addEventListener)return;
-    readyListenerInstalled=true;
+    if(readyListenerInstalled && readySocket===ws)return;   // a new socket needs its own listener
+    readyListenerInstalled=true; readySocket=ws;
     ws.addEventListener('message',(ev)=>{
       let m;try{m=JSON.parse(ev.data)}catch{return;}
       if(m.type==='queue'||m.type==='playerReady'||m.type==='lobbyState'){
@@ -4505,7 +4565,7 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   if(typeof window.openOnlinePanel==='function'){
     const oldOpen=window.openOnlinePanel;
     window.openOnlinePanel=function(){
-      onlineJoined=false;onlineReady=false;setReadyUI();
+      onlineJoined=false;onlineReady=false;readyListenerInstalled=false;readySocket=null;setReadyUI();
       oldOpen();
       let tries=0;
       const poll=()=>{
@@ -4536,17 +4596,15 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   const oldBattle=window.startBattleFromRange;
   if(typeof oldBattle==='function'){
     window.startBattleFromRange=function(){
+      if(currentPhase!==1.5) return;
       if(playerFighter){playerFighter.kills=0;playerFighter.deaths=0;playerFighter.specialGauge=0;}
+      if(typeof resetBattleField==='function') resetBattleField();   // start each match on a clean, un-inked stage
       oldBattle();
       document.getElementById('result-screen')?.classList.remove('v18-result');
     };
   }
 
-  // Clear URL mode when going back to city from the battle result.
-  document.getElementById('btn-result-ok')?.addEventListener('click',(e)=>{
-    e.preventDefault();
-    try{if(typeof startLobbyPhase==='function')startLobbyPhase();}catch{}
-  },true);
+  // (The result button's own handler already calls startRangePhase(), which now means "go back to town".)
 
 })();
 </script><script>
@@ -4863,7 +4921,7 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     }
   };
 
-  window.__V13={slopeRegions,jumpPads,launchers,movingPlatforms,spongeBlocks};
+  window.__V13={slopeRegions,jumpPads,launchers,movingPlatforms,spongeBlocks,tryGimmickLaunch};
 })();
 </script>
 
@@ -5016,7 +5074,11 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   }
   function npc(x,z,col,phase){
     const g=new THREE.Group();
-    const body=new THREE.Mesh(new THREE.CapsuleGeometry(.5,1.05,4,8),mat(col));body.position.y=1.1;g.add(body);
+    // (THREE.CapsuleGeometry only exists from r139; the game loads r128 -> build the capsule from primitives)
+    const body=new THREE.Mesh(cylGeo(.5,1.05,10),mat(col));body.position.y=1.1;g.add(body);
+    const capG=new THREE.SphereGeometry(.5,10,6);
+    const capB=new THREE.Mesh(capG,mat(col));capB.position.y=.58;g.add(capB);
+    const capT=new THREE.Mesh(capG,mat(col));capT.position.y=1.62;g.add(capT);
     const head=new THREE.Mesh(new THREE.SphereGeometry(.52,8,6),mat(0xe6c8ba));head.position.y=2.35;g.add(head);
     const bag=new THREE.Mesh(new THREE.BoxGeometry(.7,.55,.28),mat(accent[(Math.abs(x+z)|0)%accent.length]));bag.position.set(0,1.25,-.52);g.add(bag);
     g.position.set(x,0,z);add(g);
@@ -5034,6 +5096,11 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     if(lobby.group) return;
     ensureWorld();
     lobby.group=new THREE.Group();scene.add(lobby.group);
+    try{ buildLobbyContents(); }
+    catch(err){ console.error('Town decoration failed (continuing without it):',err); }
+    lobby.group.visible=false;
+  }
+  function buildLobbyContents(){
     // city ground + main streets
     box(0,-.18,0,116,.36,88,0x30313e);
     box(0,.02,0,16,.05,88,0x202331); // central avenue
@@ -5091,8 +5158,7 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     lobbyBigSign(0,30,'CENTRAL PLAZA',0xe3ff00);
     // NPC crowd
     const npcColors=[0xe3ff00,0xff0055,0x00d4ff,0x9900ff,0x75f0a8,0xffa63d];
-    [[-7,-5],[7,-5],[-10,17],[10,17],[-30,4],[30,-4],[-36,12],[36,12],[0,19],[0,-19]].forEach((p,i)=>npc(p[0],p[1],npcColors[i%npcColors.length],i*.7));
-    lobby.group.visible=false;
+    [[-7,-5],[7,-5],[-10,17],[10,17],[-30,4],[30,-4],[-36,12],[36,12],[0,19],[0,-19]].forEach((p,i)=>{ try{ npc(p[0],p[1],npcColors[i%npcColors.length],i*.7); }catch(err){ console.warn('npc failed',err); } });
   }
   function ensureLobbyPlayer(){
     if(lobby.player) return lobby.player;
@@ -5101,8 +5167,8 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
       fighters=[playerFighter];
     }
     lobby.player=playerFighter;
-    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;lobby.player.squid=false;
-    lobby.player.human.visible=true;lobby.player.squid.visible=false;
+    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;
+    lobby.player.human.visible=true;if(lobby.player.squid&&lobby.player.squid.visible!==undefined)lobby.player.squid.visible=false;
     return lobby.player;
   }
   function lobbyBlocked(x,z){
@@ -5226,6 +5292,7 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
       try{
         // All facility entries use the same reliable in-page battle initializer.
         // This avoids the old chain of wrapped startRangePhase functions.
+        if(key!=='custom') setBattleStageVisible(true);
         if(key==='range'){
           // Use the original, already-proven same-page practice initializer.
           // Do NOT change location, do NOT reload, and do NOT call the lobby wrapper.
@@ -5238,21 +5305,24 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
             try{
               if(currentPhase===1.5) startBattleFromRange();
             }catch(err){ console.error('CPU start failed',err); }
-          },80);
+          },120);
         }else if(key==='online'){
           if(typeof launchRange==='function') launchRange();
           else throw new Error('Practice launcher is missing');
           setTimeout(()=>{
             try{
+              if(currentPhase!==1.5) return;   // the player already left again
               if(typeof window.openOnlinePanel==='function') window.openOnlinePanel();
               else {
                 const panel=document.getElementById('online-panel');
-                if(panel) panel.style.display='block';
+                if(panel) panel.style.display='flex';
               }
             }catch(err){ console.error('Online panel failed',err); }
           },120);
         }else if(key==='custom'){
           // Re-open customization in the same document without navigation.
+          try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
+          document.documentElement.classList.remove('battle-cursor-hidden');
           document.querySelectorAll('#loading-screen,#news-screen,#lobby-ui,#battle-ui,#result-screen,#online-panel').forEach(el=>{
             if(el){el.style.display='none';el.style.opacity='0';}
           });
@@ -5264,10 +5334,9 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
         }
       }catch(err){
         console.error('Facility transition failed',err);
-        // Last-resort in-page retry. Never reload the document.
+        // Last-resort in-page fallback (a plain practice start). Never reload the document.
         try{
-          if(typeof launchRange==='function') launchRange();
-          else directPracticeInit();
+          directPracticeInit();
         }catch(retryErr){
           console.error('In-page practice retry failed',retryErr);
           const hint=document.getElementById('range-hint');
@@ -5300,17 +5369,47 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     if(best) action(best.key); else showToast('近くに入れる施設がないよ');
   }
   function leaveLobby(){
-    lobby.active=false;currentPhase=1;
+    // phase 1.2 = "in transition". (It used to be 1 = news screen, so any click / Space press during the
+    //  yellow-wave transition restarted the news finish routine and dragged the player back into the town.)
+    lobby.active=false;currentPhase=1.2;
     const ui=document.getElementById('lobby-ui');if(ui)ui.style.display='none';
     if(lobby.group)lobby.group.visible=false;
     if(lobby.frame)cancelAnimationFrame(lobby.frame),lobby.frame=0;
     try{ if(document.pointerLockElement===renderer.domElement)document.exitPointerLock(); }catch(e){}
     lockRequested=false;
   }
+  function setBattleStageVisible(v){
+    try{ if(stageGroup) stageGroup.visible=!!v; (decals||[]).forEach(d=>{ if(d&&d.mesh) d.mesh.visible=!!v; }); }catch(e){}
+  }
+  window.setBattleStageVisible=setBattleStageVisible;
+  function cleanBattleLeftovers(){
+    try{
+      (bullets||[]).forEach(b=>b&&b.mesh&&scene.remove(b.mesh)); bullets=[];
+      (subsList||[]).forEach(b=>b&&b.mesh&&scene.remove(b.mesh)); subsList=[];
+      (particles||[]).forEach(b=>b&&b.mesh&&scene.remove(b.mesh)); particles=[];
+    }catch(e){}
+    battleActive=false; isShooting=false;
+    try{ if(window.__V11&&window.__V11.cancel) window.__V11.cancel(); }catch(e){}
+    keys.w=keys.a=keys.s=keys.d=keys.space=keys.shift=false;
+    ['respawn-overlay','death-location-marker','special-ready','fullmap','minimap'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
+    const tb=document.getElementById('top-battle-status'); if(tb)tb.style.display='none';
+    const cg=document.getElementById('charge-gauge'); if(cg)cg.style.display='none';
+    // an online match that is still open must not keep running behind the town
+    try{ if(onlineSocket && !document.getElementById('online-panel').style.display.match(/flex|block/)){ onlineActive=false; onlineSocket.onclose=null; onlineSocket.close(); onlineSocket=null; } }catch(e){}
+    onlineActive=false;
+    // shooting can leave the pointer locked from the range
+    try{ if(document.pointerLockElement && document.pointerLockElement!==(renderer&&renderer.domElement)) document.exitPointerLock(); }catch(e){}
+  }
   function startLobbyPhase(){
+    if(lobby.frame){ cancelAnimationFrame(lobby.frame); lobby.frame=0; }
     buildLobby();ensureLobbyPlayer();
+    cleanBattleLeftovers();
+    setBattleStageVisible(false);
+    document.getElementById('news-screen').style.display='none';
+    document.getElementById('loading-screen').style.display='none';
+    const ftr=document.getElementById('facility-transition'); if(ftr){ftr.classList.remove('active');ftr.style.display='none';}
     currentPhase=1.25;lobby.active=true;lobby.group.visible=true;
-    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.human.visible=true;lobby.player.squid.visible=false;
+    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.human.visible=true;if(lobby.player.squid)lobby.player.squid.visible=false;
     lobbyYaw=0.25;lobbyPitch=-0.12;
     document.getElementById('battle-ui').style.display='none';
     document.getElementById('range-hint').style.display='none';
@@ -5387,6 +5486,20 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   document.addEventListener('mousedown',(e)=>{
     if(currentPhase===1.25&&e.button===0){ requestLobbyLock(); }
   },true);
+
+  // Touch: right-half swipe turns the town camera (left half = move, handled by the shared touch controls).
+  (function(){
+    let id=null,lx=0,ly=0,bound=false;
+    function bind(){
+      if(bound||!renderer||!renderer.domElement)return; bound=true;
+      const dom=renderer.domElement;
+      dom.addEventListener('touchstart',e=>{ if(currentPhase!==1.25)return; for(const t of e.changedTouches){ if(id===null&&t.clientX>=innerWidth/2){id=t.identifier;lx=t.clientX;ly=t.clientY;} } },{passive:true});
+      dom.addEventListener('touchmove',e=>{ if(currentPhase!==1.25)return; for(const t of e.changedTouches){ if(t.identifier===id){ lobbyYaw-=(t.clientX-lx)*.0075; lobbyPitch-=(t.clientY-ly)*.004; lobbyPitch=Math.max(-.55,Math.min(.18,lobbyPitch)); lx=t.clientX;ly=t.clientY; } } },{passive:true});
+      const end=e=>{ for(const t of e.changedTouches){ if(t.identifier===id) id=null; } };
+      dom.addEventListener('touchend',end,{passive:true}); dom.addEventListener('touchcancel',end,{passive:true});
+    }
+    const t=setInterval(()=>{ if(renderer&&renderer.domElement){ bind(); clearInterval(t); } },200);
+  })();
 
   // Buttons are touch-friendly and do not require keyboard.
   document.querySelectorAll('#lobby-ui .lobby-btn').forEach(btn=>{
@@ -5540,6 +5653,83 @@ window.addEventListener('load',()=>{
     }catch(e){}
   },2300);
 });
+</script>
+
+
+<script>
+/* =====================================================================
+   v25 STABILITY LAYER  (loaded last, wraps everything above)
+   - one single render loop (no doubled speed if the range is entered twice)
+   - a frame that throws no longer freezes the picture (the scene is still drawn)
+   - the town hides the battle stage, the battle shows it again
+   - clean paint / decals / sponges at the start of every match
+   - v17's "single movement path" dropped the super-jump, jump-pad and spinner hooks -> re-attached here
+   - keys can no longer get stuck when the tab loses focus
+   ===================================================================== */
+(function(){
+  /* ---- single render loop + error boundary ---- */
+  const _anim = animate3D;
+  let lastTs = -1, errCount = 0;
+  animate3D = function(ts){
+    if(currentPhase!==1.5 && currentPhase!==2) return;
+    if(typeof ts==='number'){ if(ts===lastTs) return; lastTs=ts; }   // a 2nd loop in the same frame dies here
+    if(stageGroup && !stageGroup.visible && window.setBattleStageVisible) window.setBattleStageVisible(true);
+    try{
+      _anim();
+    }catch(err){
+      if(errCount++<5) console.error('frame error (game keeps running):',err);
+      // The original loop re-schedules itself first, so only make sure something is drawn.
+      try{ if(renderer&&scene&&camera) renderer.render(scene,camera); }catch(e){}
+    }
+  };
+
+  /* ---- fresh battlefield ---- */
+  window.resetBattleField = function(){
+    try{
+      paintCtx.save(); paintCtx.setTransform(1,0,0,1,0,0);
+      paintCtx.fillStyle='#555566'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+      paintCtx.restore(); paintTexture.needsUpdate=true;
+      (decals||[]).forEach(d=>{ if(d&&d.mesh) scene.remove(d.mesh); }); decals=[];
+      (collidableBlocks||[]).forEach(b=>{ b.paintLevel=0; b.paintTeam=null; });
+      const g=window.__V13; if(g&&g.spongeBlocks) g.spongeBlocks.forEach(sp=>{ sp.team=null; sp.target=.7; sp.height=.7; });
+      const ta=document.getElementById('turf-a'), tb=document.getElementById('turf-b');
+      if(ta) ta.style.width='50%'; if(tb) tb.style.width='50%';
+    }catch(e){ console.warn('resetBattleField',e); }
+  };
+
+  /* ---- online damage: hits on remote players are reported to the server, the victim applies them ---- */
+  const _applyDamage = applyDamage;
+  applyDamage = function(target, dmg, from){
+    if(onlineActive && target && target.remote){
+      if(playerFighter && target.alive && target.team!==playerFighter.team && onlineSocket && onlineSocket.readyState===1){
+        try{ onlineSocket.send(JSON.stringify({type:'hit',target:target.id,damage:Math.round(dmg)})); }catch(e){}
+      }
+      return;   // the remote player's own client decides its HP
+    }
+    _applyDamage(target, dmg, from);
+  };
+
+  /* ---- movement: re-attach the hooks that v17's replacement dropped ---- */
+  const _v17Move = updatePlayerMovement;
+  updatePlayerMovement = function(delta){
+    const sj = window.__V11;
+    if(sj && sj.getJumpState && sj.getJumpState()){ sj.update(performance.now()); return; }   // super jump in progress
+    _v17Move(delta);
+    const f = playerFighter;
+    if(!f || !f.alive) return;
+    const g = window.__V13;
+    if(g && g.tryGimmickLaunch) g.tryGimmickLaunch(f, performance.now());                       // jump pads / launchers
+    if(f.weapon && f.weapon.category==='spinner' && !isShooting){                                // spinner: release cancels wind-up
+      if(f.spinnerCharging){ f.spinnerCharging=false; f.spinnerChargeStart=0; const cg=document.getElementById('charge-gauge'); if(cg)cg.style.display='none'; }
+      f.spinnerFiring=false;
+    }
+  };
+
+  /* ---- input safety ---- */
+  function releaseKeys(){ keys.w=keys.a=keys.s=keys.d=keys.space=keys.shift=false; isShooting=false; }
+  window.addEventListener('blur', releaseKeys);
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) releaseKeys(); });
+})();
 </script>
 
 </body>

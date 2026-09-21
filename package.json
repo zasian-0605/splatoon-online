@@ -1,7 +1,8 @@
 {
-  "name": "splatoon-like-web-online-v19",
-  "version": "19.0.0",
+  "name": "splatoon-like-web-online-v25",
+  "version": "25.0.0",
   "private": true,
-  "scripts": {"start": "node server.js"},
-  "dependencies": {"ws": "^8.18.0"}
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" }
 }
