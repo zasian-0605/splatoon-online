@@ -13,3 +13,9 @@
 ## Render
 Build Command: `npm install`
 Start Command: `npm start`
+
+
+## v26 stage update
+- Battle stage expanded to a very wide 60 x 150 rectangular field.
+- Paint and map coordinates use separate X/Z scales so the wide stage displays correctly.
+- Enemy/AI charge states never show the player's shared charge gauge; only local player charging is shown.
