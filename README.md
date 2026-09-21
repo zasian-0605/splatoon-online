@@ -1,17 +1,9 @@
-# スプラ風 Web v29
+# Splatoon-like Web v31（ロビー復旧安定版）
 
-1ファイルゲーム本体版。`index.html` に街ロビー・試し撃ち・CPU対戦・オンライン・カスタマイズ・結果画面・各種ギミックを統合。
+v27の安定版を基準に復元し、対戦開始時のチーム集合スポーンだけを安全に追加した版です。
 
-## v29変更
-- ローディング後は必ずロビーへ入る。
-- 正面に試し撃ち受付、広場にCPU/オンライン/カスタマイズを明確に配置。
-- CPU対戦開始時、A/B各チームをそれぞれ1つのスポーンエリアへ集結させてから開始。
-- オンライン側もチームスポーン地点にスナップ。
-- 既存のマップ、武器、HUD、歩行、MAP表示などは維持。
+- index.html: ゲーム本体
+- server.js: オンライン用WebSocketサーバー
+- package.json / render.yaml: Render用
 
-## ローカル
-`npm install` → `npm start` → http://localhost:3000
-
-
-## v30
-Lobby / radio flow restored from v28/v29 stable base. Initial loading now proceeds to customization, then radio, then lobby; team-spawn changes are retained.
+重要: v30/v28の追加レイヤーはこの版には入れていません。
