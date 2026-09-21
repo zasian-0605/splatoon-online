@@ -701,7 +701,7 @@ function setupCustomizeUI(){
       playerFighter.chargeStart = 0;
       rebuildFighterModel(playerFighter, playerConfig);
     }
-    if(hasSeenNews){ startRangePhase(); } else { startNewsPhase(); }
+    if(hasSeenNews){ window.startLobbyPhase ? window.startLobbyPhase() : startRangePhase(); } else { startNewsPhase(); }
   });
 }
 
@@ -2091,7 +2091,7 @@ function showNextLine(){
     setTimeout(()=>{
       ns.style.display='none';
       hasSeenNews=true;
-      startRangePhase();
+      window.startLobbyPhase ? window.startLobbyPhase() : startRangePhase();
     },800);
     return;
   }
@@ -2170,7 +2170,8 @@ function startRangePhase(){
   currentPhase = 1.5;
   battleActive = false;
   prevTime = performance.now();
-  animate3D();
+  ++gameLoopToken;
+  animate3D(gameLoopToken);
 }
 
 function makeAiCfg(team){
@@ -2570,9 +2571,12 @@ function updateBullets(delta){
 }
 
 let turfTick=0;
-function animate3D(){
+let gameLoopToken=0;
+function animate3D(token){
+  if(token===undefined) token=++gameLoopToken;
+  if(token!==gameLoopToken) return;
   if(currentPhase!==1.5 && currentPhase!==2) return;
-  requestAnimationFrame(animate3D);
+  requestAnimationFrame(()=>animate3D(token));
 
   const time = performance.now();
   const delta = Math.min((time-prevTime)/1000, 0.1);
@@ -4433,6 +4437,21 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       prompt.textContent='街を歩いて施設へ　WASD / 左スティック：移動　マウス：視点　[E]：近くの施設';
     }
   }
+  function enterRangeSafely(){
+    try{
+      if(typeof launchRange!=='function') throw new Error('range launcher missing');
+      launchRange();
+      if(currentPhase!==1.5){
+        // One deterministic retry if another phase handler changed the phase during the click.
+        currentPhase=1;
+        launchRange();
+      }
+      if(currentPhase!==1.5) throw new Error('range phase not entered');
+    }catch(err){
+      console.error('Practice entry failed',err);
+      showToast('試し撃ちを開始できませんでした');
+    }
+  }
   function action(key){
     if(currentPhase!==1.25)return;
     const p=lobby.player; if(!p)return;
@@ -4442,10 +4461,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       showToast('その施設まで歩いて近づいてね');return;
     }
     leaveLobby();
-    if(key==='range'){ setTimeout(()=>{launchRange();},0); }
-    else if(key==='cpu'){ setTimeout(()=>{launchRange();setTimeout(()=>startBattleFromRange(),80);},0); }
-    else if(key==='online'){ setTimeout(()=>{launchRange();setTimeout(()=>openOnlinePanel(),80);},0); }
-    else if(key==='custom'){ setTimeout(()=>{goToCustomizeFromGame();},0); }
+    if(key==='range'){ enterRangeSafely(); }
+    else if(key==='cpu'){ enterRangeSafely(); if(currentPhase===1.5) startBattleFromRange(); }
+    else if(key==='online'){ enterRangeSafely(); if(currentPhase===1.5) openOnlinePanel(); }
+    else if(key==='custom'){ goToCustomizeFromGame(); }
   }
   function nearestAction(){
     let best=null,bd=6.8;
@@ -4458,7 +4477,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const ui=document.getElementById('lobby-ui');if(ui)ui.style.display='none';
     if(lobby.group)lobby.group.visible=false;
     if(lobby.frame)cancelAnimationFrame(lobby.frame),lobby.frame=0;
-    try{ if(document.pointerLockElement===renderer.domElement)document.exitPointerLock(); }catch(e){}
+    if(lobby.player){
+      lobby.player.root.visible=true;
+      if(lobby.player.human) lobby.player.human.visible=true;
+      if(lobby.player.squid) lobby.player.squid.visible=false;
+      lobby.player.squid_mode=false;
+      lobby.player.alive=true;
+    }
+    try{ if(renderer && document.pointerLockElement===renderer.domElement)document.exitPointerLock(); }catch(e){}
     lockRequested=false;
   }
   function startLobbyPhase(){
@@ -4507,13 +4533,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     lobby.frame=requestAnimationFrame(lobbyLoop);
   }
 
-  // Capture the current, fully patched range launcher once, then make startRangePhase mean "go to lobby".
+  // Capture the current, fully patched practice launcher without replacing it.
   const launchRange=window.startRangePhase;
   if(typeof launchRange!=='function') return;
+  window.__realStartRangePhase=launchRange;
   window.startLobbyPhase=startLobbyPhase;
-  window.startRangePhase=function(){startLobbyPhase();};
 
-  // When the news finishes, the overridden startRangePhase automatically lands in the lobby.
+  // The news/custom flow enters the lobby explicitly. This keeps startRangePhase reserved for practice.
+  const originalShowNextLine=window.showNextLine;
+  // The functions are globally bound in this classic script; patch their transition targets once below.
   // Keyboard shortcuts for lobby.
   window.addEventListener('keydown',(e)=>{
     if(currentPhase!==1.25)return;
