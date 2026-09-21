@@ -1,0 +1,7 @@
+{
+  "name": "splatoon-like-web-online-v19",
+  "version": "19.0.0",
+  "private": true,
+  "scripts": {"start": "node server.js"},
+  "dependencies": {"ws": "^8.18.0"}
+}
