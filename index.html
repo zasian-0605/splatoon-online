@@ -322,8 +322,8 @@ let battleTimer=180;
 let battleActive=false;
 let turfPct = {a:0,b:0};
 
-const STAGE_HALF_X = 48;
-const STAGE_HALF_Z = 80;
+const STAGE_HALF_X = 30;
+const STAGE_HALF_Z = 75;
 // Legacy scalar kept for older UI calculations; stage mapping uses X/Z halves above.
 const STAGE_HALF = STAGE_HALF_Z;
 const CLIMB_THRESHOLD = 55;
@@ -906,13 +906,16 @@ function buildPlayerModelGroup(cfg){
       addBox(weaponGroup,.16,.10,.16,dark,0,-r*2.0,0);
       addSubdividedBox(weaponGroup,.22,.14,.50,glow,0,-r*2.35,0);
     } else if(selectedWeapon.category==='maneuver'){
-      // マニューバーは「1丁」を作る。外側で右手・左手に1丁ずつ置くので合計2丁。
-      const g=new THREE.Group(); weaponGroup.add(g);
-      addSubdividedBox(g,.16,.16,.42,c,0,0,0);
-      addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
-      addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
-      addBox(g,.11,.26,.11,dark,0,-.20,-.02);
-      addBox(g,.20,.07,.12,metal,0,.05,-.12);
+      // マニューバー：二丁を左右に開いた未来的ブラスター
+      const side=0.23;
+      [[-side,0],[side,0]].forEach(([sx])=>{
+        const g=new THREE.Group(); g.position.x=sx; weaponGroup.add(g);
+        addSubdividedBox(g,.16,.16,.42,c,0,0,0,0, sx<0?-.10:.10,0);
+        addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
+        addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
+        addBox(g,.11,.26,.11,dark,0,-.20,-.02);
+      });
+      addBox(weaponGroup,.34,.07,.12,metal,0,.05,-.12);
     } else if(selectedWeapon.category==='slosher'){
       // スロッシャー：明確なバケツ形状＋液体チャンバー＋長い柄
       const bucket=new THREE.Group(); bucket.rotation.z=Math.PI/2; weaponGroup.add(bucket);
@@ -1161,17 +1164,15 @@ function buildStage(){
   decals.forEach(d=>scene.remove(d.mesh));
   decals = [];
 
-  // v33: wide, flat rectangular arena. No ramps, platforms, or unreachable holes.
-  const STAGE_W = 96;
-  const STAGE_D = 160;
+  // v12 stage: tall rectangle, fully walkable/paintable floor, three clear routes.
+  // World: X = -18..18, Z = -45..45.
+  const STAGE_W = 60;
+  const STAGE_D = 150;
   const halfW = STAGE_W/2;
   const halfD = STAGE_D/2;
-
-  const waterMat = new THREE.MeshLambertMaterial({color:0x176b83, transparent:true, opacity:.92});
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+14, STAGE_D+14, 1, 1), waterMat);
-  water.rotation.x = -Math.PI/2;
-  water.position.y = -0.28;
-  stageGroup.add(water);
+  const SX = STAGE_W / 36;
+  const SZ = STAGE_D / 90;
+  const addStageBlock = (x,y,z,w,h,d,color,opts={}) => addBlock(x*SX,y,z*SZ,w*SX,h,d*SZ,color,opts);
 
   const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
   const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
@@ -1179,7 +1180,7 @@ function buildStage(){
   ground.rotation.x = -Math.PI/2;
   stageGroup.add(ground);
 
-  // Reset paint and create clearly separated home zones.
+  // Reset paint and give both teams a broad, separated home zone.
   paintCtx.fillStyle = '#555566';
   paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
   function paintRectWorld(x0,z0,x1,z1,colorHex){
@@ -1189,35 +1190,86 @@ function buildStage(){
     paintCtx.fillStyle=hexToCss(colorHex);
     paintCtx.fillRect(x,y,w,h);
   }
-  paintRectWorld(-45,-79,45,-61,teamAHex);
-  paintRectWorld(-45,61,45,79,teamBHex);
+  paintRectWorld(-28,-74,28,-52,teamAHex);
+  paintRectWorld(-28,52,28,74,teamBHex);
   paintTexture.needsUpdate = true;
 
-  spawnPointA = new THREE.Vector3(0,0,-68);
-  spawnPointB = new THREE.Vector3(0,0, 68);
+  spawnPointA = new THREE.Vector3(0,0,-64);
+  spawnPointB = new THREE.Vector3(0,0, 64);
 
-  // Only a few broad box walls. Every wall is paintable by paintWallSurface().
-  const walls = [
-    {x:-22,z:-28,w:18,h:2.8,d:2.4},
-    {x: 22,z:-18,w:16,h:3.2,d:2.4},
-    {x:-16,z:  0,w:22,h:2.6,d:2.4},
-    {x: 18,z:  8,w:18,h:3.0,d:2.4},
-    {x:-25,z: 30,w:18,h:2.8,d:2.4},
-    {x: 25,z: 31,w:18,h:2.8,d:2.4},
-    {x:  0,z:-42,w:20,h:2.4,d:2.2},
-    {x:  0,z: 42,w:20,h:2.4,d:2.2}
+  // Broad spawn pads, deliberately far apart.
+  addStageBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
+  addStageBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
+
+  // Three routes: left / center / right.
+  // Left and right stay low. The center route is elevated and connected by stairs.
+  const routeXs = [-12,0,12];
+  routeXs.forEach(x=>{
+    waypoints.push({x,z:-30});
+    waypoints.push({x,z:-10});
+    waypoints.push({x,z:10});
+    waypoints.push({x,z:30});
+  });
+
+  // Low lane cover. Openings between covers keep each route flowing.
+  const lowCovers = [
+    {x:-12,z:-25,w:7,d:3,h:2.4}, {x:-12,z:-12,w:5,d:3,h:1.5}, {x:-12,z:4,w:7,d:3,h:2.8}, {x:-12,z:22,w:5,d:3,h:1.8},
+    {x:12,z:-25,w:7,d:3,h:2.4},  {x:12,z:-12,w:5,d:3,h:1.5}, {x:12,z:4,w:7,d:3,h:2.8},  {x:12,z:22,w:5,d:3,h:1.8},
+    {x:-6,z:-5,w:3,d:5,h:1.8}, {x:6,z:11,w:3,d:5,h:2.2},
+    {x:-6,z:21,w:3,d:4,h:2.0}, {x:6,z:-21,w:3,d:4,h:2.0}
   ];
-  walls.forEach((w,i)=>addBlock(w.x,0,w.z,w.w,w.h,w.d,[0x596775,0x48596c,0x647386][i%3],{climbable:false}));
+  lowCovers.forEach(c=>addStageBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
 
-  // Simple navigation points for CPU opponents.
-  const pts=[
-    [-34,-50], [0,-50], [34,-50],
-    [-34,-20], [0,-10], [34,-5],
-    [-34,18], [0,24], [34,18],
-    [-34,52], [0,52], [34,52]
-  ];
-  waypoints = pts.map(([x,z])=>({x,z}));
+  // Mid dividers separate the three lanes but leave deliberate choke/opening points.
+  // Height is low enough to read as cover, not an impassable wall.
+  [-6,6].forEach(x=>{
+    [-32,-18,-2,14,28].forEach(z=>addStageBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
+  });
 
+  // Center high route: long raised path.
+  addStageBlock(0,3,-14,8,3.0,20,0x657789);
+  addStageBlock(0,3, 14,8,3.0,20,0x657789);
+  addStageBlock(0,3,  0,8,3.0,10,0x718396);
+  waypoints.push({x:0,z:-14,y:3});
+  waypoints.push({x:0,z:0,y:3});
+  waypoints.push({x:0,z:14,y:3});
+
+  // Stair ramps at both ends of the high route, made from short steps.
+  [-1,1].forEach(dir=>{
+    for(let i=0;i<8;i++){
+      const z = dir * (23 + i*0.9);
+      const h = 0.45 + (7-i)*0.32;
+      addStageBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
+    }
+  });
+
+  // Two raised side platforms create additional vertical options without cluttering the stage.
+  [
+    {x:-12,z:14,w:6,d:8,h:2.2},
+    {x:12,z:-14,w:6,d:8,h:2.2}
+  ].forEach(p=>{
+    addStageBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
+    waypoints.push({x:p.x,z:p.z,y:p.h});
+  });
+
+  // Connect left <-> center and center <-> right at two clear crossover points.
+  // These bridges are low, wide and paintable.
+  [-8,8].forEach(z=>{
+    addStageBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
+    addStageBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
+    waypoints.push({x:-6,z});
+    waypoints.push({x:6,z});
+  });
+
+  // Center observation block for another height change.
+  addStageBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
+  waypoints.push({x:0,z:0,y:6});
+
+  // Expand route coordinates together with the enlarged rectangular stage.
+  waypoints = waypoints.map(p => ({...p, x:p.x*SX, z:p.z*SZ}));
+
+  // Keep the outer edge visually clear. No water, pits, or non-paintable holes.
+  // Movement itself is clamped to the rectangular playable area in collision code.
   stageBuilt = true;
 }
 
@@ -2307,34 +2359,31 @@ function updatePlayerMovement(delta){
 }
 
 function clampStageXY(x,z){
-  return {x, z};
+  return {
+    x:Math.max(-29.25,Math.min(29.25,x)),
+    z:Math.max(-74.25,Math.min(74.25,z))
+  };
 }
 
 function tryMoveWithCollision(f, vel, delta, isSquid){
   const rawNx = f.pos.x + vel.x*delta;
   const rawNz = f.pos.z + vel.z*delta;
-
-  // The arena is surrounded by water. Crossing the edge means falling in.
-  if(Math.abs(rawNx) > STAGE_HALF_X || Math.abs(rawNz) > STAGE_HALF_Z){
-    f.pos.x = rawNx;
-    f.pos.z = rawNz;
-    if(f.alive) killFighter(f);
-    return false;
-  }
-
-  const nx = rawNx, nz = rawNz;
+  const clamped = clampStageXY(rawNx,rawNz);
+  const nx = clamped.x;
+  const nz = clamped.z;
   const wall = getBlockingWall(nx, nz, f.pos.y);
   if(wall){
     const isMine = wall.paintTeam===f.team && wall.paintLevel>=CLIMB_THRESHOLD && wall.climbable;
-    if(isSquid && isMine && (vel.x!==0||vel.z!==0)) return true;
+    if(isSquid && isMine && (vel.x!==0||vel.z!==0)){
+      return true;
+    }
     const wallX = getBlockingWall(nx, f.pos.z, f.pos.y);
     const wallZ = getBlockingWall(f.pos.x, nz, f.pos.y);
     if(!wallX) f.pos.x = nx;
     if(!wallZ) f.pos.z = nz;
     return false;
   }
-  f.pos.x = nx;
-  f.pos.z = nz;
+  f.pos.x = nx; f.pos.z = nz;
   return false;
 }
 
@@ -4419,570 +4468,83 @@ ${roomText(m.players)}`;
 
 
 <script>
-/* ================================================================
-   v33 STABLE GAME PATCH
-   - Base: v25 working version
-   - Large flat paintable stage + water edge
-   - Squid toggle without requiring ink; safe ink sampling
-   - E in practice/battle always returns to the lobby
-   - Maneuverer: one weapon in each hand (not four)
-   - Shooting + jump = short slide
-   - Enemy charge is never shown on the local charge HUD
-   - Team grouped spawn at battle start
-   ================================================================ */
+/* =====================================================================
+   V34 STABILITY / SIMPLE ARENA PATCH
+   Base: v25. Remove all complex stage gimmicks.
+   Use a fresh battle fighter instead of reusing the lobby avatar.
+   ===================================================================== */
 (function(){
   'use strict';
+  const W=60,D=150;
 
-  // -------- Safe ink sampling: cache getImageData to avoid hitching/freezes --------
-  const inkProbeCache = new WeakMap();
-  const originalOnFighterInk = onFighterInk;
-  onFighterInk = function(f){
-    try{
-      const now=performance.now();
-      const cached=inkProbeCache.get(f);
-      if(cached && now-cached.t<90) return cached.value;
-      const {cx,cy}=worldToCanvas(f.pos.x,f.pos.z);
-      if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height){ inkProbeCache.set(f,{t:now,value:false}); return false; }
-      const d=paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data;
-      const tc=new THREE.Color(f.team==='A'?teamAHex:teamBHex);
-      const r=d[0]/255,g=d[1]/255,b=d[2]/255;
-      const value=((r-tc.r)**2+(g-tc.g)**2+(b-tc.b)**2)<0.07;
-      inkProbeCache.set(f,{t:now,value});
-      return value;
-    }catch(e){
-      // Never let ink sampling stop the game loop.
-      return false;
-    }
+  buildStage=function(){
+    if(stageGroup){try{scene.remove(stageGroup);}catch(e){}}
+    stageGroup=new THREE.Group(); scene.add(stageGroup);
+    collidableBlocks=[]; waypoints=[];
+    decals.forEach(d=>{try{scene.remove(d.mesh);}catch(e){}}); decals=[];
+    const water=new THREE.Mesh(new THREE.PlaneGeometry(W+14,D+14,1,1),new THREE.MeshLambertMaterial({color:0x176b83,transparent:true,opacity:.93}));
+    water.rotation.x=-Math.PI/2; water.position.y=-.32; stageGroup.add(water);
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(W,D,1,1),new THREE.MeshLambertMaterial({map:paintTexture}));
+    ground.rotation.x=-Math.PI/2; stageGroup.add(ground);
+    paintCtx.fillStyle='#555566'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+    const rect=(x0,z0,x1,z1,c)=>{const a=worldToCanvas(x0,z0),b=worldToCanvas(x1,z1);paintCtx.fillStyle=hexToCss(c);paintCtx.fillRect(Math.min(a.cx,b.cx),Math.min(a.cy,b.cy),Math.abs(b.cx-a.cx),Math.abs(b.cy-a.cy));};
+    rect(-27,-74,27,-55,teamAHex); rect(-27,55,27,74,teamBHex); paintTexture.needsUpdate=true;
+    spawnPointA=new THREE.Vector3(0,0,-64); spawnPointB=new THREE.Vector3(0,0,64);
+    const walls=[
+      {x:-14,z:-30,w:14,h:3,d:2.5},{x:14,z:-18,w:14,h:2.6,d:2.5},{x:0,z:-2,w:16,h:3.2,d:2.5},
+      {x:-14,z:18,w:14,h:2.8,d:2.5},{x:14,z:30,w:14,h:3,d:2.5},{x:0,z:42,w:18,h:2.5,d:2.5}
+    ];
+    walls.forEach(w=>addBlock(w.x,0,w.z,w.w,w.h,w.d,0x566577,{climbable:false}));
+    for(const z of [-52,-30,-8,14,36,56]){waypoints.push({x:-21,z},{x:0,z},{x:21,z});}
+    stageBuilt=true;
   };
 
-  // -------- Stable squid state --------
-  let squidOn=false;
-  let lastShiftStamp=0;
-  const baseKeyDownHandler = null;
-  window.addEventListener('keydown',(e)=>{
-    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
-    if(currentPhase!==1.5 && currentPhase!==2) return;
-    if(e.repeat || performance.now()-lastShiftStamp<120) return;
-    lastShiftStamp=performance.now();
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    squidOn=!squidOn;
-    keys.shift=squidOn;
-  },true);
-  window.addEventListener('keyup',(e)=>{
-    if(e.code!=='ShiftLeft' && e.code!=='ShiftRight') return;
-    if(currentPhase!==1.5 && currentPhase!==2) return;
-    // Toggle mode: releasing Shift does NOT cancel squid mode.
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  },true);
-
-  // Tablet squid button toggles the same mode.
-  const squidButton=document.getElementById('btn-squid');
-  if(squidButton){
-    squidButton.addEventListener('pointerdown',(e)=>{
-      if(currentPhase!==1.5 && currentPhase!==2) return;
-      e.preventDefault(); e.stopImmediatePropagation();
-      squidOn=!squidOn;
-      keys.shift=squidOn;
-    },true);
+  function resetInput(){
+    keys.w=keys.a=keys.s=keys.d=keys.space=keys.shift=false;
+    isShooting=false; playerVelocity.set(0,0,0); canJump=true;
+    const g=document.getElementById('charge-gauge'); if(g) g.style.display='none';
   }
 
-  // Replace the final movement function with a stable v25-derived version.
-  // It keeps the existing economy, weapon handling and animation, but never
-  // requires own-ink just to transform into a squid.
-  const previousMovement = updatePlayerMovement;
-  updatePlayerMovement = function(delta){
-    const f=playerFighter;
-    if(!f || !f.alive) return;
-    try{
-      const now=performance.now();
-      const isSquid=!!squidOn;
-      setupFighterEconomy(f);
-      regenPlayer(f,delta,isSquid);
-      f.squid_mode=isSquid;
-      const ownInk=isSquid && f.ink>0 && onFighterInk(f);
-      const gp=f.gearProfile||gearProfile(f);
-      const isJetpack=f.jetpackUntil && now<f.jetpackUntil;
-      let speedMult=isSquid?(ownInk?1.85:.72):1.0;
-      if(!isSquid && isShooting && f.weapon.category!=='maneuver') speedMult*=.62;
-      if(f.weapon.category==='maneuver' && isShooting) speedMult*=1.12;
-      if(f.weapon.category==='roller' && isShooting) speedMult*=1.03;
-      speedMult*=gp.move;
-      if(isSquid) speedMult*=gp.swim;
-      if(now<f.speedBoostUntil) speedMult*=1.5;
-      if(isJetpack) speedMult=1;
-
-      const moveDir=new THREE.Vector3();
-      if(keys.w)moveDir.z-=1;if(keys.s)moveDir.z+=1;if(keys.a)moveDir.x-=1;if(keys.d)moveDir.x+=1;
-      let moving=false;
-      if(moveDir.lengthSq()>0){
-        moveDir.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
-        playerVelocity.x=moveDir.x*15*speedMult;
-        playerVelocity.z=moveDir.z*15*speedMult;
-        moving=true;
-        if(!isSquid&&!isShooting)f.human.rotation.y=Math.atan2(playerVelocity.x,playerVelocity.z);
-      }else{
-        playerVelocity.x*=.78;playerVelocity.z*=.78;
-      }
-      f._moving=moving;
-
-      if(!isSquid){
-        f.human.rotation.y=yaw+Math.PI;
-        if(f.weapon.category==='roller' && isShooting) doRollerAction(f,now,moving);
-        else if(f.weapon.category==='wiper' && isShooting){
-          if(!f.wiperChargeStart)f.wiperChargeStart=now;
-          const frac=Math.min(1,(now-f.wiperChargeStart)/f.weapon.chargeTime);
-          const gauge=document.getElementById('charge-gauge');
-          if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
-          if(frac>=1){doWiperSlash(f,1);f.wiperChargeStart=now;}
-        }else if(f.weapon.category==='charger'){
-          const gauge=document.getElementById('charge-gauge');
-          // Local player only.
-          if(gauge){
-            if(f.isCharging){
-              const frac=Math.min(1,(now-f.chargeStart)/f.weapon.chargeTime);
-              gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));
-            }else gauge.style.display='none';
-          }
-        }else if(isShooting){
-          const d=new THREE.Vector3();camera.getWorldDirection(d);tryShoot(f,d,now);
-        }
-      }else{
-        f.wiperChargeStart=0;f.isCharging=false;f.spinnerCharging=false;f.spinnerFiring=false;
-        const gauge=document.getElementById('charge-gauge');if(gauge)gauge.style.display='none';
-      }
-
-      // Normal jump.
-      const climbing=tryMoveWithCollision(f,playerVelocity,delta,isSquid);
-      if(isJetpack){playerVelocity.y=0;f.pos.y=Math.max(f.pos.y,3.2);}
-      else{
-        if(keys.space&&canJump&&!climbing){playerVelocity.y=10;canJump=false;try{sfx('jump');}catch(e){}}
-        if(!climbing)playerVelocity.y-=30*delta;
-        f.pos.y+=playerVelocity.y*delta;
-      }
-      const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
-      const restY=(isSquid&&ownInk)?floorY-.35:floorY;
-      if(!isJetpack&&f.pos.y<=restY){f.pos.y=restY;playerVelocity.y=0;canJump=true;}
-
-      updateFighterAnimation(f,moving,isSquid);
-      f.root.rotation.y=isSquid?yaw:f.human.rotation.y;
-    }catch(err){
-      // If an optional animation/effect ever fails, keep the character and camera alive.
-      try{
-        f.squid_mode=!!squidOn;
-        updateFighterAnimation(f,!!f._moving,!!squidOn);
-      }catch(e){}
+  function cleanBattleStart(){
+    try{window.__V15?.leaveLobby?.();}catch(e){try{lobby.active=false;}catch(_){}}
+    resetInput();
+    try{if(lobby?.player?.root)scene.remove(lobby.player.root);}catch(e){}
+    try{lobby.player=null;}catch(e){}
+    try{if(playerFighter?.root)scene.remove(playerFighter.root);}catch(e){}
+    playerFighter=null; fighters=[]; stageBuilt=false;
+    const fn=window.__V25StartRange;
+    if(typeof fn!=='function') throw new Error('v25 startRangePhase missing');
+    fn();
+    if(playerFighter){
+      playerFighter.pos.set(spawnPointA.x,0,spawnPointA.z-4);
+      playerFighter.root.position.copy(playerFighter.pos);
+      playerFighter.root.visible=true; playerFighter.human.visible=true; playerFighter.squid.visible=false;
+      playerFighter.squid_mode=false; playerFighter.alive=true; playerFighter.hp=playerFighter.maxHp; playerFighter.ink=100;
+      playerFighter.specialGauge=0; playerFighter.isCharging=false; playerFighter._moving=false;
     }
-  };
+    currentPhase=1.5; battleActive=false; prevTime=performance.now();
+  }
+  window.__V34StartRange=cleanBattleStart;
 
-  // -------- Maneuverer jump-slide --------
-  let spaceWasDown=false;
-  let slideUntil=0;
-  let slideDir=new THREE.Vector3(0,0,-1);
-  const movementWithSlide = updatePlayerMovement;
-  updatePlayerMovement = function(delta){
-    const f=playerFighter;
-    const beforeSpace=spaceWasDown;
-    movementWithSlide(delta);
-    if(!f || !f.alive) { spaceWasDown=!!keys.space; return; }
-    const now=performance.now();
-    const trigger=f.weapon?.category==='maneuver' && isShooting && !!keys.space && !beforeSpace;
-    if(trigger){
-      slideUntil=now+230;
-      const hv=new THREE.Vector3(playerVelocity.x,0,playerVelocity.z);
-      if(hv.lengthSq()>0.05) slideDir.copy(hv.normalize());
-      else{
-        slideDir.set(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0),yaw).normalize();
-      }
-      try{sfx('jump');}catch(e){}
-      showToast('スライド！');
-    }
-    if(now<slideUntil){
-      const burst=30*(delta*0.016<0.00001?0.001:1);
-      f.pos.x += slideDir.x*burst*delta;
-      f.pos.z += slideDir.z*burst*delta;
-      playerVelocity.y=Math.max(playerVelocity.y,4.0);
-    }
-    spaceWasDown=!!keys.space;
-  };
-
-  // -------- Team grouped spawn --------
-  const originalStartBattle=startBattleFromRange;
+  const baseBattle=startBattleFromRange;
   startBattleFromRange=function(){
-    originalStartBattle();
-    if(currentPhase!==2 || !playerFighter)return;
-    const offsets=[-5.4,-1.8,1.8,5.4];
-    fighters.filter(f=>f.team==='A').slice(0,4).forEach((f,i)=>{
-      f.pos.set(spawnPointA.x+offsets[i],0,spawnPointA.z);
-      f.root.position.copy(f.pos); f.root.visible=true; f.alive=true; f.hp=f.maxHp;
-    });
-    fighters.filter(f=>f.team==='B').slice(0,4).forEach((f,i)=>{
-      f.pos.set(spawnPointB.x+offsets[i],0,spawnPointB.z);
-      f.root.position.copy(f.pos); f.root.visible=true; f.alive=true; f.hp=f.maxHp;
-    });
-    squidOn=false;keys.shift=false;playerFighter.squid_mode=false;
+    baseBattle();
+    if(currentPhase!==2||!playerFighter)return;
+    const offs=[-5.4,-1.8,1.8,5.4];
+    fighters.filter(f=>f.team==='A').slice(0,4).forEach((f,i)=>{f.pos.set(spawnPointA.x+offs[i],0,spawnPointA.z);f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;});
+    fighters.filter(f=>f.team==='B').slice(0,4).forEach((f,i)=>{f.pos.set(spawnPointB.x+offs[i],0,spawnPointB.z);f.root.position.copy(f.pos);f.root.visible=true;f.alive=true;f.hp=f.maxHp;});
   };
 
-  // -------- E always returns to the lobby from practice/battle/results --------
-  function returnToLobby(){
-    try{if(document.pointerLockElement)document.exitPointerLock();}catch(e){}
-    battleActive=false;
-    try{bullets.forEach(b=>scene.remove(b.mesh));}catch(e){}
-    bullets=[];
-    try{subsList.forEach(b=>scene.remove(b.mesh));}catch(e){}
-    subsList=[];
-    try{particles.forEach(p=>scene.remove(p.mesh));}catch(e){}
-    particles=[];
-    fighters.forEach(f=>{try{f.root.visible=false;}catch(e){}});
-    if(playerFighter)playerFighter.root.visible=false;
-    fighters=playerFighter?[playerFighter]:[];
-    squidOn=false;keys.shift=false;
-    const rs=document.getElementById('result-screen');if(rs)rs.style.display='none';
-    const rh=document.getElementById('range-hint');if(rh)rh.style.display='none';
-    if(typeof window.startLobbyPhase==='function') window.startLobbyPhase();
-  }
-  window.addEventListener('keydown',(e)=>{
-    if(e.code!=='KeyE')return;
-    if(currentPhase!==1.5 && currentPhase!==2 && currentPhase!==3)return;
-    e.preventDefault();e.stopImmediatePropagation();returnToLobby();
-  },true);
-
-  // -------- Enemy charge HUD lockdown --------
   setInterval(()=>{
-    try{
-      const g=document.getElementById('charge-gauge');
-      if(!g)return;
-      const local=!!(playerFighter && (currentPhase===1.5||currentPhase===2) && playerFighter.weapon?.category==='charger' && playerFighter.isCharging && !playerFighter.squid_mode);
-      if(!local)g.style.display='none';
-    }catch(e){}
+    const g=document.getElementById('charge-gauge'); if(!g)return;
+    const local=!!(playerFighter&&(currentPhase===1.5||currentPhase===2)&&playerFighter.weapon?.category==='charger'&&playerFighter.isCharging&&!playerFighter.squid_mode);
+    if(!local)g.style.display='none';
   },80);
-
-  // Paintable-wall guarantee: walls never become permanently unpaintable.
-  collidableBlocks.forEach(b=>{if(b && b.h>=1.3)b.climbable=false;});
 })();
 </script>
-
 </body>
 </html>
 
-<script>
-/* =====================================================================
-   FINAL v13 STAGE GIMMICK PATCH
-   - 段差を減らして長いスロープ中心の立体ステージ
-   - 外周の裏取りルート / 高所ルート / ジャンプパッド
-   - 上昇リフト / 飛び出しランチャー
-   - 同色インクで膨らむスポンジブロック
-   - 塗り状況で変化するスポンジ・ギミック
-   ===================================================================== */
-(function(){
-  const THREE_ = THREE;
-  const slopeRegions=[];
-  const jumpPads=[];
-  const launchers=[];
-  const movingPlatforms=[];
-  const spongeBlocks=[];
-  const gimmickMeshes=[];
-  let gimmickTick=0;
-
-  function mkMat(hex,opts={}){
-    return new THREE_.MeshLambertMaterial(Object.assign({color:hex},opts));
-  }
-  function addGMesh(m){ if(stageGroup){ stageGroup.add(m); gimmickMeshes.push(m); } return m; }
-
-  function addRamp(x,z,w,length,baseY,rise,axis='z'){
-    const thickness=0.45;
-    const angle=Math.atan2(rise,length);
-    const geo=new THREE_.BoxGeometry(w,thickness,length);
-    const mesh=new THREE_.Mesh(geo,mkMat(0x71849a));
-    mesh.position.set(x,baseY+rise/2,z);
-    if(axis==='z') mesh.rotation.x=-angle;
-    else mesh.rotation.z=angle;
-    addGMesh(mesh);
-    slopeRegions.push({xMin:x-w/2,xMax:x+w/2,zMin:z-length/2,zMax:z+length/2,baseY,rise,length,axis});
-    return mesh;
-  }
-
-  function slopeHeightAt(x,z){
-    let best=-Infinity;
-    for(const r of slopeRegions){
-      if(x<r.xMin||x>r.xMax||z<r.zMin||z>r.zMax) continue;
-      let t;
-      if(r.axis==='z') t=(z-r.zMin)/r.length;
-      else t=(x-r.xMin)/r.length;
-      const y=r.baseY+r.rise*Math.max(0,Math.min(1,t));
-      if(y>best) best=y;
-    }
-    return best===-Infinity?null:best;
-  }
-
-  function addJumpPad(x,z,dirX,dirZ,power=18,label='ジャンプパッド'){
-    const group=new THREE_.Group();
-    const base=new THREE_.Mesh(new THREE_.CylinderGeometry(1.15,1.15,.22,32),mkMat(0x8d9bb0));
-    base.position.y=.12; group.add(base);
-    const ring=new THREE_.Mesh(new THREE_.TorusGeometry(.82,.10,10,32),mkMat(0xe9f7ff,{emissive:0x6ecbff,emissiveIntensity:1.8}));
-    ring.rotation.x=Math.PI/2; ring.position.y=.28; group.add(ring);
-    group.position.set(x,0,z); addGMesh(group);
-    jumpPads.push({x,z,radius:1.35,dir:new THREE_.Vector3(dirX,0,dirZ).normalize(),power,coolUntil:0,mesh:group,label});
-    return group;
-  }
-
-  function addLauncher(x,z,dirX,dirZ,power=28,label='ランチャー'){
-    const group=new THREE_.Group();
-    const pad=new THREE_.Mesh(new THREE_.CylinderGeometry(1.0,1.18,.3,24),mkMat(0x59677b));
-    pad.position.y=.15; group.add(pad);
-    const arrow=new THREE_.Mesh(new THREE_.ConeGeometry(.48,.9,6),mkMat(0xb8efff,{emissive:0x59cfff,emissiveIntensity:1.5}));
-    arrow.rotation.z=-Math.PI/2; arrow.position.set(dirX*0.34,.55,dirZ*0.34); group.add(arrow);
-    group.position.set(x,0,z); addGMesh(group);
-    launchers.push({x,z,radius:1.25,dir:new THREE_.Vector3(dirX,0,dirZ).normalize(),power,coolUntil:0,mesh:group,label});
-    return group;
-  }
-
-  function addMovingPlatform(x,z,w,d,baseY,amplitude,speed){
-    const mesh=new THREE_.Mesh(new THREE_.BoxGeometry(w,.6,d),mkMat(0x65798f));
-    mesh.position.set(x,baseY,z); addGMesh(mesh);
-    const p={mesh,x,z,w,d,baseY,amplitude,speed,phase:Math.random()*Math.PI*2};
-    movingPlatforms.push(p);
-    return p;
-  }
-
-  function addSponge(x,z,w=3,d=3,maxH=5){
-    const geo=new THREE_.BoxGeometry(w,.7,d);
-    const mat=mkMat(0xf0aa42);
-    const mesh=new THREE_.Mesh(geo,mat);
-    mesh.position.set(x,.35,z); addGMesh(mesh);
-    const s={mesh,x,z,w,d,maxH,height:.7,target:.7,team:null,lastHit:0};
-    spongeBlocks.push(s);
-    return s;
-  }
-
-  function addRouteMarker(x,z,text){
-    const g=new THREE_.Group();
-    const base=new THREE_.Mesh(new THREE_.CylinderGeometry(.34,.34,.14,18),mkMat(0x2e3949));
-    base.position.y=.07;g.add(base);
-    const pole=new THREE_.Mesh(new THREE_.CylinderGeometry(.035,.035,1.1,8),mkMat(0xaab8ca));
-    pole.position.y=.62;g.add(pole);
-    g.position.set(x,0,z);addGMesh(g);
-  }
-
-  const _buildStageV12=buildStage;
-  buildStage=function(){
-    _buildStageV12();
-    slopeRegions.length=0;jumpPads.length=0;launchers.length=0;movingPlatforms.length=0;spongeBlocks.length=0;gimmickMeshes.length=0;
-
-    // Wipe only the newly created arrays; stage itself is already rebuilt above.
-    // Broad ramps = main vertical circulation. Most transitions are slopes, not stairs.
-    addRamp(-12,-22,8,16,0,2.6,'z');
-    addRamp(12,22,8,16,0,2.6,'z');
-    addRamp(0,-26,10,14,0,4.6,'z');
-    addRamp(0,26,10,14,0,4.6,'z');
-    addRamp(-8,0,6,18,0,2.2,'x');
-    addRamp(8,0,6,18,0,2.2,'x');
-
-    // Huge high observation route + soft approach ramps.
-    addRamp(0,-4,12,12,2.2,2.8,'z');
-    addRamp(0,4,12,12,5.0, -2.8,'z');
-
-    // Outer back routes: long flank lanes that can wrap behind the enemy team.
-    addRamp(-15,-3,3.2,46,0,1.4,'z');
-    addRamp(15,3,3.2,46,0,1.4,'z');
-
-    // Jump pads to break sight lines and create alternate attacks.
-    addJumpPad(-10,-25,0,1,18,'左高台へ');
-    addJumpPad(10,25,0,-1,18,'右高台へ');
-    addJumpPad(-14,12,1,-.2,16,'中央横へ');
-    addJumpPad(14,-12,-1,.2,16,'中央横へ');
-
-    // Launchers: strong vertical arcs / long bypass movement.
-    addLauncher(-4,-31,0,1,30,'中央上空へ');
-    addLauncher(4,31,0,-1,30,'中央上空へ');
-    addLauncher(-15,0,1,0,22,'裏取りショートカット');
-    addLauncher(15,0,-1,0,22,'裏取りショートカット');
-
-    // Very high moving lifts.
-    addMovingPlatform(-9,0,5,5,1.2,5.8,.8);
-    addMovingPlatform(9,0,5,5,1.2,5.8,.75);
-    addMovingPlatform(0,-16,5,5,2.0,7.5,.55);
-    addMovingPlatform(0,16,5,5,2.0,7.5,.58);
-
-    // Sponge walls. Same-color ink grows them; opposite-color ink shrinks them.
-    addSponge(-5,-12,3.6,2.8,5.5);
-    addSponge(5,-12,3.6,2.8,5.5);
-    addSponge(-5,12,3.6,2.8,5.5);
-    addSponge(5,12,3.6,2.8,5.5);
-    addSponge(0,-2,4.2,2.5,6.5);
-    addSponge(0,2,4.2,2.5,6.5);
-
-    addRouteMarker(-15,-36,'左裏取り');
-    addRouteMarker(15,36,'右裏取り');
-    addRouteMarker(0,0,'中央高所');
-  };
-
-  const _supportV13=getSupportHeight;
-  getSupportHeight=function(x,z,y){
-    let best=_supportV13(x,z,y);
-    const sy=slopeHeightAt(x,z);
-    if(sy!==null && sy<=y+1.1 && sy>best) best=sy;
-    for(const p of movingPlatforms){
-      const py=p.mesh.position.y+.3;
-      if(x>=p.mesh.position.x-p.w/2 && x<=p.mesh.position.x+p.w/2 && z>=p.mesh.position.z-p.d/2 && z<=p.mesh.position.z+p.d/2){
-        if(py<=y+1.2 && py>best) best=py;
-      }
-    }
-    return best;
-  };
-
-  function readPaintAt(x,z){
-    try{
-      const uv=worldToCanvas(x,z);
-      if(uv.cx<0||uv.cy<0||uv.cx>=paintCanvas.width||uv.cy>=paintCanvas.height) return null;
-      const d=paintCtx.getImageData(Math.floor(uv.cx),Math.floor(uv.cy),1,1).data;
-      const rgb=[d[0],d[1],d[2]];
-      const ca=new THREE_.Color(teamAHex), cb=new THREE_.Color(teamBHex);
-      const da=(rgb[0]/255-ca.r)**2+(rgb[1]/255-ca.g)**2+(rgb[2]/255-ca.b)**2;
-      const db=(rgb[0]/255-cb.r)**2+(rgb[1]/255-cb.g)**2+(rgb[2]/255-cb.b)**2;
-      if(Math.min(da,db)>.12) return null;
-      return da<db?'A':'B';
-    }catch(e){ return null; }
-  }
-
-  function updateSponge(s,delta){
-    const team=readPaintAt(s.x,s.z);
-    if(team){
-      // The first ink becomes the sponge's current color. Repeated shots of the
-      // same color make it inflate; the opposite color makes it collapse.
-      if(!s.team) s.team=team;
-      if(team===s.team){
-        s.target=s.maxH;
-      }else{
-        s.target=.7;
-        s.team=team;
-      }
-      const move=delta*5.0;
-      s.height += Math.sign(s.target-s.height)*Math.min(Math.abs(s.target-s.height),move);
-    } else {
-      s.target=Math.max(.7,s.height-delta*.15);
-      s.height += Math.sign(s.target-s.height)*Math.min(Math.abs(s.target-s.height),delta*.3);
-    }
-    s.mesh.scale.y=Math.max(.08,s.height/.7);
-    s.mesh.position.y=s.height/2;
-  }
-
-  function updatePlatforms(time){
-    for(const p of movingPlatforms){
-      const y=p.baseY + Math.sin(time*p.speed*.001+p.phase)*p.amplitude;
-      p.mesh.position.y=y;
-    }
-  }
-
-  function tryGimmickLaunch(f,now){
-    if(!f || !f.alive) return false;
-    for(const p of jumpPads){
-      if(now<p.coolUntil) continue;
-      const dx=f.pos.x-p.x,dz=f.pos.z-p.z;
-      if(dx*dx+dz*dz <= p.radius*p.radius && f.pos.y<2.5){
-        f.pos.y=Math.max(f.pos.y,getSupportHeight(f.pos.x,f.pos.z,f.pos.y)+.15);
-        playerVelocity.y=p.power;
-        p.coolUntil=now+650;
-        try{sfx('jump');}catch(e){}
-        showToastFor(f,p.label+'！');
-        return true;
-      }
-    }
-    for(const p of launchers){
-      if(now<p.coolUntil) continue;
-      const dx=f.pos.x-p.x,dz=f.pos.z-p.z;
-      if(dx*dx+dz*dz <= p.radius*p.radius && f.pos.y<2.5){
-        playerVelocity.x=p.dir.x*p.power;
-        playerVelocity.z=p.dir.z*p.power;
-        playerVelocity.y=p.power*.95;
-        p.coolUntil=now+900;
-        try{sfx('jump');}catch(e){}
-        showToastFor(f,p.label+'！');
-        return true;
-      }
-    }
-    return false;
-  }
-
-  const _updateMoveV13=updatePlayerMovement;
-  updatePlayerMovement=function(delta){
-    const beforeY=playerFighter?playerFighter.pos.y:0;
-    _updateMoveV13(delta);
-    if(playerFighter && playerFighter.alive){
-      tryGimmickLaunch(playerFighter,performance.now());
-      const support=getSupportHeight(playerFighter.pos.x,playerFighter.pos.z,playerFighter.pos.y);
-      if(playerFighter.pos.y<support) playerFighter.pos.y=support;
-      // Small slope gravity smoothing prevents sticking at tiny slope seams.
-      if(Math.abs(playerFighter.pos.y-beforeY)<0.001 && playerFighter.pos.y<support+.08) playerFighter.pos.y=support;
-    }
-  };
-
-  // AI can use launch pads too.
-  const _updateAIV13=updateAI;
-  updateAI=function(f,delta,now){
-    _updateAIV13(f,delta,now);
-    if(f && f.alive){
-      for(const p of jumpPads){
-        const dx=f.pos.x-p.x,dz=f.pos.z-p.z;
-        if(dx*dx+dz*dz<=p.radius*p.radius && f.pos.y<2.5){
-          f.pos.y=getSupportHeight(f.pos.x,f.pos.z,f.pos.y)+.15;
-          // AI does not share playerVelocity; use a direct arc.
-          f._gimmickVY=p.power;
-        }
-      }
-      if(f._gimmickVY){
-        f._gimmickVY-=30*delta;
-        f.pos.y+=f._gimmickVY*delta;
-        const sy=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
-        if(f.pos.y<=sy){f.pos.y=sy;f._gimmickVY=0;}
-      }
-    }
-  };
-
-  // Paint hit -> sponge response. Uses the existing bullet positions and stops the shot on impact.
-  const _updateBulletsGimmick=updateBullets;
-  updateBullets=function(delta){
-    _updateBulletsGimmick(delta);
-    // The regular bullet loop may have removed the bullet already; this pass handles active hits.
-    for(let i=bullets.length-1;i>=0;i--){
-      const b=bullets[i];
-      if(!b||!b.mesh||!b.mesh.parent) continue;
-      for(const s of spongeBlocks){
-        const dx=b.mesh.position.x-s.x,dz=b.mesh.position.z-s.z;
-        if(Math.abs(dx)<=s.w/2+.35 && Math.abs(dz)<=s.d/2+.35 && b.mesh.position.y<=s.height+1.3){
-          const same=(b.team==='A');
-          // Any team projectile paints the sponge zone; the matching team makes the block swell.
-          paintGround(s.x,s.z,Math.max(s.w,s.d)*.62,b.team==='A'?teamAHex:teamBHex,{trail:true,noNetwork:true});
-          s.team=b.team;
-          s.target=b.team==='A'?s.maxH:.7;
-          s.lastHit=performance.now();
-          for(let p=0;p<8;p++) spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,b.team==='A'?teamAHex:teamBHex);
-          scene.remove(b.mesh); bullets.splice(i,1); break;
-        }
-      }
-    }
-  };
-
-  // Animation / gimmick update.
-  const _animateV13=animate3D;
-  animate3D=function(){
-    _animateV13();
-    if(currentPhase===1.5||currentPhase===2){
-      const now=performance.now();
-      const dt=.016;
-      gimmickTick+=dt;
-      updatePlatforms(now);
-      for(const s of spongeBlocks) updateSponge(s,dt);
-      // Gentle animation of pads / launchers.
-      for(const p of jumpPads) if(p.mesh) p.mesh.rotation.y=now*.0012;
-      for(const p of launchers) if(p.mesh) p.mesh.rotation.y=-now*.0008;
-    }
-  };
-
-  window.__V13={slopeRegions,jumpPads,launchers,movingPlatforms,spongeBlocks};
-})();
-</script>
 
 <script>
 /* =====================================================================
@@ -5133,11 +4695,7 @@ ${roomText(m.players)}`;
   }
   function npc(x,z,col,phase){
     const g=new THREE.Group();
-    const body=new THREE.Group();
-    const bodyCore=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,1.0,8),mat(col)); bodyCore.position.y=1.05; body.add(bodyCore);
-    const bodyTop=new THREE.Mesh(new THREE.SphereGeometry(.5,8,6),mat(col)); bodyTop.position.y=1.55; body.add(bodyTop);
-    const bodyBottom=new THREE.Mesh(new THREE.SphereGeometry(.5,8,6),mat(col)); bodyBottom.position.y=.55; body.add(bodyBottom);
-    g.add(body);
+    const body=new THREE.Mesh(new THREE.CapsuleGeometry(.5,1.05,4,8),mat(col));body.position.y=1.1;g.add(body);
     const head=new THREE.Mesh(new THREE.SphereGeometry(.52,8,6),mat(0xe6c8ba));head.position.y=2.35;g.add(head);
     const bag=new THREE.Mesh(new THREE.BoxGeometry(.7,.55,.28),mat(accent[(Math.abs(x+z)|0)%accent.length]));bag.position.set(0,1.25,-.52);g.add(bag);
     g.position.set(x,0,z);add(g);
@@ -5269,9 +4827,9 @@ ${roomText(m.players)}`;
       showToast('その施設まで歩いて近づいてね');return;
     }
     leaveLobby();
-    if(key==='range'){ setTimeout(()=>{launchRange();},0); }
-    else if(key==='cpu'){ setTimeout(()=>{launchRange();setTimeout(()=>startBattleFromRange(),80);},0); }
-    else if(key==='online'){ setTimeout(()=>{launchRange();setTimeout(()=>openOnlinePanel(),80);},0); }
+    if(key==='range'){ setTimeout(()=>{(window.__V34StartRange || launchRange)();},0); }
+    else if(key==='cpu'){ setTimeout(()=>{(window.__V34StartRange || launchRange)();setTimeout(()=>startBattleFromRange(),80);},0); }
+    else if(key==='online'){ setTimeout(()=>{(window.__V34StartRange || launchRange)();setTimeout(()=>openOnlinePanel(),80);},0); }
     else if(key==='custom'){ setTimeout(()=>{goToCustomizeFromGame();},0); }
   }
   function nearestAction(){
@@ -5335,7 +4893,7 @@ ${roomText(m.players)}`;
   }
 
   // Capture the current, fully patched range launcher once, then make startRangePhase mean "go to lobby".
-  const launchRange=window.startRangePhase;
+  const launchRange=window.startRangePhase; window.__V25StartRange=launchRange;
   if(typeof launchRange!=='function') return;
   window.startLobbyPhase=startLobbyPhase;
   window.startRangePhase=function(){startLobbyPhase();};
