@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>自作インクバトル Webゲーム v25</title>
+<title>スプラ3風 Webオンライン v25 - 安定版（分割前ベース）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 body{margin:0;overflow:hidden;background-color:#e3ff00;font-family:"Impact","Arial Black",sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;}
@@ -135,7 +137,7 @@ body.pointer-lock-ready{cursor:none !important;}
 #weapon-hud .weapon-name{font-size:14px;font-weight:900;color:#fff;}
 #weapon-hud .weapon-kind{font-size:10px;opacity:.9;color:#e3ff00;}
 
-/* ===== v17 自作3Dロビー ===== */
+/* ===== v15 自作3Dロビー ===== */
 #lobby-ui{position:absolute;inset:0;z-index:18;display:none;pointer-events:none;font-family:"Impact","Arial Black",sans-serif;color:#fff;}
 #lobby-brand{position:absolute;top:18px;left:22px;padding:10px 18px;background:rgba(18,10,34,.82);border:3px solid #e3ff00;transform:skewX(-8deg);box-shadow:7px 7px 0 rgba(0,0,0,.45);pointer-events:none;}
 #lobby-brand .small{font:700 11px/1 sans-serif;letter-spacing:2px;color:#e3ff00;}
@@ -150,22 +152,6 @@ body.pointer-lock-ready{cursor:none !important;}
 #lobby-location{position:absolute;left:20px;bottom:20px;padding:7px 12px;border-left:4px solid #e3ff00;background:rgba(0,0,0,.44);font:700 12px/1.3 sans-serif;pointer-events:none;}
 .lobby-hotspot{position:absolute;transform:translate(-50%,-100%);padding:5px 8px;border:2px solid #fff;border-radius:8px;background:rgba(47,5,156,.88);color:#fff;font:900 11px sans-serif;pointer-events:none;white-space:nowrap;display:none;}
 @media(max-width:800px){#lobby-menu{width:260px;right:8px;top:8px}.lobby-btn{padding:13px 10px}.lobby-brand{top:8px;left:8px}.lobby-brand .big{font-size:22px}.lobby-brand .small{font-size:9px}#lobby-prompt{bottom:185px;font-size:13px;max-width:90vw;white-space:normal;text-align:center}}
-
-/* v19 one-file facility transition */
-#facility-transition{position:fixed;inset:0;z-index:9999;display:none;overflow:hidden;background:#e3ff00;pointer-events:none;opacity:0;}
-#facility-transition.active{display:block;animation:ftFade .2s ease-out forwards;}
-#facility-transition .ft-bg{position:absolute;inset:0;background:#e3ff00;}
-.ft-wave{position:absolute;left:-15vw;width:130vw;height:120vh;bottom:-75vh;background:#2f059c;border-radius:48% 52% 0 0 / 28% 28% 0 0;transform:rotate(-4deg) scaleY(.9);}
-.ft-wave-a{animation:ftWaveIn .85s cubic-bezier(.2,.8,.2,1) forwards;}
-.ft-wave-b{background:#fff;bottom:-92vh;animation:ftWaveInB 1.05s .08s cubic-bezier(.2,.8,.2,1) forwards;}
-#facility-transition .ft-text{position:absolute;inset:0;display:grid;place-content:center;text-align:center;color:#111;font:900 clamp(30px,7vw,72px)/.9 Arial Black,Meiryo,sans-serif;letter-spacing:.05em;opacity:0;animation:ftText .5s .35s ease-out forwards;}
-#facility-transition .ft-text span{font-size:.38em;letter-spacing:.18em;}
-@keyframes ftFade{to{opacity:1}}
-@keyframes ftWaveIn{to{bottom:-8vh;transform:rotate(-4deg) scaleY(1.15)}}
-@keyframes ftWaveInB{to{bottom:10vh;transform:rotate(3deg) scaleY(1.18)}}
-@keyframes ftText{to{opacity:1;transform:translateY(-3vh)}}
-body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #battle-ui{animation:ftShake .48s cubic-bezier(.36,.07,.19,.97) both;}
-@keyframes ftShake{0%,100%{transform:translate3d(0,0,0) rotate(0)}10%,30%,50%,70%,90%{transform:translate3d(-7px,2px,0) rotate(-.45deg)}20%,40%,60%,80%{transform:translate3d(8px,-2px,0) rotate(.45deg)}}
 </style>
 
 <style>
@@ -179,33 +165,8 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
 #customize-screen #v6-gear-editor{display:block;}
 @media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
 </style>
-
-<style id="v18-style">
-/* v18: map opens only on demand */
-#minimap{display:none !important;}
-#fullmap{display:none;}
-#v18-online-ready{margin-top:8px;text-align:center;font:900 14px/1.4 Arial,Meiryo,sans-serif;color:#e3ff00;}
-#result-screen.v18-result{background:radial-gradient(circle at 50% 38%,rgba(80,10,120,.96),rgba(7,3,18,.97) 68%);}
-.v18-result-card{width:min(760px,92vw);padding:34px 34px 28px;border:4px solid #fff;border-radius:24px;background:rgba(8,8,16,.86);box-shadow:14px 14px 0 rgba(0,0,0,.55);text-align:center;}
-.v18-result-kicker{font:900 15px/1 Arial,Meiryo,sans-serif;letter-spacing:4px;color:#e3ff00;margin-bottom:8px;}
-.v18-result-title{font:900 clamp(54px,10vw,92px)/.9 Arial Black,Impact,sans-serif;text-shadow:5px 5px 0 #000;margin:0 0 18px;}
-.v18-score-row{display:flex;gap:12px;justify-content:center;align-items:stretch;margin:16px 0;flex-wrap:wrap;}
-.v18-team-box{flex:1;min-width:180px;padding:16px;border-radius:16px;border:3px solid rgba(255,255,255,.6);background:rgba(255,255,255,.07);}
-.v18-team-box .label{font:900 14px Arial,Meiryo,sans-serif;opacity:.85;}
-.v18-team-box .pct{font:900 52px/1 Arial Black,Impact,sans-serif;margin-top:6px;}
-.v18-result-stats{font:900 15px/1.9 Arial,Meiryo,sans-serif;color:#fff;margin:14px 0 22px;}
-.v18-result-note{font:700 12px Arial,Meiryo,sans-serif;color:#bbb;margin-bottom:18px;}
-#online-start.ready-on{background:#e3ff00 !important;color:#2f059c !important;box-shadow:0 0 0 3px rgba(227,255,0,.25),0 0 22px rgba(227,255,0,.65);}
-</style>
-</head>
+<meta name="game-version" content="v25-clean-rollback"></head>
 <body>
-<!-- v24 COMPLETE: lobby + practice + CPU + online + customize + results + stage gimmicks are all inside this one HTML file. -->
-<div id="facility-transition" aria-hidden="true">
-  <div class="ft-bg"></div>
-  <div class="ft-wave ft-wave-a"></div>
-  <div class="ft-wave ft-wave-b"></div>
-  <div class="ft-text">LOADING<br><span>TRY SHOOTING</span></div>
-</div>
 
 <div id="loading-screen">
 <div class="bg-pattern"></div>
@@ -258,7 +219,7 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
   <div id="lobby-brand"><div class="small">ORIGINAL WEB CITY</div><div class="big">BANDARU CENTRAL</div></div>
   <div id="lobby-menu">
     <div id="lobby-menu-title">ロビー</div>
-    <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。<br>（マウスが消えてボタンを押せない時は Esc を押すとカーソルが出ます）</div>
+    <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
     <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">🟨 南西：試し撃ち　🟥 南東：CPU　🟦 北西：カスタム　🟪 北東：オンライン</div>
     <button class="lobby-btn" data-lobby-action="range">🎯 試し撃ち場 <span class="k">1 / E</span></button>
     <button class="lobby-btn" data-lobby-action="cpu">⚔ CPU 4vs4 <span class="k">2</span></button>
@@ -302,16 +263,16 @@ body.facility-shake canvas,body.facility-shake #lobby-ui,body.facility-shake #ba
 <div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div></div>
 <div id="special-ready">SPECIAL READY!</div>
 <div id="death-location-marker">💀 ここでやられた</div>
-<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">ロビーに戻る</button></div>
+<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">試し撃ち場に戻る</button></div>
 
 
 <div id="online-panel">
   <div id="online-card">
     <h2>オンライン バンカラマッチ</h2>
     <div id="online-status">接続準備中…</div>
-    <div id="online-room">2〜8人。参加者全員が「準備OK」なら開始します。</div><div id="v18-online-ready">準備状態：未参加</div>
+    <div id="online-room">8人揃うまで自動マッチングします。</div>
     <div id="online-actions">
-      <button id="online-start">参加して準備OK</button>
+      <button id="online-start">マッチング開始</button>
       <button id="online-cancel">戻る</button>
     </div>
     <div id="online-note">ブラウザだけで遊べるWeb版。試し撃ち・CPU 4vs4・オンライン8人を搭載。オンライン時だけ通信サーバーを使います。</div>
@@ -326,11 +287,6 @@ let currentPhase = 0; // 0 loading,0.5 customize,1 news,1.5 range,2 battle,3 res
 let isReady = false;
 let hasSeenNews = false;
 let stageBuilt = false;
-
-/* ---- v25: state shared between the separate <script> patch blocks.
-   (They used to be `let` inside one IIFE, so later blocks threw ReferenceError.) ---- */
-var onlineSocket = null, onlineActive = false, onlineRoomId = null, onlinePlayerId = null, onlineTeam = null;
-var setBattleCursor = function(hidden){ document.body.style.cursor = hidden ? 'none' : ''; };
 
 let inkTime = 0;
 let inkAnimationFrameId = null;
@@ -388,7 +344,6 @@ const newsLines = [
 {name:"全員",text:"ほな さいならー！"}
 ];
 let currentLineIndex=0;
-let newsFinishing=false;
 let typeWriterInterval=null;
 let isTyping=false;
 
@@ -524,7 +479,7 @@ function resizeInkCanvas(){
     customCamera.updateProjectionMatrix();
     customRenderer.setSize(window.innerWidth, window.innerHeight);
   }
-  if(camera && renderer){
+  if((currentPhase===1.5||currentPhase===2||currentPhase===3) && camera && renderer){
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -557,10 +512,7 @@ function handleAdvanceEvent(e){
   if(e.type==='keydown' && e.code!=='Space' && e.code!=='Enter') return;
   if(!isReady) return;
   if(currentPhase===0){ startCustomizePhase(); }
-  else if(currentPhase===1){
-    const ns=document.getElementById('news-screen');
-    if(ns && ns.style.display==='block') showNextLine();
-  }
+  else if(currentPhase===1){ showNextLine(); }
 }
 
 /* =========================================================
@@ -580,18 +532,7 @@ function startCustomizePhase(){
   }, 800);
 }
 
-function disposeCustomPreview(){
-  if(customAnimFrameId){ cancelAnimationFrame(customAnimFrameId); customAnimFrameId=null; }
-  if(customRenderer){
-    try{ customRenderer.dispose(); }catch(e){}
-    try{ customRenderer.forceContextLoss && customRenderer.forceContextLoss(); }catch(e){}
-    if(customRenderer.domElement && customRenderer.domElement.parentNode) customRenderer.domElement.parentNode.removeChild(customRenderer.domElement);
-  }
-  customRenderer=null; customScene=null; customCamera=null; customPreviewGroup=null;
-}
-
 function initCustomPreview(){
-  disposeCustomPreview(); // re-entering the screen must not leak WebGL contexts / animation loops
   const container = document.getElementById('customize-preview');
   container.innerHTML='';
   customScene = new THREE.Scene();
@@ -612,7 +553,6 @@ function initCustomPreview(){
   updateCustomPlayerModel();
 
   function renderPreview(){
-    if(!customRenderer) return;
     customAnimFrameId = requestAnimationFrame(renderPreview);
     if(customPreviewGroup) customPreviewGroup.root.rotation.y += 0.008;
     customRenderer.render(customScene, customCamera);
@@ -651,10 +591,7 @@ function updateWeaponInfo(){
     `【${categoryLabel[w.category]}】\n${stat}\nサブ:${w.sub} / スペシャル:${w.special}`;
 }
 
-let customizeUIBound = false;
 function setupCustomizeUI(){
-  const firstBind = !customizeUIBound;
-  customizeUIBound = true;
   const selectOutfit = document.getElementById('select-outfit');
   selectOutfit.innerHTML='';
   outfitList.forEach(item=>{
@@ -663,7 +600,7 @@ function setupCustomizeUI(){
     selectOutfit.appendChild(opt);
   });
   selectOutfit.value = playerConfig.outfit;
-  if(firstBind) selectOutfit.addEventListener('change',(e)=>{ playerConfig.outfit=parseInt(e.target.value); updateCustomPlayerModel(); });
+  selectOutfit.addEventListener('change',(e)=>{ playerConfig.outfit=parseInt(e.target.value); updateCustomPlayerModel(); });
 
   const selectWeapon = document.getElementById('select-weapon');
   selectWeapon.innerHTML='';
@@ -673,7 +610,7 @@ function setupCustomizeUI(){
     selectWeapon.appendChild(opt);
   });
   selectWeapon.value = playerConfig.weapon;
-  if(firstBind) selectWeapon.addEventListener('change',(e)=>{ playerConfig.weapon=parseInt(e.target.value); updateCustomPlayerModel(); updateWeaponInfo(); });
+  selectWeapon.addEventListener('change',(e)=>{ playerConfig.weapon=parseInt(e.target.value); updateCustomPlayerModel(); updateWeaponInfo(); });
   updateWeaponInfo();
 
   const renderHairButtons = ()=>{
@@ -698,12 +635,6 @@ function setupCustomizeUI(){
 
   const bindGroup = (id,key)=>{
     const container = document.getElementById(id);
-    // keep the highlighted button in sync with the saved config when the screen is re-opened
-    container.querySelectorAll('.opt-btn').forEach(btn=>{
-      const v = btn.getAttribute('data-val');
-      btn.classList.toggle('active', String(playerConfig[key])===v);
-    });
-    if(!firstBind) return;
     container.querySelectorAll('.opt-btn').forEach(btn=>{
       btn.addEventListener('click',(e)=>{
         e.stopPropagation();
@@ -722,9 +653,9 @@ function setupCustomizeUI(){
   bindGroup('grp-color','color');
   bindGroup('grp-gear','gear');
 
-  if(firstBind) document.getElementById('btn-confirm').addEventListener('click',(e)=>{
+  document.getElementById('btn-confirm').addEventListener('click',(e)=>{
     e.stopPropagation();
-    disposeCustomPreview();
+    cancelAnimationFrame(customAnimFrameId);
     document.getElementById('customize-screen').style.display='none';
     teamAHex = inkColorPalette[playerConfig.color];
     teamBHex = (playerConfig.color===1) ? 0x00e5ff : 0xff2255;
@@ -910,43 +841,110 @@ function buildPlayerModelGroup(cfg){
     const c=matWpColor;
     const metal=new THREE.MeshLambertMaterial({color:0x9aa4b3,flatShading:true});
     const dark=new THREE.MeshLambertMaterial({color:0x15151b,flatShading:true});
-    const accent=new THREE.MeshLambertMaterial({color:selectedWeapon.color,emissive:selectedWeapon.color,emissiveIntensity:.22,flatShading:true});
-    const light=new THREE.MeshLambertMaterial({color:0xf3f7ff,flatShading:true});
-    const box=(g,w,h,d,m,x=0,y=0,z=0,rx=0,ry=0,rz=0)=>addBox(g,w,h,d,m,x,y,z,rx,ry,rz);
-    const cyl=(g,rt,rb,len,segs,m,x=0,y=0,z=0,rx=0,ry=0,rz=0)=>addCyl(g,rt,rb,len,segs,m,x,y,z,rx,ry,rz);
-    const grip=(g,x=0,y=-.28,z=-.08,scale=1)=>{ box(g,.16*scale,.34*scale,.16*scale,dark,x,y,z,0,0,.04); box(g,.22*scale,.07*scale,.20*scale,metal,x,y-.20*scale,z+.03*scale); };
-    const nozzle=(g,len=.42,r=.055)=>{ cyl(g,r,r,len,8,metal,0,.02,len*.48,Math.PI/2,0,0); cyl(g,r*1.55,r*1.55,.11,8,accent,0,.02,len*.92,Math.PI/2,0,0); };
+    const glow=new THREE.MeshLambertMaterial({color:selectedWeapon.color,emissive:selectedWeapon.color,emissiveIntensity:.25});
+
+    function grip(y=-.14){
+      addSubdividedBox(weaponGroup,.13,.30,.13,dark,0,y,0,0,0,0.05);
+      addBox(weaponGroup,.20,.07,.16,metal,0,y-.17,.02);
+    }
+    function barrel(len=.55,r=.055){
+      addCyl(weaponGroup,r,r,len,10,metal,0,0,len*.58,Math.PI/2,0,0);
+      addCyl(weaponGroup,r*1.35,r*1.35,.08,10,glow,0,0,len*.88,Math.PI/2,0,0);
+    }
+
     if(selectedWeapon.category==='shooter'){
-      const bodyL=Math.max(.55,selectedWeapon.length*1.25);
-      box(weaponGroup,.34,.24,bodyL,c,0,0,0); box(weaponGroup,.24,.10,.34,dark,0,.14,-.03); box(weaponGroup,.10,.13,.22,light,0,.08,-bodyL*.25);
-      cyl(weaponGroup,.10,.13,.20,10,metal,0,0,-bodyL*.46,Math.PI/2,0,0); nozzle(weaponGroup,bodyL*.72,.06); grip(weaponGroup,0,-.27,-.12,1); box(weaponGroup,.24,.08,.26,accent,0,.04,-bodyL*.22);
+      // シューター：ボディ＋グリップ＋チャンバー＋前方バレル
+      const bodyW=name==='.52ガロン'||name==='.96ガロンデコ'?.30:.24;
+      const bodyL=Math.max(.38,selectedWeapon.length*.95);
+      addSubdividedBox(weaponGroup,bodyW,.20,bodyL,c,0,0,0);
+      addBox(weaponGroup,bodyW*.9,.08,.23,dark,0,.13,-.05);
+      addCyl(weaponGroup,bodyW*.42,bodyW*.42,.12,12,metal,0,.02,-bodyL*.42,Math.PI/2,0,0);
+      barrel(bodyL*.72,Math.max(.045,bodyW*.22));
+      grip(-.20);
+      if(name==='N-ZAP85'){
+        addBox(weaponGroup,.08,.14,.32,metal,0,.07,-.08);
+        addCyl(weaponGroup,.08,.08,.28,10,glow,0,.18,-.12,Math.PI/2,0,0);
+      }
+      if(name==='プライムシューター'){
+        addBox(weaponGroup,.12,.10,.28,metal,0,.18,.02);
+        addCyl(weaponGroup,.07,.07,.18,10,glow,0,.05,.40,Math.PI/2,0,0);
+      }
+      if(name==='.52ガロン'||name==='.96ガロンデコ'){
+        addSubdividedCyl(weaponGroup,.15,.34,glow,0,.15,-.03,0,0,0);
+        addBox(weaponGroup,.26,.07,.12,metal,0,.25,.13);
+      }
     } else if(selectedWeapon.category==='blaster'){
-      box(weaponGroup,.40,.34,.50,c,0,.04,-.02); cyl(weaponGroup,.19,.22,.68,10,c,0,.06,.40,Math.PI/2,0,0); cyl(weaponGroup,.28,.24,.16,10,accent,0,.06,.80,Math.PI/2,0,0);
-      box(weaponGroup,.28,.16,.24,dark,0,-.17,.08); grip(weaponGroup,0,-.27,-.04,1.05); box(weaponGroup,.18,.12,.35,metal,0,.18,-.22);
+      // ブラスター：太いチューブ＋大型マズル＋背面カートリッジ
+      const tube=.18+selectedWeapon.thickness*.55;
+      addSubdividedCyl(weaponGroup,tube,selectedWeapon.length*1.18,c,0,0,.02,Math.PI/2,0,0);
+      addCyl(weaponGroup,tube*1.55,tube*1.30,.16,12,metal,0,0,selectedWeapon.length*.78,Math.PI/2,0,0);
+      addCyl(weaponGroup,tube*1.85,tube*1.60,.10,12,glow,0,0,selectedWeapon.length*.93,Math.PI/2,0,0);
+      addBox(weaponGroup,.23,.14,.22,dark,0,.04,-.20);
+      grip(-.20);
+      addBox(weaponGroup,.13,.13,.24,metal,0,.10,-.50);
     } else if(selectedWeapon.category==='charger'){
-      const len=Math.max(1.45,selectedWeapon.length*2.6);
-      box(weaponGroup,.18,.18,len,c,0,.02,0); cyl(weaponGroup,.045,.045,len*.84,8,metal,0,.03,len*.48,Math.PI/2,0,0);
-      box(weaponGroup,.28,.11,.52,dark,0,.20,.04); cyl(weaponGroup,.09,.09,.34,8,accent,0,.20,.16,Math.PI/2,0,0); box(weaponGroup,.12,.11,.20,light,0,.09,-len*.24); grip(weaponGroup,0,-.22,-.10,.9);
-      if(selectedWeapon.scope){ cyl(weaponGroup,.08,.10,.38,8,dark,0,.25,-.02,Math.PI/2,0,0); cyl(weaponGroup,.05,.07,.24,8,accent,0,.25,.18,Math.PI/2,0,0); }
+      // チャージャー：極細長銃身＋大型スコープ
+      const len=selectedWeapon.length*1.85;
+      addSubdividedBox(weaponGroup,.14,.14,len,c,0,0,0);
+      addCyl(weaponGroup,.05,.05,len*.95,10,metal,0,0,len*.50,Math.PI/2,0,0);
+      addCyl(weaponGroup,.09,.09,.34,12,dark,0,.19,.02,Math.PI/2,0,0);
+      addCyl(weaponGroup,.115,.095,.24,12,glow,0,.19,.17,Math.PI/2,0,0);
+      addCyl(weaponGroup,.07,.07,.18,10,metal,0,.20,.35,Math.PI/2,0,0);
+      addCyl(weaponGroup,.05,.05,.12,10,0x000000?dark:dark,0,.19,.44,Math.PI/2,0,0);
+      grip(-.22);
+      addBox(weaponGroup,.10,.07,.25,metal,0,-.07,-len*.40);
     } else if(selectedWeapon.category==='roller'){
-      const r=.34+selectedWeapon.thickness*.55; cyl(weaponGroup,r,r,selectedWeapon.length*1.65,16,c,0,.05,.03,0,0,Math.PI/2);
-      cyl(weaponGroup,r*.72,r*.72,.12,10,metal,0,.05,-selectedWeapon.length*.84,0,0,Math.PI/2); cyl(weaponGroup,r*.72,r*.72,.12,10,metal,0,.05,selectedWeapon.length*.84,0,0,Math.PI/2);
-      box(weaponGroup,.11,.13,.95,metal,0,-r*1.28,0); box(weaponGroup,.22,.16,.58,accent,0,-r*2.0,0); grip(weaponGroup,0,-r*2.30,0,1.25);
+      // ローラー：巨大ドラム＋二本フレーム＋長い持ち手
+      const r=selectedWeapon.thickness*1.55;
+      addCyl(weaponGroup,r,r,selectedWeapon.length*1.25,16,c,0,0,0,0,0,Math.PI/2);
+      addCyl(weaponGroup,r*.72,r*.72,.10,12,metal,0,0,-selectedWeapon.length*.69,0,0,Math.PI/2);
+      addCyl(weaponGroup,r*.72,r*.72,.10,12,metal,0,0,selectedWeapon.length*.69,0,0,Math.PI/2);
+      addBox(weaponGroup,.08,.12,.75,metal,0,-r*1.35,0);
+      addBox(weaponGroup,.16,.10,.16,dark,0,-r*2.0,0);
+      addSubdividedBox(weaponGroup,.22,.14,.50,glow,0,-r*2.35,0);
     } else if(selectedWeapon.category==='maneuver'){
-      const body=new THREE.Group(); weaponGroup.add(body); box(body,.22,.20,.48,c,0,0,.02,0,0,.08); cyl(body,.055,.06,.48,8,metal,0,.03,.34,Math.PI/2,0,0); cyl(body,.09,.09,.10,8,accent,0,.03,.60,Math.PI/2,0,0); grip(body,0,-.28,-.05,.85); box(body,.12,.07,.22,dark,0,.10,-.12);
+      // マニューバー：二丁を左右に開いた未来的ブラスター
+      const side=0.23;
+      [[-side,0],[side,0]].forEach(([sx])=>{
+        const g=new THREE.Group(); g.position.x=sx; weaponGroup.add(g);
+        addSubdividedBox(g,.16,.16,.42,c,0,0,0,0, sx<0?-.10:.10,0);
+        addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
+        addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
+        addBox(g,.11,.26,.11,dark,0,-.20,-.02);
+      });
+      addBox(weaponGroup,.34,.07,.12,metal,0,.05,-.12);
     } else if(selectedWeapon.category==='slosher'){
-      const bucket=new THREE.Group(); weaponGroup.add(bucket); bucket.rotation.z=Math.PI/2; cyl(bucket,.38,.27,.52,10,c,0,0,0); cyl(bucket,.43,.43,.07,10,metal,0,0,.26); cyl(bucket,.23,.23,.06,10,accent,0,0,.21); box(weaponGroup,.08,.08,.62,metal,0,-.20,-.13,Math.PI/9,0,0); grip(weaponGroup,0,-.44,-.14,1);
+      // スロッシャー：明確なバケツ形状＋液体チャンバー＋長い柄
+      const bucket=new THREE.Group(); bucket.rotation.z=Math.PI/2; weaponGroup.add(bucket);
+      addCyl(bucket,.30,.20,.42,14,c,0,0,0);
+      addCyl(bucket,.24,.24,.06,14,dark,0,0,.23);
+      addCyl(bucket,.13,.13,.06,12,glow,0,.01,.20,0,0,0);
+      addBox(weaponGroup,.08,.08,.55,metal,0,-.18,-.12,Math.PI/9,0,0);
+      grip(-.36);
     } else if(selectedWeapon.category==='wiper'){
-      box(weaponGroup,.09,.11,1.55,metal,0,.08,.28); box(weaponGroup,.26,.06,1.20,accent,0,.10,.28,0,.05,0); box(weaponGroup,.13,.17,.30,dark,0,-.15,-.50); cyl(weaponGroup,.09,.09,.38,8,metal,0,-.36,-.52,0,0,0); box(weaponGroup,.22,.14,.20,c,0,-.54,-.52);
+      // ワイパー：剣／ブレード形状をはっきり出す
+      const bladeLen=selectedWeapon.length*2.1;
+      addBox(weaponGroup,.08,.06,bladeLen,metal,0,.08,.20);
+      addBox(weaponGroup,.22,.10,bladeLen*.72,glow,0,.06,.16,0,.05,0);
+      addBox(weaponGroup,.10,.12,.28,dark,0,-.12,-.48);
+      addCyl(weaponGroup,.09,.09,.34,10,metal,0,-.30,-.49,0,0,0);
+      addBox(weaponGroup,.20,.12,.16,c,0,-.48,-.49);
+      addBox(weaponGroup,.07,.10,.18,glow,0,.10,.93);
     } else if(selectedWeapon.category==='spinner'){
-      box(weaponGroup,.34,.26,.75,c,0,.02,0); cyl(weaponGroup,.30,.24,.18,12,dark,0,.02,.34,Math.PI/2,0,0);
-      for(let i=0;i<4;i++){ const ang=i*Math.PI/2; cyl(weaponGroup,.045,.045,.85,8,metal,Math.cos(ang)*.10,.02,.70+Math.sin(ang)*.10,Math.PI/2,0,0); }
-      cyl(weaponGroup,.12,.12,.10,8,accent,0,.08,.18,Math.PI/2,0,0); grip(weaponGroup,0,-.25,-.10,1.05);
+      // スピナー：チャージャーより太い長銃＋巨大スピンユニット
+      const len=selectedWeapon.length*1.55;
+      addSubdividedBox(weaponGroup,.24,.20,len,c,0,0,0);
+      addCyl(weaponGroup,.09,.09,len*.95,12,metal,0,0,len*.52,Math.PI/2,0,0);
+      addCyl(weaponGroup,.18,.18,.18,16,dark,0,.15,.05,0,0,0);
+      addCyl(weaponGroup,.13,.13,.10,12,glow,0,.15,.17,0,0,0);
+      grip(-.22);
     } else {
-      box(weaponGroup,wT,wT,wL,c); nozzle(weaponGroup,Math.max(.35,wL*.8),Math.max(.035,wT*.24)); grip(weaponGroup,0,-.20,-.08,.9);
+      addSubdividedBox(weaponGroup,wT,wT,wL,c,0,0,0);
+      barrel(wL*.8,wT*.25); grip(-.16);
     }
     return weaponGroup;
   }
+
   const weaponGroup = buildWeaponMesh();
   weaponGroup.position.set(0,-.55,.1);
   aR.add(weaponGroup);
@@ -1027,9 +1025,8 @@ sampleCanvas.width = 96; sampleCanvas.height = 96;
 const sampleCtx = sampleCanvas.getContext('2d');
 
 function worldToCanvas(x,z){
-  const bd = window.__BATTLE_BOUNDS || {halfW:28,halfD:70};
-  const u = (x + bd.halfW) / (bd.halfW*2);
-  const v = (z + bd.halfD) / (bd.halfD*2);
+  const u = (x + STAGE_HALF) / (STAGE_HALF*2);
+  const v = (z + STAGE_HALF) / (STAGE_HALF*2);
   return { cx: u*paintCanvas.width, cy: v*paintCanvas.height };
 }
 
@@ -1037,8 +1034,7 @@ function hexToCss(hex){ return '#' + hex.toString(16).padStart(6,'0'); }
 
 function paintGround(x,z,radius,colorHex){
   const {cx,cy} = worldToCanvas(x,z);
-  const bd = window.__BATTLE_BOUNDS || {halfW:28,halfD:70};
-  const cr = (radius/(bd.halfW*2)) * paintCanvas.width;
+  const cr = (radius/(STAGE_HALF*2)) * paintCanvas.width;
   paintCtx.fillStyle = hexToCss(colorHex);
   paintCtx.beginPath();
   const pts = 10 + Math.floor(Math.random()*6);
@@ -1157,81 +1153,139 @@ function addBlock(x,y,z,w,h,d,color,opts={}){
 }
 
 function buildStage(){
-  if(stageGroup) scene.remove(stageGroup);
-  stageGroup=new THREE.Group(); scene.add(stageGroup);
-  collidableBlocks=[]; waypoints=[];
-  decals.forEach(d=>scene.remove(d.mesh)); decals=[];
+  if(stageGroup){ scene.remove(stageGroup); }
+  stageGroup = new THREE.Group();
+  scene.add(stageGroup);
+  collidableBlocks = [];
+  waypoints = [];
+  decals.forEach(d=>scene.remove(d.mesh));
+  decals = [];
 
-  const STAGE_W=56, STAGE_D=140, halfW=STAGE_W/2, halfD=STAGE_D/2;
-  window.__BATTLE_BOUNDS={halfW,halfD,water:4};
+  // v12 stage: tall rectangle, fully walkable/paintable floor, three clear routes.
+  // World: X = -18..18, Z = -45..45.
+  const STAGE_W = 36;
+  const STAGE_D = 90;
+  const halfW = STAGE_W/2;
+  const halfD = STAGE_D/2;
 
-  const water=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+18,STAGE_D+18,1,1),new THREE.MeshBasicMaterial({color:0x1679c7,transparent:true,opacity:.84}));
-  water.rotation.x=-Math.PI/2; water.position.y=-3.4; stageGroup.add(water);
-  const waterWave=new THREE.Mesh(new THREE.RingGeometry(2,halfW+4.5,64),new THREE.MeshBasicMaterial({color:0x71dbff,transparent:true,opacity:.23,side:THREE.DoubleSide}));
-  waterWave.rotation.x=-Math.PI/2; waterWave.position.y=-3.35; stageGroup.add(waterWave);
+  const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
+  const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  stageGroup.add(ground);
 
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W,STAGE_D,1,1),new THREE.MeshLambertMaterial({map:paintTexture}));
-  ground.rotation.x=-Math.PI/2; stageGroup.add(ground);
-
-  paintCtx.fillStyle='#555566'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
-  function paintRectWorld(x0,z0,x1,z1,colorHex){const a=worldToCanvas(x0,z0),b=worldToCanvas(x1,z1);paintCtx.fillStyle=hexToCss(colorHex);paintCtx.fillRect(Math.min(a.cx,b.cx),Math.min(a.cy,b.cy),Math.abs(b.cx-a.cx),Math.abs(b.cy-a.cy));}
-  paintRectWorld(-26,-69,26,-53,teamAHex); paintRectWorld(-26,53,26,69,teamBHex); paintTexture.needsUpdate=true;
-
-  function addRamp(x,y,z,w,h,d,color,dir=1){
-    const geo=new THREE.BufferGeometry(), z0=-d/2,z1=d/2,high=dir===1?z1:z0;
-    const v=new Float32Array([-w/2,0,z0,w/2,0,z0,-w/2,0,z1,w/2,0,z1,-w/2,h,high,w/2,h,high]);
-    geo.setAttribute('position',new THREE.BufferAttribute(v,3)); geo.setIndex([0,2,1,1,2,3,0,1,5,0,5,4,2,4,5,2,5,3,0,4,2,1,3,5]); geo.computeVertexNormals();
-    const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color,flatShading:true}));mesh.position.set(x,y,z);stageGroup.add(mesh);
-    collidableBlocks.push({mesh,minX:x-w/2,maxX:x+w/2,minY:y,maxY:y+h,minZ:z-d/2,maxZ:z+d/2,w,h,d,paintLevel:0,paintTeam:null,baseColor:color,climbable:true,type:'ramp',rampDir:dir});
+  // Reset paint and give both teams a broad, separated home zone.
+  paintCtx.fillStyle = '#555566';
+  paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+  function paintRectWorld(x0,z0,x1,z1,colorHex){
+    const a=worldToCanvas(x0,z0), b=worldToCanvas(x1,z1);
+    const x=Math.min(a.cx,b.cx), y=Math.min(a.cy,b.cy);
+    const w=Math.abs(b.cx-a.cx), h=Math.abs(b.cy-a.cy);
+    paintCtx.fillStyle=hexToCss(colorHex);
+    paintCtx.fillRect(x,y,w,h);
   }
+  paintRectWorld(-16,-44,16,-31,teamAHex);
+  paintRectWorld(-16,31,16,44,teamBHex);
+  paintTexture.needsUpdate = true;
 
-  spawnPointA=new THREE.Vector3(0,0,-60); spawnPointB=new THREE.Vector3(0,0,60);
-  addBlock(0,0,-60,48,.18,14,0x5c6373,{climbable:false}); addBlock(0,0,60,48,.18,14,0x5c6373,{climbable:false});
+  spawnPointA = new THREE.Vector3(0,0,-38);
+  spawnPointB = new THREE.Vector3(0,0, 38);
 
-  [-20,20].forEach(x=>{[-48,-26,0,26,48].forEach(z=>waypoints.push({x,z}));});
-  [-34,-12,0,12,34].forEach(z=>waypoints.push({x:0,z}));
+  // Broad spawn pads, deliberately far apart.
+  addBlock(0,0,-38,30,0.15,10,0x6c7180,{climbable:false});
+  addBlock(0,0, 38,30,0.15,10,0x6c7180,{climbable:false});
 
-  // Center high road: broad, gentle up/down instead of stair steps.
-  addRamp(0,0,-38,12,5.5,24,0x73839a,1);
-  addBlock(0,5.5,-18,12,.4,14,0x67788d,{climbable:false});
-  addBlock(0,5.5,-3,12,.4,16,0x71849b,{climbable:false});
-  addBlock(0,5.5,14,12,.4,18,0x67788d,{climbable:false});
-  addRamp(0,0,38,12,5.5,24,0x73839a,-1);
+  // Three routes: left / center / right.
+  // Left and right stay low. The center route is elevated and connected by stairs.
+  const routeXs = [-12,0,12];
+  routeXs.forEach(x=>{
+    waypoints.push({x,z:-30});
+    waypoints.push({x,z:-10});
+    waypoints.push({x,z:10});
+    waypoints.push({x,z:30});
+  });
 
-  // Left/right raised lanes: shallow slopes, open flank behind them.
-  addRamp(-20,0,-26,10,2.5,16,0x586b7f,1); addBlock(-20,2.5,-15,10,.35,10,0x5f7185,{climbable:false}); addRamp(-20,0,-4,10,2.5,16,0x586b7f,-1);
-  addRamp(20,0,10,10,2.5,16,0x586b7f,1); addBlock(20,2.5,21,10,.35,10,0x5f7185,{climbable:false}); addRamp(20,0,32,10,2.5,16,0x586b7f,-1);
+  // Low lane cover. Openings between covers keep each route flowing.
+  const lowCovers = [
+    {x:-12,z:-25,w:7,d:3,h:2.4}, {x:-12,z:-12,w:5,d:3,h:1.5}, {x:-12,z:4,w:7,d:3,h:2.8}, {x:-12,z:22,w:5,d:3,h:1.8},
+    {x:12,z:-25,w:7,d:3,h:2.4},  {x:12,z:-12,w:5,d:3,h:1.5}, {x:12,z:4,w:7,d:3,h:2.8},  {x:12,z:22,w:5,d:3,h:1.8},
+    {x:-6,z:-5,w:3,d:5,h:1.8}, {x:6,z:11,w:3,d:5,h:2.2},
+    {x:-6,z:21,w:3,d:4,h:2.0}, {x:6,z:-21,w:3,d:4,h:2.0}
+  ];
+  lowCovers.forEach(c=>addBlock(c.x,0,c.z,c.w,c.h,c.d,0x596775));
 
-  // Low covers leave large continuous paintable spaces.
+  // Mid dividers separate the three lanes but leave deliberate choke/opening points.
+  // Height is low enough to read as cover, not an impassable wall.
+  [-6,6].forEach(x=>{
+    [-32,-18,-2,14,28].forEach(z=>addBlock(x,0,z,1.25,1.7,8.0,0x4b5967));
+  });
+
+  // Center high route: long raised path.
+  addBlock(0,3,-14,8,3.0,20,0x657789);
+  addBlock(0,3, 14,8,3.0,20,0x657789);
+  addBlock(0,3,  0,8,3.0,10,0x718396);
+  waypoints.push({x:0,z:-14,y:3});
+  waypoints.push({x:0,z:0,y:3});
+  waypoints.push({x:0,z:14,y:3});
+
+  // Stair ramps at both ends of the high route, made from short steps.
+  [-1,1].forEach(dir=>{
+    for(let i=0;i<8;i++){
+      const z = dir * (23 + i*0.9);
+      const h = 0.45 + (7-i)*0.32;
+      addBlock(0,0,z,8,h,0.95,0x8090a1,{climbable:false});
+    }
+  });
+
+  // Two raised side platforms create additional vertical options without cluttering the stage.
   [
-    {x:-10,z:-42,w:7,d:3,h:1.6},{x:10,z:-29,w:7,d:3,h:1.3},{x:-10,z:-3,w:7,d:3,h:1.6},{x:10,z:12,w:7,d:3,h:1.5},
-    {x:-10,z:32,w:7,d:3,h:1.4},{x:10,z:45,w:7,d:3,h:1.7},{x:-24,z:-2,w:4,d:8,h:1.4},{x:24,z:-24,w:4,d:8,h:1.4},
-    {x:-24,z:26,w:4,d:8,h:1.4},{x:24,z:38,w:4,d:8,h:1.4}
-  ].forEach(c=>addBlock(c.x,0,c.z,c.w,c.h,c.d,0x4e5c6d));
+    {x:-12,z:14,w:6,d:8,h:2.2},
+    {x:12,z:-14,w:6,d:8,h:2.2}
+  ].forEach(p=>{
+    addBlock(p.x,0,p.z,p.w,p.h,p.d,0x6b7a8a);
+    waypoints.push({x:p.x,z:p.z,y:p.h});
+  });
 
-  // Crossovers for aggressive flank routes.
-  addRamp(-8,0,-7,7,1.4,10,0x6d7f93,1); addRamp(8,0,7,7,1.4,10,0x6d7f93,-1);
-  addRamp(-8,0,18,7,1.4,10,0x6d7f93,-1); addRamp(8,0,-18,7,1.4,10,0x6d7f93,1);
-  stageBuilt=true;
+  // Connect left <-> center and center <-> right at two clear crossover points.
+  // These bridges are low, wide and paintable.
+  [-8,8].forEach(z=>{
+    addBlock(-6,0,z,10,0.25,4,0x748293,{climbable:false});
+    addBlock( 6,0,z,10,0.25,4,0x748293,{climbable:false});
+    waypoints.push({x:-6,z});
+    waypoints.push({x:6,z});
+  });
+
+  // Center observation block for another height change.
+  addBlock(0,6,0,4,2.5,4,0x8393a4,{climbable:false});
+  waypoints.push({x:0,z:0,y:6});
+
+  // Keep the outer edge visually clear. No water, pits, or non-paintable holes.
+  // Movement itself is clamped to the rectangular playable area in collision code.
+  stageBuilt = true;
 }
 
+/* =========================================================
+   コリジョン判定
+   ========================================================= */
 function getSupportHeight(x,z,y){
-  let best=0;
-  for(const b of collidableBlocks){
-    if(x<b.minX||x>b.maxX||z<b.minZ||z>b.maxZ) continue;
-    if(b.type==='ramp'){
-      const t=b.rampDir===1?(z-b.minZ)/(b.maxZ-b.minZ):(b.maxZ-z)/(b.maxZ-b.minZ);
-      const h=b.minY+Math.max(0,Math.min(1,t))*b.h;
-      if(h<=y+1.6&&h>best)best=h;
-    }else if(b.maxY<=y+1.05&&b.maxY>best)best=b.maxY;
+  let best = 0;
+  for(let i=0;i<collidableBlocks.length;i++){
+    const b = collidableBlocks[i];
+    if(x>=b.minX && x<=b.maxX && z>=b.minZ && z<=b.maxZ){
+      if(b.maxY <= y+1.05 && b.maxY > best) best = b.maxY;
+    }
   }
   return best;
 }
+
 function getBlockingWall(x,z,y){
-  const pad=.35;
-  for(const b of collidableBlocks){
-    if(b.type==='ramp'||(b.maxY-b.minY)<1.3) continue;
-    if(x>=b.minX-pad&&x<=b.maxX+pad&&z>=b.minZ-pad&&z<=b.maxZ+pad&&y+.2<b.maxY-.15&&y+1.5>b.minY)return b;
+  const pad = 0.35;
+  for(let i=0;i<collidableBlocks.length;i++){
+    const b = collidableBlocks[i];
+    if((b.maxY-b.minY) < 1.3) continue;
+    if(x>=b.minX-pad && x<=b.maxX+pad && z>=b.minZ-pad && z<=b.maxZ+pad){
+      if(y+0.2 < b.maxY-0.15 && y+1.5 > b.minY) return b;
+    }
   }
   return null;
 }
@@ -1253,7 +1307,7 @@ function createFighter(opts){
     armL: built.armL, armR: built.armR, legL: built.legL, legR: built.legR,
     weapon: weaponList[cfg.weapon], specialGauge:0, lastShot:0, lastSub:0,
     invulnUntil:0, speedBoostUntil:0, chargeStart:0, isCharging:false,
-    lastSwing:0, activeSpecialUntil:0, kills:0, deaths:0,
+    lastSwing:0, activeSpecialUntil:0,
     cfg: cfg,
     ai: opts.isPlayer ? null : { state:'patrol', target:null, waypoint: waypoints[Math.floor(Math.random()*waypoints.length)]||{x:0,z:0}, nextDecision:0, paintTick:0 }
   };
@@ -1319,7 +1373,6 @@ function killFighter(f){
   if(!f.alive) return;
   f.alive = false;
   f.deathLocation = f.pos.clone();
-  f.deaths=(f.deaths||0)+1;
   f.root.visible = false;
   f.respawnAt = performance.now() + 3000;
   addKillFeed(`${weaponCategoryIcon(f)} ${f.team==='A'?'A':'B'} ${f.id} がやられた`, 'dead');
@@ -1334,14 +1387,13 @@ function killFighter(f){
 function applyDamage(target, dmg, fromFighter){
   if(!target.alive) return;
   if(performance.now() < target.invulnUntil) return;
+  // グレートバリア：自陣シールド内なら無効化
   for(let i=0;i<shields.length;i++){
     const sh = shields[i];
     if(sh.team===target.team && target.pos.distanceTo(sh.pos)<sh.radius) return;
   }
-  if(fromFighter && fromFighter.team!==target.team){ target._lastAttackerId=fromFighter.id; }
   target.hp -= dmg;
   if(target.hp <= 0){
-    if(fromFighter && fromFighter.team!==target.team){ fromFighter.kills=(fromFighter.kills||0)+1; }
     killFighter(target);
   }
 }
@@ -1975,6 +2027,11 @@ window.addEventListener('keydown',(e)=>{
       goToCustomizeFromGame();
     }
   }
+  if(e.code==='KeyP'){
+    if(currentPhase===1.5 || currentPhase===2){
+      showToast('オンライン対戦(PvP)はまだ準備中です！');
+    }
+  }
   if(e.code==='KeyO'){
     if(currentPhase===1.5){
       startBattleFromRange();
@@ -2016,7 +2073,6 @@ function goToCustomizeFromGame(){
 function startNewsPhase(){
   currentPhase=1;
   currentLineIndex=0;
-  newsFinishing=false;
   const ns=document.getElementById('news-screen');
   ns.style.display='block';
   setTimeout(()=>{ns.style.opacity=1;},50);
@@ -2032,14 +2088,11 @@ function showNextLine(){
     return;
   }
   if(currentLineIndex>=newsLines.length){
-    if(newsFinishing) return;          // extra taps while fading out must not start the town twice
-    newsFinishing=true;
     const ns=document.getElementById('news-screen');
     ns.style.opacity=0;
     setTimeout(()=>{
       ns.style.display='none';
       hasSeenNews=true;
-      newsFinishing=false;
       startRangePhase();
     },800);
     return;
@@ -2297,10 +2350,9 @@ function updatePlayerMovement(delta){
 }
 
 function clampStageXY(x,z){
-  const bd=window.__BATTLE_BOUNDS||{halfW:28,halfD:70,water:4};
   return {
-    x:Math.max(-bd.halfW-bd.water*.75,Math.min(bd.halfW+bd.water*.75,x)),
-    z:Math.max(-bd.halfD-bd.water*.75,Math.min(bd.halfD+bd.water*.75,z))
+    x:Math.max(-17.25,Math.min(17.25,x)),
+    z:Math.max(-43.25,Math.min(43.25,z))
   };
 }
 
@@ -2453,9 +2505,9 @@ function updateBullets(delta){
     if(hitFighter){
       if(b.explosive){
         explodeAt(b.mesh.position.clone(), b.explosionRadius, b.splashDamage, b.team, {paintRadius:b.paintRadius});
-        applyDamage(hitFighter, b.damage - b.splashDamage, fighters.find(f=>f.id===b.fromId)||null); // 直撃分は追加
+        applyDamage(hitFighter, b.damage - b.splashDamage, null); // 直撃分は追加
       } else {
-        applyDamage(hitFighter, b.damage, fighters.find(f=>f.id===b.fromId)||null);
+        applyDamage(hitFighter, b.damage, null);
       }
       for(let p=0;p<4;p++) spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
       scene.remove(b.mesh);
@@ -2578,13 +2630,6 @@ setTimeout(()=>{
   const lt = document.getElementById('loading-text');
   lt.textContent = 'TAP or PRESS SPACE';
   lt.style.color = '#ff0055'; lt.style.webkitTextStroke = '2px #ffffff'; lt.style.animationDuration = '0.5s';
-  // Do not leave the player stranded on the loading screen. A click/Space can
-  // still advance immediately, and otherwise the game moves on automatically.
-  setTimeout(()=>{
-    if(currentPhase===0 && isReady){
-      try{ startCustomizePhase(); }catch(err){ console.error('Auto start failed',err); }
-    }
-  }, 350);
 }, 2000);
 
 window.addEventListener('keydown', handleAdvanceEvent);
@@ -2703,32 +2748,27 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const mult = opts.mult || 1;
     const baseR = Math.max(.45, radius*1.18*mult);
     const {cx,cy}=worldToCanvas(x,z);
-    // The paint canvas is square but the stage is 56 x 140, so draw in *world units*
-    // (scale the context) - otherwise every splat becomes a 2.5x longer oval along Z.
-    const bd = window.__BATTLE_BOUNDS || {halfW:28,halfD:70};
-    const sx = paintCanvas.width/(bd.halfW*2), sy = paintCanvas.height/(bd.halfD*2);
+    const cr=(baseR/(STAGE_HALF*2))*paintCanvas.width;
     paintCtx.save();
     paintCtx.fillStyle=hexToCss(colorHex);
-    paintCtx.translate(cx,cy);
-    paintCtx.scale(sx,sy);
-    // Main stamp
+    // Main soft stamp
     paintCtx.beginPath();
-    paintCtx.arc(0,0,baseR,0,Math.PI*2);
+    paintCtx.arc(cx,cy,cr,0,Math.PI*2);
     paintCtx.fill();
     // Several organic satellites => much better coverage
     const n = Math.max(3, Math.min(10, Math.round(radius*1.7)));
     for(let i=0;i<n;i++){
       const a=i*2.399963 + (x*0.03+z*0.07);
-      const rr=baseR*(.25+.65*((i%5)/4));
-      const px=Math.cos(a)*rr*.85, py=Math.sin(a)*rr*.85;
-      paintCtx.beginPath(); paintCtx.arc(px,py,baseR*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
+      const rr=cr*(.25+.65*((i%5)/4));
+      const px=cx+Math.cos(a)*rr*.85, py=cy+Math.sin(a)*rr*.85;
+      paintCtx.beginPath(); paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
     }
     // short trail segment when requested (roller/brush/wiper)
     if(opts.to){
-      paintCtx.strokeStyle=hexToCss(colorHex);
-      paintCtx.lineWidth=Math.max(.12,baseR*1.5);
+      const to=worldToCanvas(opts.to.x,opts.to.z);
+      paintCtx.lineWidth=Math.max(2,cr*1.5);
       paintCtx.lineCap='round';
-      paintCtx.beginPath(); paintCtx.moveTo(0,0); paintCtx.lineTo(opts.to.x-x,opts.to.z-z); paintCtx.stroke();
+      paintCtx.beginPath(); paintCtx.moveTo(cx,cy); paintCtx.lineTo(to.cx,to.cy); paintCtx.stroke();
     }
     paintCtx.restore();
     paintTexture.needsUpdate=true;
@@ -3076,29 +3116,19 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
 
   /* ---------- Online state ---------- */
-  onlineSocket=null; onlineActive=false; onlineRoomId=null; onlinePlayerId=null; onlineTeam=null; // (declared globally with `var`)
+  let onlineSocket=null, onlineActive=false, onlineRoomId=null, onlinePlayerId=null, onlineTeam=null;
   const remoteMap=new Map();
 
   function setOnlineStatus(t){const e=document.getElementById('online-status');if(e)e.textContent=t;}
   function roomText(players=[]){
-    return players.map(p=>`[${p.team}] ${p.id}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n')||'2〜8人。参加者全員が「準備OK」なら開始します。';
+    return players.map(p=>`[${p.team}] ${p.id}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n')||'8人揃うまで自動マッチングします。';
   }
   function onlineUrl(){ return (location.protocol==='https:'?'wss://':'ws://') + location.host; }
 
-  function isOnlinePanelOpen(){
-    const pn=document.getElementById('online-panel');
-    return !!pn && pn.style.display!=='none' && pn.style.display!=='';
-  }
   function openOnlinePanel(){
-    // The mouse must be free to click the panel buttons.
-    try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
-    try{ if(window.__V10 && window.__V10.releaseLock) window.__V10.releaseLock(); }catch(e){}
-    // A previous socket (e.g. from an earlier match) must not stay open in the background.
-    if(onlineSocket){ try{ onlineSocket.onclose=null; onlineSocket.close(); }catch(e){} onlineSocket=null; }
-    onlineActive=false;
     document.getElementById('online-panel').style.display='flex';
     setOnlineStatus('サーバーに接続します…');
-    let savedWs=null; try{ savedWs=localStorage.getItem('splatoonWs'); }catch(e){}
+    const savedWs=localStorage.getItem('splatoonWs');
     const url=savedWs || (location.protocol==='file:' ? '' : onlineUrl());
     try{
       if(!url){ setOnlineStatus('オンラインは公開Web版のURLから利用してください。試し撃ち・CPU対戦はそのまま遊べます。'); return; }
@@ -3109,11 +3139,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       };
       onlineSocket.onmessage=(ev)=>{
         let m;try{m=JSON.parse(ev.data);}catch{return;}
-        if(m.type==="queue"){setOnlineStatus(`マッチング待機中… ${m.count}/8人（2人以上・全員READYで開始）`);}
+        if(m.type==="queue"){setOnlineStatus(`マッチング中… ${m.count}/8人`); const r=document.getElementById('online-room'); if(r) r.textContent=`8人揃うまで待機中… 現在 ${m.count}/8人`;}
         if(m.type==="matchFound"){
           onlineActive=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;
-          setOnlineStatus(`対戦開始！ ${(m.players||[]).length}人 → ${m.team}チーム`);
-          document.getElementById('online-room').textContent=`${(m.players||[]).length}人
+          setOnlineStatus(`マッチング中… 8/8人 → ${m.team}チーム`);
+          document.getElementById('online-room').textContent=`8/8人
 ${roomText(m.players)}`;
           startOnlineBattle(m);
         }
@@ -3121,11 +3151,10 @@ ${roomText(m.players)}`;
         if(m.type==="state"){applyRemoteState(m);}
         if(m.type==="paint"){ const localColor=window.__V6?.displayColorForPlayer?.(m.id); paintGround(m.x,m.z,m.radius,localColor??m.colorHex,{mult:m.mult||1,remote:true}); }
         if(m.type==="serverToast"){showToast(m.text);}
-        if(m.type==="hit"&&onlineActive&&playerFighter&&playerFighter.alive){ applyDamage(playerFighter,Number(m.damage)||0,remoteMap.get(m.from)||null); }
         if(m.type==="matchEnd" && onlineActive){onlineActive=false;endBattle();}
       };
-      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。公開Web版のURLから開いているか確認してください。（Renderの無料枠は起動に30〜60秒かかることがあります）');
-      onlineSocket.onclose=()=>{ if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');} else if(isOnlinePanelOpen()) setOnlineStatus('サーバーとの接続が切れました。「戻る」→ もう一度オンラインへ'); };
+      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。公開Web版のURLから開いているか確認してください。');
+      onlineSocket.onclose=()=>{if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}};
     }catch(e){setOnlineStatus('WebSocket開始に失敗しました');}
   }
   function hideOnlinePanel(){
@@ -3150,7 +3179,6 @@ ${roomText(m.players)}`;
     me.pos=me.root.position;
     teamAHex=inkColorPalette[playerConfig.color];
     teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
-    if(typeof resetBattleField==='function') resetBattleField();
     battleTimer=180; battleActive=true; currentPhase=2;
     document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block'; updateTeamLifeStrip(); document.getElementById('kill-feed').innerHTML='';
     document.getElementById('range-hint').style.display='none';
@@ -3210,10 +3238,10 @@ ${roomText(m.players)}`;
   };
 
   /* ---------- Online keyboard + panel buttons ---------- */
-  document.getElementById('online-start').addEventListener('click',()=>{audioInit();if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',name:'player'}));setOnlineStatus('マッチング中… 1/8人'); const r=document.getElementById('online-room'); if(r)r.textContent='2人以上集まり、全員が準備OKになると開始します。';}});
+  document.getElementById('online-start').addEventListener('click',()=>{audioInit();if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',name:'player'}));setOnlineStatus('マッチング中… 1/8人'); const r=document.getElementById('online-room'); if(r)r.textContent='8人揃うまで待機中… 現在 1/8人';}});
   document.getElementById('online-cancel').addEventListener('click',closeOnlinePanel);
   window.addEventListener('keydown',(e)=>{
-    if(e.code==='KeyP' && currentPhase===1.5 && !isOnlinePanelOpen()){window.openOnlinePanel();}
+    if(e.code==='KeyP' && currentPhase===1.5){openOnlinePanel();}
   });
 
   /* ---------- UI: gear list text ---------- */
@@ -3285,13 +3313,6 @@ ${roomText(m.players)}`;
   const oldDoPlayerSubThrow=doPlayerSubThrow;
   doPlayerSubThrow=function(){oldDoPlayerSubThrow();};
 
-  /* ---- v25: these helpers live inside this IIFE, but the following <script> blocks call them
-     as globals (regenPlayer / consumeInk / setupFighterEconomy / gearProfile / sfx ...).
-     Without this export every frame threw "ReferenceError" => the practice field never rendered. ---- */
-  Object.assign(window,{
-    gearProfile, setupFighterEconomy, consumeInk, regenPlayer, doRollerAction, doWiperSlash,
-    sfx, inkCost, openOnlinePanel, closeOnlinePanel
-  });
 })();
 
 // === Projectile visual pass: larger ink orbs + continuous falling ink trail ===
@@ -3823,7 +3844,10 @@ ${roomText(m.players)}`;
   /* Patch existing online socket message handler by wrapping openOnlinePanel. */
   const _oldOpenOnline=openOnlinePanel;
   openOnlinePanel=function(){
-    _oldOpenOnline();   // (status/labels are handled by the v19 ready-UI)
+    _oldOpenOnline();
+    setQueueCount(1);
+    const start=document.getElementById('online-start');
+    if(start)start.textContent='マッチング開始';
   };
 
   /* ---------- Patch remote paint + matchFound color roster ---------- */
@@ -4091,24 +4115,18 @@ ${roomText(m.players)}`;
   let mapFrame=0;
 
   function battleScreen(){ return currentPhase===1.5 || currentPhase===2; }
-  // Any overlay the player has to click on: the cursor must stay visible & the mouse must not be locked.
-  function uiOpen(){
-    const on=document.getElementById('online-panel'), rs=document.getElementById('result-screen');
-    return !!((on&&on.style.display&&on.style.display!=='none') || (full&&full.style.display==='flex') || (rs&&rs.style.display==='flex'));
-  }
   function setCursorHard(hidden){
-    if(hidden && uiOpen()) hidden=false;
-    // (the html.battle-cursor-hidden CSS rule hides the cursor everywhere; no per-element inline styles are needed,
-    //  and they used to stay behind and keep the cursor invisible on the menus)
-    document.querySelectorAll('[style*="cursor"]').forEach(el=>el.style.removeProperty('cursor'));
     root.classList.toggle('battle-cursor-hidden',!!hidden);
     document.body.classList.toggle('pointer-lock-ready',!!hidden);
     document.body.style.setProperty('cursor',hidden?'none':'auto','important');
     if(renderer?.domElement) renderer.domElement.style.setProperty('cursor',hidden?'none':'auto','important');
+    if(hidden){
+      document.querySelectorAll('*').forEach(el=>el.style.setProperty('cursor','none','important'));
+    }
   }
 
   function requestLock(){
-    if(!battleScreen() || !renderer?.domElement || uiOpen()) return;
+    if(!battleScreen() || !renderer?.domElement) return;
     pointerLockWanted=true;
     setCursorHard(true);
     try{
@@ -4265,11 +4283,7 @@ ${roomText(m.players)}`;
     if(e.code==='KeyM' && battleScreen()){
       e.preventDefault();
       if(full.style.display==='flex') full.style.display='none';
-      else{
-        full.style.display='flex';
-        // the map is clicked with the mouse (super jump) -> release the pointer lock
-        try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(err){}
-      }
+      else full.style.display='flex';
       setCursorHard(true);
     }
     if(e.code==='Escape' && full.style.display==='flex'){
@@ -4290,7 +4304,6 @@ ${roomText(m.players)}`;
     }else{
       if(full) full.style.display='none';
       if(mini) mini.style.display='none';
-      if(root.classList.contains('battle-cursor-hidden')) setCursorHard(false);
     }
   },250);
 
@@ -4371,7 +4384,7 @@ ${roomText(m.players)}`;
   function openFullMap(){
     if(!inBattle() || !full) return;
     full.style.display='flex';
-    try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(err){}   // map needs a free mouse
+    if(window.__V10?.requestLock) window.__V10.requestLock();
   }
   if(mapBtn) mapBtn.addEventListener('pointerdown',(e)=>{
     e.preventDefault();
@@ -4434,180 +4447,14 @@ ${roomText(m.players)}`;
     oldEndBattleV11();
   };
 
-  window.__V11={startSuperJump,openFullMap,getJumpState:()=>jumpState,update:updateSuperJump,cancel:()=>{jumpState=null;}};
+  window.__V11={startSuperJump,openFullMap,getJumpState:()=>jumpState};
 })();
 </script>
 
-
+</body>
+</html>
 
 <script>
-/* =====================================================================
-   v19 ONE-FILE INTEGRATION
-   - online: 2~8 players, all ready => start
-   - full map only when M / MAP is pressed
-   - dynamic online team counts
-   - proper result card
-   - fixed rectangular stage bounds / map scaling
-   ===================================================================== */
-(function(){
-  const q=new URLSearchParams(location.search);
-  const mode=q.get('mode');
-
-  // Dynamic online HUD roster count (works for 2..8 players).
-  const oldLifeStrip=window.updateTeamLifeStrip;
-  if(typeof oldLifeStrip==='function'){
-    window.updateTeamLifeStrip=function(){
-      try{
-        const a=document.getElementById('life-a'), b=document.getElementById('life-b');
-        const paint=(team,el)=>{
-          if(!el)return;
-          el.innerHTML='';
-          const list=(fighters||[]).filter(f=>f&&f.team===team);
-          for(let i=0;i<list.length;i++){
-            const f=list[i];const dot=document.createElement('span');
-            dot.className='life-dot'+(!f.alive?' dead':'');
-            dot.textContent=f.alive?'●':'×';
-            dot.style.background=f.alive?(team==='A'?'#dfff00':'#ff3c6b'):'#444';
-            el.appendChild(dot);
-          }
-        };
-        paint('A',a);paint('B',b);
-      }catch(e){ oldLifeStrip(); }
-    };
-  }
-
-  // Map is strictly opt-in: keyboard M or the on-screen MAP button opens the full map.
-  const mini=document.getElementById('minimap'); if(mini)mini.style.display='none';
-  const mapBtn=document.getElementById('btn-map');
-  if(mapBtn){ mapBtn.textContent='MAP'; }
-
-  // Better match result presentation.
-  const baseEnd=window.endBattle;
-  if(typeof baseEnd==='function'){
-    window.endBattle=function(){
-      baseEnd();
-      const screen=document.getElementById('result-screen');
-      if(!screen)return;
-      screen.classList.add('v18-result');
-      const title=document.getElementById('result-title');
-      const detail=document.getElementById('result-detail');
-      if(!title||!detail||!playerFighter)return;
-      computeTurf();
-      const a=turfPct.a,b=turfPct.b,neutral=Math.max(0,100-a-b);
-      let winner='DRAW';
-      if(a>b)winner='A TEAM'; else if(b>a)winner='B TEAM';
-      const won=(playerFighter.team==='A'?a:b) > (playerFighter.team==='A'?b:a);
-      if(a===b) winner='DRAW';
-      const kills=playerFighter.kills||0,deaths=playerFighter.deaths||0;
-      const card=document.createElement('div');card.className='v18-result-card';
-      const h2=document.createElement('div');h2.className='v18-result-kicker';h2.textContent='BATTLE RESULTS';card.appendChild(h2);
-      const tt=document.createElement('div');tt.className='v18-result-title';tt.textContent=a===b?'DRAW':(won?'WIN!':'LOSE');tt.style.color=a===b?'#fff':(won?'#e3ff00':'#ff3b6b');card.appendChild(tt);
-      const row=document.createElement('div');row.className='v18-score-row';
-      row.innerHTML=`<div class="v18-team-box"><div class="label">TEAM A</div><div class="pct">${a}%</div></div><div class="v18-team-box"><div class="label">TEAM B</div><div class="pct">${b}%</div></div>`;card.appendChild(row);
-      const stats=document.createElement('div');stats.className='v18-result-stats';
-      stats.innerHTML=`${kills} K / ${deaths} D　｜　未塗り ${neutral}%<br>勝利チーム：${winner}`;card.appendChild(stats);
-      const note=document.createElement('div');note.className='v18-result-note';note.textContent='塗った面積 + 生存状況を確認して、次のバトルへ。';card.appendChild(note);
-      const btn=document.getElementById('btn-result-ok'); if(btn){ card.appendChild(btn); }
-      screen.replaceChildren(card);
-      screen.style.display='flex';
-    };
-  }
-
-  // Online ready-state UI and socket message side-listener.
-  let onlineJoined=false,onlineReady=false,readyListenerInstalled=false;
-  function readyEl(){return document.getElementById('v18-online-ready');}
-  function setReadyUI(){
-    const e=readyEl(),b=document.getElementById('online-start');
-    if(e)e.textContent=onlineJoined?`準備状態：${onlineReady?'✅ READY':'⏳ 未準備'}`:'準備状態：未参加';
-    if(b){b.textContent=onlineJoined?(onlineReady?'準備を解除':'準備OK'):'参加して準備OK';b.classList.toggle('ready-on',onlineReady);}
-  }
-  let readySocket=null;
-  function attachReadyListener(){
-    const ws=onlineSocket;
-    if(!ws||!ws.addEventListener)return;
-    if(readyListenerInstalled && readySocket===ws)return;   // a new socket needs its own listener
-    readyListenerInstalled=true; readySocket=ws;
-    ws.addEventListener('message',(ev)=>{
-      let m;try{m=JSON.parse(ev.data)}catch{return;}
-      if(m.type==='queue'||m.type==='playerReady'||m.type==='lobbyState'){
-        if(m.selfReady!==undefined)onlineReady=!!m.selfReady;
-        const cnt=m.count??(m.players||[]).length;
-        const r=document.getElementById('online-room');
-        if(r)r.textContent=`参加者 ${cnt}/8人
-${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('\
-')||'まだ参加者はいません'}`;
-        setReadyUI();
-      }
-    });
-  }
-
-  // We intercept the existing button's capture phase so the old 8-player action cannot fire.
-  document.addEventListener('click',(e)=>{
-    const btn=e.target?.closest?.('#online-start');
-    if(!btn)return;
-    e.preventDefault();e.stopImmediatePropagation();
-    const go=()=>{
-      const ws=onlineSocket;
-      if(!ws||ws.readyState!==1){showToast('サーバー接続を待ってね');return;}
-      if(!onlineJoined){
-        ws.send(JSON.stringify({type:'joinQueue',name:'player',ready:true}));
-        onlineJoined=true;onlineReady=true;
-      }else{
-        onlineReady=!onlineReady;
-        ws.send(JSON.stringify({type:'ready',ready:onlineReady}));
-      }
-      setReadyUI();attachReadyListener();
-    };
-    go();
-  },true);
-
-  // Patch openOnlinePanel only once, without replacing its original socket handlers.
-  if(typeof window.openOnlinePanel==='function'){
-    const oldOpen=window.openOnlinePanel;
-    window.openOnlinePanel=function(){
-      onlineJoined=false;onlineReady=false;readyListenerInstalled=false;readySocket=null;setReadyUI();
-      oldOpen();
-      let tries=0;
-      const poll=()=>{
-        attachReadyListener();
-        if(!readyListenerInstalled && tries++<60)setTimeout(poll,50);
-      };
-      poll();
-    };
-  }
-  const cancel=document.getElementById('online-cancel');
-  if(cancel){cancel.addEventListener('click',()=>{onlineJoined=false;onlineReady=false;setReadyUI();},true);}
-
-  // Optional legacy direct-mode compatibility; the normal game stays in this one HTML file.
-  if(mode){
-    document.getElementById('news-screen')?.style && (document.getElementById('news-screen').style.display='none');
-    document.getElementById('lobby-ui')?.style && (document.getElementById('lobby-ui').style.display='none');
-    const boot=()=>{
-      const api=window.__V15;
-      if(!api?.launchRange){setTimeout(boot,50);return;}
-      api.launchRange();
-      if(mode==='cpu'){setTimeout(()=>{ if(typeof startBattleFromRange==='function') startBattleFromRange(); },160);}
-      if(mode==='online'){setTimeout(()=>{ if(typeof window.openOnlinePanel==='function') window.openOnlinePanel(); },220);}
-    };
-    setTimeout(boot,80);
-  }
-
-  // Reset per-battle counters on a fresh battle.
-  const oldBattle=window.startBattleFromRange;
-  if(typeof oldBattle==='function'){
-    window.startBattleFromRange=function(){
-      if(currentPhase!==1.5) return;
-      if(playerFighter){playerFighter.kills=0;playerFighter.deaths=0;playerFighter.specialGauge=0;}
-      if(typeof resetBattleField==='function') resetBattleField();   // start each match on a clean, un-inked stage
-      oldBattle();
-      document.getElementById('result-screen')?.classList.remove('v18-result');
-    };
-  }
-
-  // (The result button's own handler already calls startRangePhase(), which now means "go back to town".)
-
-})();
-</script><script>
 /* =====================================================================
    FINAL v13 STAGE GIMMICK PATCH
    - 段差を減らして長いスロープ中心の立体ステージ
@@ -4921,13 +4768,13 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     }
   };
 
-  window.__V13={slopeRegions,jumpPads,launchers,movingPlatforms,spongeBlocks,tryGimmickLaunch};
+  window.__V13={slopeRegions,jumpPads,launchers,movingPlatforms,spongeBlocks};
 })();
 </script>
 
 <script>
 /* =====================================================================
-   v17 ORIGINAL 3D LOBBY
+   v15 ORIGINAL 3D LOBBY
    - Blender等の外部3Dモデルを一切使わず、Three.jsプリミティブだけで街を生成
    - 中央広場 / 商店街 / 高層ビル / 路地 / 高架 / 看板 / NPC / 施設入口
    - ロビーは歩き回れる専用モード。施設から試し撃ち・CPU・オンライン・カスタムへ移動
@@ -5074,11 +4921,7 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
   }
   function npc(x,z,col,phase){
     const g=new THREE.Group();
-    // (THREE.CapsuleGeometry only exists from r139; the game loads r128 -> build the capsule from primitives)
-    const body=new THREE.Mesh(cylGeo(.5,1.05,10),mat(col));body.position.y=1.1;g.add(body);
-    const capG=new THREE.SphereGeometry(.5,10,6);
-    const capB=new THREE.Mesh(capG,mat(col));capB.position.y=.58;g.add(capB);
-    const capT=new THREE.Mesh(capG,mat(col));capT.position.y=1.62;g.add(capT);
+    const body=new THREE.Mesh(new THREE.CapsuleGeometry(.5,1.05,4,8),mat(col));body.position.y=1.1;g.add(body);
     const head=new THREE.Mesh(new THREE.SphereGeometry(.52,8,6),mat(0xe6c8ba));head.position.y=2.35;g.add(head);
     const bag=new THREE.Mesh(new THREE.BoxGeometry(.7,.55,.28),mat(accent[(Math.abs(x+z)|0)%accent.length]));bag.position.set(0,1.25,-.52);g.add(bag);
     g.position.set(x,0,z);add(g);
@@ -5096,11 +4939,6 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     if(lobby.group) return;
     ensureWorld();
     lobby.group=new THREE.Group();scene.add(lobby.group);
-    try{ buildLobbyContents(); }
-    catch(err){ console.error('Town decoration failed (continuing without it):',err); }
-    lobby.group.visible=false;
-  }
-  function buildLobbyContents(){
     // city ground + main streets
     box(0,-.18,0,116,.36,88,0x30313e);
     box(0,.02,0,16,.05,88,0x202331); // central avenue
@@ -5144,21 +4982,10 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     poi(22,-13,'cpu','CPU対戦');
     poi(-22,14,'custom','カスタマイズ');
     poi(22,14,'online','オンライン');
-    // Large, simple overhead signs: buildings stay in the same places, navigation gets obvious.
-    function lobbyBigSign(x,z,text,fg){
-      const c=document.createElement('canvas');c.width=512;c.height=112;const ctx=c.getContext('2d');
-      ctx.fillStyle='#11131c';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#ffffff';ctx.lineWidth=7;ctx.strokeRect(4,4,c.width-8,c.height-8);
-      ctx.font='900 48px Arial Black,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=hexToCss(fg);ctx.fillText(text,c.width/2,c.height/2);
-      const tex=new THREE.CanvasTexture(c);const m=new THREE.Mesh(new THREE.PlaneGeometry(8,1.75),new THREE.MeshBasicMaterial({map:tex,transparent:true}));m.position.set(x,5.2,z);m.rotation.y=Math.PI;lobby.group.add(m);lobby.props.push(m);
-    }
-    lobbyBigSign(-22,-18,'01  TEST / 試し撃ち',0xe3ff00);
-    lobbyBigSign(22,-18,'02  CPU BATTLE',0xff0055);
-    lobbyBigSign(-22,18,'03  CUSTOMIZE',0x00d4ff);
-    lobbyBigSign(22,18,'04  ONLINE 8P',0x9900ff);
-    lobbyBigSign(0,30,'CENTRAL PLAZA',0xe3ff00);
     // NPC crowd
     const npcColors=[0xe3ff00,0xff0055,0x00d4ff,0x9900ff,0x75f0a8,0xffa63d];
-    [[-7,-5],[7,-5],[-10,17],[10,17],[-30,4],[30,-4],[-36,12],[36,12],[0,19],[0,-19]].forEach((p,i)=>{ try{ npc(p[0],p[1],npcColors[i%npcColors.length],i*.7); }catch(err){ console.warn('npc failed',err); } });
+    [[-7,-5],[7,-5],[-10,17],[10,17],[-30,4],[30,-4],[-36,12],[36,12],[0,19],[0,-19]].forEach((p,i)=>npc(p[0],p[1],npcColors[i%npcColors.length],i*.7));
+    lobby.group.visible=false;
   }
   function ensureLobbyPlayer(){
     if(lobby.player) return lobby.player;
@@ -5167,8 +4994,8 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
       fighters=[playerFighter];
     }
     lobby.player=playerFighter;
-    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;
-    lobby.player.human.visible=true;if(lobby.player.squid&&lobby.player.squid.visible!==undefined)lobby.player.squid.visible=false;
+    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;lobby.player.squid=false;
+    lobby.player.human.visible=true;lobby.player.squid.visible=false;
     return lobby.player;
   }
   function lobbyBlocked(x,z){
@@ -5217,151 +5044,20 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
       prompt.textContent='街を歩いて施設へ　WASD / 左スティック：移動　マウス：視点　[E]：近くの施設';
     }
   }
-  let facilityTransitionBusy=false;
-
-  // v20: robust in-page facility transition. Never reloads the document.
-  function directPracticeInit(){
-    // Make all non-battle layers disappear first.
-    const ids=['loading-screen','news-screen','customize-screen','lobby-ui','result-screen','online-panel'];
-    ids.forEach(id=>{const el=document.getElementById(id); if(el){el.style.display='none'; el.style.opacity='0';}});
-    const trans=document.getElementById('facility-transition');
-    if(trans){trans.classList.remove('active');trans.style.display='none';}
-
-    ensureWorld();
-    if(!stageBuilt) buildStage();
-
-    teamAHex = inkColorPalette[playerConfig.color];
-    teamBHex = (playerConfig.color===1) ? 0x00e5ff : 0xff2255;
-
-    // Reset battle objects from a previous failed entry.
-    bullets.forEach(b=>b.mesh && scene.remove(b.mesh)); bullets=[];
-    subsList.forEach(b=>b.mesh && scene.remove(b.mesh)); subsList=[];
-    particles.forEach(b=>b.mesh && scene.remove(b.mesh)); particles=[];
-    if(!playerFighter){
-      playerFighter=createFighter({id:'player',isPlayer:true,team:'A',x:spawnPointA.x,z:spawnPointA.z-4,cfg:Object.assign({},playerConfig)});
-    } else {
-      playerFighter.pos.set(spawnPointA.x,0,spawnPointA.z-4);
-      playerFighter.hp=playerFighter.maxHp;
-      playerFighter.alive=true;
-      playerFighter.root.visible=true;
-      playerFighter.weapon=weaponList[playerConfig.weapon] || weaponList[0];
-      try{ rebuildFighterModel(playerFighter,playerConfig); }catch(e){}
-    }
-    fighters=[playerFighter];
-    playerVelocity.set(0,0,0); canJump=true; yaw=0; pitch=-0.2;
-
-    document.getElementById('battle-ui').style.display='block';
-    document.getElementById('battle-ui').style.opacity='1';
-    document.getElementById('range-hint').style.display='block';
-    document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズ　[O] CPU対戦　[P] オンライン';
-    document.getElementById('instructions').innerHTML='【PC】WASD:移動 / マウス:視点 / 左クリック:撃つ / Shift:イカ / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ/iPad】左側スワイプ:移動 / 右側スワイプ:視点 / ボタンで操作';
-    document.getElementById('respawn-overlay').style.display='none';
-    document.getElementById('result-screen').style.display='none';
-    document.getElementById('top-battle-status').style.display='none';
-    document.getElementById('alive-count').style.display='none';
-    currentPhase=1.5;
-    battleActive=false;
-    prevTime=performance.now();
-    try{ window.__V10?.showMaps?.(false); }catch(e){}
-    try{ window.__V10?.requestLock?.(); }catch(e){}
-    animate3D();
-  }
-
-  function enterFacility(key){
-    if(facilityTransitionBusy) return;
-    facilityTransitionBusy=true;
-    const labels={range:'TRY SHOOTING',cpu:'CPU BATTLE',online:'ONLINE',custom:'CUSTOMIZE'};
-    const ov=document.getElementById('facility-transition');
-    const text=ov?.querySelector('.ft-text');
-    if(text) text.innerHTML=`LOADING<br><span>${labels[key]||String(key).toUpperCase()}</span>`;
-    document.body.classList.remove('facility-shake');
-    void document.body.offsetWidth;
-    document.body.classList.add('facility-shake');
-    if(ov){
-      ov.style.display='block';
-      ov.classList.remove('active');
-      void ov.offsetWidth;
-      ov.classList.add('active');
-    }
-
-    // Stop the lobby immediately. Do NOT call any legacy page-navigation or
-    // startRangePhase wrappers here. Everything stays inside this one HTML file.
-    leaveLobby();
-
-    setTimeout(()=>{
-      try{
-        // All facility entries use the same reliable in-page battle initializer.
-        // This avoids the old chain of wrapped startRangePhase functions.
-        if(key!=='custom') setBattleStageVisible(true);
-        if(key==='range'){
-          // Use the original, already-proven same-page practice initializer.
-          // Do NOT change location, do NOT reload, and do NOT call the lobby wrapper.
-          if(typeof launchRange==='function') launchRange();
-          else throw new Error('Practice launcher is missing');
-        }else if(key==='cpu'){
-          if(typeof launchRange==='function') launchRange();
-          else throw new Error('Practice launcher is missing');
-          setTimeout(()=>{
-            try{
-              if(currentPhase===1.5) startBattleFromRange();
-            }catch(err){ console.error('CPU start failed',err); }
-          },120);
-        }else if(key==='online'){
-          if(typeof launchRange==='function') launchRange();
-          else throw new Error('Practice launcher is missing');
-          setTimeout(()=>{
-            try{
-              if(currentPhase!==1.5) return;   // the player already left again
-              if(typeof window.openOnlinePanel==='function') window.openOnlinePanel();
-              else {
-                const panel=document.getElementById('online-panel');
-                if(panel) panel.style.display='flex';
-              }
-            }catch(err){ console.error('Online panel failed',err); }
-          },120);
-        }else if(key==='custom'){
-          // Re-open customization in the same document without navigation.
-          try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
-          document.documentElement.classList.remove('battle-cursor-hidden');
-          document.querySelectorAll('#loading-screen,#news-screen,#lobby-ui,#battle-ui,#result-screen,#online-panel').forEach(el=>{
-            if(el){el.style.display='none';el.style.opacity='0';}
-          });
-          const cs=document.getElementById('customize-screen');
-          if(cs){cs.style.display='block';cs.style.opacity='1';}
-          currentPhase=0.5;
-          setupCustomizeUI();
-          initCustomPreview();
-        }
-      }catch(err){
-        console.error('Facility transition failed',err);
-        // Last-resort in-page fallback (a plain practice start). Never reload the document.
-        try{
-          directPracticeInit();
-        }catch(retryErr){
-          console.error('In-page practice retry failed',retryErr);
-          const hint=document.getElementById('range-hint');
-          if(hint){hint.style.display='block';hint.textContent='試し撃ちを起動中…';}
-        }
-      }
-    },620);
-
-    setTimeout(()=>document.body.classList.remove('facility-shake'),900);
-    setTimeout(()=>{
-      if(ov){ov.classList.remove('active');ov.style.display='none';}
-      facilityTransitionBusy=false;
-      // Safety net: if the practice launcher somehow left us in the lobby/loading state,
-      // start the original in-page practice initializer immediately.
-      if(key==='range' && currentPhase!==1.5){
-        try{ if(typeof launchRange==='function') launchRange(); }catch(e){ console.error('Practice safety net failed',e); }
-      }
-    },1300);
-  }
-
   function action(key){
-    if(currentPhase!==1.25 || facilityTransitionBusy)return;
-    enterFacility(key);
+    if(currentPhase!==1.25)return;
+    const p=lobby.player; if(!p)return;
+    let target=lobby.pois.find(v=>v.key===key);
+    if(!target) return;
+    if(Math.hypot(p.pos.x-target.x,p.pos.z-target.z)>6.8){
+      showToast('その施設まで歩いて近づいてね');return;
+    }
+    leaveLobby();
+    if(key==='range'){ setTimeout(()=>{launchRange();},0); }
+    else if(key==='cpu'){ setTimeout(()=>{launchRange();setTimeout(()=>startBattleFromRange(),80);},0); }
+    else if(key==='online'){ setTimeout(()=>{launchRange();setTimeout(()=>openOnlinePanel(),80);},0); }
+    else if(key==='custom'){ setTimeout(()=>{goToCustomizeFromGame();},0); }
   }
-
   function nearestAction(){
     let best=null,bd=6.8;
     if(!lobby.player)return;
@@ -5369,47 +5065,17 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     if(best) action(best.key); else showToast('近くに入れる施設がないよ');
   }
   function leaveLobby(){
-    // phase 1.2 = "in transition". (It used to be 1 = news screen, so any click / Space press during the
-    //  yellow-wave transition restarted the news finish routine and dragged the player back into the town.)
-    lobby.active=false;currentPhase=1.2;
+    lobby.active=false;currentPhase=1;
     const ui=document.getElementById('lobby-ui');if(ui)ui.style.display='none';
     if(lobby.group)lobby.group.visible=false;
     if(lobby.frame)cancelAnimationFrame(lobby.frame),lobby.frame=0;
     try{ if(document.pointerLockElement===renderer.domElement)document.exitPointerLock(); }catch(e){}
     lockRequested=false;
   }
-  function setBattleStageVisible(v){
-    try{ if(stageGroup) stageGroup.visible=!!v; (decals||[]).forEach(d=>{ if(d&&d.mesh) d.mesh.visible=!!v; }); }catch(e){}
-  }
-  window.setBattleStageVisible=setBattleStageVisible;
-  function cleanBattleLeftovers(){
-    try{
-      (bullets||[]).forEach(b=>b&&b.mesh&&scene.remove(b.mesh)); bullets=[];
-      (subsList||[]).forEach(b=>b&&b.mesh&&scene.remove(b.mesh)); subsList=[];
-      (particles||[]).forEach(b=>b&&b.mesh&&scene.remove(b.mesh)); particles=[];
-    }catch(e){}
-    battleActive=false; isShooting=false;
-    try{ if(window.__V11&&window.__V11.cancel) window.__V11.cancel(); }catch(e){}
-    keys.w=keys.a=keys.s=keys.d=keys.space=keys.shift=false;
-    ['respawn-overlay','death-location-marker','special-ready','fullmap','minimap'].forEach(id=>{const el=document.getElementById(id); if(el)el.style.display='none';});
-    const tb=document.getElementById('top-battle-status'); if(tb)tb.style.display='none';
-    const cg=document.getElementById('charge-gauge'); if(cg)cg.style.display='none';
-    // an online match that is still open must not keep running behind the town
-    try{ if(onlineSocket && !document.getElementById('online-panel').style.display.match(/flex|block/)){ onlineActive=false; onlineSocket.onclose=null; onlineSocket.close(); onlineSocket=null; } }catch(e){}
-    onlineActive=false;
-    // shooting can leave the pointer locked from the range
-    try{ if(document.pointerLockElement && document.pointerLockElement!==(renderer&&renderer.domElement)) document.exitPointerLock(); }catch(e){}
-  }
   function startLobbyPhase(){
-    if(lobby.frame){ cancelAnimationFrame(lobby.frame); lobby.frame=0; }
     buildLobby();ensureLobbyPlayer();
-    cleanBattleLeftovers();
-    setBattleStageVisible(false);
-    document.getElementById('news-screen').style.display='none';
-    document.getElementById('loading-screen').style.display='none';
-    const ftr=document.getElementById('facility-transition'); if(ftr){ftr.classList.remove('active');ftr.style.display='none';}
     currentPhase=1.25;lobby.active=true;lobby.group.visible=true;
-    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.human.visible=true;if(lobby.player.squid)lobby.player.squid.visible=false;
+    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.human.visible=true;lobby.player.squid.visible=false;
     lobbyYaw=0.25;lobbyPitch=-0.12;
     document.getElementById('battle-ui').style.display='none';
     document.getElementById('range-hint').style.display='none';
@@ -5487,20 +5153,6 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     if(currentPhase===1.25&&e.button===0){ requestLobbyLock(); }
   },true);
 
-  // Touch: right-half swipe turns the town camera (left half = move, handled by the shared touch controls).
-  (function(){
-    let id=null,lx=0,ly=0,bound=false;
-    function bind(){
-      if(bound||!renderer||!renderer.domElement)return; bound=true;
-      const dom=renderer.domElement;
-      dom.addEventListener('touchstart',e=>{ if(currentPhase!==1.25)return; for(const t of e.changedTouches){ if(id===null&&t.clientX>=innerWidth/2){id=t.identifier;lx=t.clientX;ly=t.clientY;} } },{passive:true});
-      dom.addEventListener('touchmove',e=>{ if(currentPhase!==1.25)return; for(const t of e.changedTouches){ if(t.identifier===id){ lobbyYaw-=(t.clientX-lx)*.0075; lobbyPitch-=(t.clientY-ly)*.004; lobbyPitch=Math.max(-.55,Math.min(.18,lobbyPitch)); lx=t.clientX;ly=t.clientY; } } },{passive:true});
-      const end=e=>{ for(const t of e.changedTouches){ if(t.identifier===id) id=null; } };
-      dom.addEventListener('touchend',end,{passive:true}); dom.addEventListener('touchcancel',end,{passive:true});
-    }
-    const t=setInterval(()=>{ if(renderer&&renderer.domElement){ bind(); clearInterval(t); } },200);
-  })();
-
   // Buttons are touch-friendly and do not require keyboard.
   document.querySelectorAll('#lobby-ui .lobby-btn').forEach(btn=>{
     btn.addEventListener('pointerdown',(e)=>{e.preventDefault();e.stopPropagation();action(btn.dataset.lobbyAction);},true);
@@ -5513,224 +5165,6 @@ ${(m.players||[]).map(p=>`${p.team||'?'} ${p.id} ${p.ready?'✅':'○'}`).join('
     oldGoToCustomize();
   };
 
-  window.__V15={startLobbyPhase,leaveLobby,action,launchRange}; window.__V17={version:"19"};
+  window.__V15={startLobbyPhase,leaveLobby,action};
 })();
 </script>
-
-<!-- v17 final gameplay fixes -->
-<script>
-(function(){
-  // Fresh start on every reload: do not persist game progress/equipment.
-  try{ localStorage.removeItem('splatoon_like_player_config'); }catch(e){}
-
-  // Raise visibility/coverage of normal shots: paint several points spread across each flight path.
-  const baseUpdateBullets=updateBullets;
-  updateBullets=function(delta){
-    baseUpdateBullets(delta);
-    for(const b of bullets){
-      if(!b?.mesh?.position)continue;
-      const cur=b.mesh.position;
-      if(!b._v17Prev)b._v17Prev=cur.clone();
-      const p=b._v17Prev, dist=Math.hypot(cur.x-p.x,cur.z-p.z);
-      if(dist>.62){
-        const col=b.team==='A'?teamAHex:teamBHex;
-        const count=6;
-        // Every other segment receives a stamp: about 3/6 segments.
-        for(let i=1;i<=count;i+=2){const t=i/count;paintGround(p.x+(cur.x-p.x)*t,p.z+(cur.z-p.z)*t,(b.paintRadius||1.2)*.70,col,{trail:true,noNetwork:true});}
-        b._v17Prev=cur.clone();
-      }
-    }
-  };
-
-  // Keep slopes/old gimmicks, but give the player a single predictable movement path.
-  const __oldV17Move=updatePlayerMovement;
-  updatePlayerMovement=function(delta){
-    const f=playerFighter;if(!f||!f.alive)return;
-    setupFighterEconomy(f);
-    const now=performance.now();
-    const isSquid=!!keys.shift; // Shift = squid anywhere, just like the dedicated mobile button.
-    f.squid_mode=isSquid;
-    const ownInk=onFighterInk(f);
-    regenPlayer(f,delta,isSquid);
-    const gp=f.gearProfile||gearProfile(f);
-    let speed=isSquid?(ownInk?1.92:.70):1;
-    if(!isSquid&&isShooting&&f.weapon.category!=='maneuver')speed*=.64;
-    if(f.weapon.category==='maneuver'&&isShooting)speed*=1.10;
-    speed*=gp.move;if(isSquid)speed*=gp.swim;if(now<f.speedBoostUntil)speed*=1.5;
-    const dir=new THREE.Vector3((keys.d?1:0)-(keys.a?1:0),0,(keys.s?1:0)-(keys.w?1:0));
-    const moving=dir.lengthSq()>0;
-    if(moving){dir.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);playerVelocity.x=dir.x*16*speed;playerVelocity.z=dir.z*16*speed;}else{playerVelocity.x*=.80;playerVelocity.z*=.80;}
-    f._moving=moving;
-
-    if(!isSquid){
-      f.human.rotation.y=yaw+Math.PI;
-      if(f.weapon.category==='roller'&&isShooting)doRollerAction(f,now,moving);
-      else if(f.weapon.category==='wiper'&&isShooting){
-        if(!f.wiperChargeStart)f.wiperChargeStart=now;
-        const frac=Math.min(1,(now-f.wiperChargeStart)/f.weapon.chargeTime),g=document.getElementById('charge-gauge');g.style.display='block';g.style.setProperty('--pct',Math.round(frac*100));if(frac>=1){doWiperSlash(f,1);f.wiperChargeStart=now;}
-      }else if(f.weapon.category==='charger'){
-        const g=document.getElementById('charge-gauge');if(f.isCharging){const frac=Math.min(1,(now-f.chargeStart)/f.weapon.chargeTime);g.style.display='block';g.style.setProperty('--pct',Math.round(frac*100));}
-      }else if(isShooting){const d=new THREE.Vector3();camera.getWorldDirection(d);tryShoot(f,d,now);}
-    }else{f.wiperChargeStart=0;f.isCharging=false;document.getElementById('charge-gauge').style.display='none';}
-
-    const nx=f.pos.x+playerVelocity.x*delta,nz=f.pos.z+playerVelocity.z*delta;
-    const wall=getBlockingWall(nx,nz,f.pos.y);
-    if(!wall){f.pos.x=nx;f.pos.z=nz;}else{if(!getBlockingWall(nx,f.pos.z,f.pos.y))f.pos.x=nx;if(!getBlockingWall(f.pos.x,nz,f.pos.y))f.pos.z=nz;}
-
-    if(keys.space&&canJump){playerVelocity.y=10.5;canJump=false;try{sfx('jump')}catch(e){}}
-    playerVelocity.y-=30*delta;f.pos.y+=playerVelocity.y*delta;
-    const floor=getSupportHeight(f.pos.x,f.pos.z,f.pos.y),rest=isSquid&&ownInk?floor-.35:floor;
-    if(f.pos.y<=rest){f.pos.y=rest;playerVelocity.y=0;canJump=true;}
-
-    const bd=window.__BATTLE_BOUNDS||{halfW:28,halfD:70,water:4};
-    // Falling/out-of-bounds means water death; do not clamp at the edge.
-    if(f.pos.y<-2.6||Math.abs(f.pos.x)>bd.halfW+bd.water||Math.abs(f.pos.z)>bd.halfD+bd.water){killFighter(f);return;}
-    updateFighterAnimation(f,moving,isSquid);f.root.rotation.y=isSquid?yaw:f.human.rotation.y;
-  };
-
-  // Walk motion: alternating limbs + small torso bob, and squid tentacle sway.
-  const __oldAnim=updateFighterAnimation;
-  updateFighterAnimation=function(f,moving,isSquid){
-    __oldAnim(f,moving,isSquid);
-    if(!f?.human||!f.human.visible)return;
-    const k=moving?Math.sin(performance.now()*.015):0;
-    f.human.position.y=moving?Math.abs(k)*.045:0;
-    f.legL.rotation.x=-k*.72;f.legR.rotation.x=k*.72;f.armL.rotation.x=k*.34;f.armR.rotation.x=-k*.30;
-    if(!moving)f.human.rotation.z=0;else f.human.rotation.z=-k*.018;
-  };
-
-  // Paint the top face of raised platforms using the same global paint texture.
-  const baseBuildStage=buildStage;
-  buildStage=function(){
-    baseBuildStage();
-    if(window.__V17PaintCaps){window.__V17PaintCaps.forEach(m=>stageGroup?.remove(m));}
-    window.__V17PaintCaps=[];
-    for(const b of collidableBlocks){
-      if(b.type==='ramp'||b.h<.25)continue;
-      const cap=new THREE.Mesh(new THREE.PlaneGeometry(b.w,b.d,1,1),new THREE.MeshBasicMaterial({map:paintTexture,transparent:true,opacity:.98,depthWrite:false}));
-      cap.rotation.x=-Math.PI/2;cap.position.set((b.minX+b.maxX)/2,b.maxY+.012,(b.minZ+b.maxZ)/2);stageGroup.add(cap);window.__V17PaintCaps.push(cap);
-    }
-  };
-
-  // Mobile squid button fix.
-  const btn=document.getElementById('btn-squid');
-  if(btn){const down=e=>{keys.shift=true;e.preventDefault();};const up=e=>{keys.shift=false;e.preventDefault();};btn.addEventListener('pointerdown',down,true);btn.addEventListener('pointerup',up,true);btn.addEventListener('pointercancel',up,true);btn.addEventListener('pointerleave',up,true);}
-})();
-</script>
-
-<script>
-// v20 boot guard: if a previous patch ever leaves the page in a transition overlay, recover to lobby.
-window.addEventListener('load',()=>{
-  setTimeout(()=>{
-    const ov=document.getElementById('facility-transition');
-    if(ov && ov.classList.contains('active') && typeof currentPhase!=="undefined" && currentPhase===1.25){
-      ov.classList.remove('active'); ov.style.display='none';
-    }
-  },1700);
-});
-</script>
-
-<script>
-/* v24 compatibility: keep the old saveConfig API without persisting state. */
-function saveConfig(){ return false; }
-</script>
-
-<script>
-/* v24 ONE-FILE INTEGRITY GUARD
-   The complete game lives in this one index.html.  No town.html/battle.html navigation is required.
-   A reload intentionally resets the game state.
-*/
-window.__V24_ONE_FILE__ = true;
-window.addEventListener('load',()=>{
-  setTimeout(()=>{
-    try{
-      const loading=document.getElementById('loading-screen');
-      const lt=document.getElementById('loading-text');
-      if(loading && getComputedStyle(loading).display!=='none' && typeof isReady!=='undefined' && isReady){
-        if(lt){lt.textContent='TAP or PRESS SPACE';lt.style.color='#ff0055';lt.style.webkitTextStroke='2px #ffffff';}
-        loading.style.opacity='1';
-      }
-    }catch(e){}
-  },2300);
-});
-</script>
-
-
-<script>
-/* =====================================================================
-   v25 STABILITY LAYER  (loaded last, wraps everything above)
-   - one single render loop (no doubled speed if the range is entered twice)
-   - a frame that throws no longer freezes the picture (the scene is still drawn)
-   - the town hides the battle stage, the battle shows it again
-   - clean paint / decals / sponges at the start of every match
-   - v17's "single movement path" dropped the super-jump, jump-pad and spinner hooks -> re-attached here
-   - keys can no longer get stuck when the tab loses focus
-   ===================================================================== */
-(function(){
-  /* ---- single render loop + error boundary ---- */
-  const _anim = animate3D;
-  let lastTs = -1, errCount = 0;
-  animate3D = function(ts){
-    if(currentPhase!==1.5 && currentPhase!==2) return;
-    if(typeof ts==='number'){ if(ts===lastTs) return; lastTs=ts; }   // a 2nd loop in the same frame dies here
-    if(stageGroup && !stageGroup.visible && window.setBattleStageVisible) window.setBattleStageVisible(true);
-    try{
-      _anim();
-    }catch(err){
-      if(errCount++<5) console.error('frame error (game keeps running):',err);
-      // The original loop re-schedules itself first, so only make sure something is drawn.
-      try{ if(renderer&&scene&&camera) renderer.render(scene,camera); }catch(e){}
-    }
-  };
-
-  /* ---- fresh battlefield ---- */
-  window.resetBattleField = function(){
-    try{
-      paintCtx.save(); paintCtx.setTransform(1,0,0,1,0,0);
-      paintCtx.fillStyle='#555566'; paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
-      paintCtx.restore(); paintTexture.needsUpdate=true;
-      (decals||[]).forEach(d=>{ if(d&&d.mesh) scene.remove(d.mesh); }); decals=[];
-      (collidableBlocks||[]).forEach(b=>{ b.paintLevel=0; b.paintTeam=null; });
-      const g=window.__V13; if(g&&g.spongeBlocks) g.spongeBlocks.forEach(sp=>{ sp.team=null; sp.target=.7; sp.height=.7; });
-      const ta=document.getElementById('turf-a'), tb=document.getElementById('turf-b');
-      if(ta) ta.style.width='50%'; if(tb) tb.style.width='50%';
-    }catch(e){ console.warn('resetBattleField',e); }
-  };
-
-  /* ---- online damage: hits on remote players are reported to the server, the victim applies them ---- */
-  const _applyDamage = applyDamage;
-  applyDamage = function(target, dmg, from){
-    if(onlineActive && target && target.remote){
-      if(playerFighter && target.alive && target.team!==playerFighter.team && onlineSocket && onlineSocket.readyState===1){
-        try{ onlineSocket.send(JSON.stringify({type:'hit',target:target.id,damage:Math.round(dmg)})); }catch(e){}
-      }
-      return;   // the remote player's own client decides its HP
-    }
-    _applyDamage(target, dmg, from);
-  };
-
-  /* ---- movement: re-attach the hooks that v17's replacement dropped ---- */
-  const _v17Move = updatePlayerMovement;
-  updatePlayerMovement = function(delta){
-    const sj = window.__V11;
-    if(sj && sj.getJumpState && sj.getJumpState()){ sj.update(performance.now()); return; }   // super jump in progress
-    _v17Move(delta);
-    const f = playerFighter;
-    if(!f || !f.alive) return;
-    const g = window.__V13;
-    if(g && g.tryGimmickLaunch) g.tryGimmickLaunch(f, performance.now());                       // jump pads / launchers
-    if(f.weapon && f.weapon.category==='spinner' && !isShooting){                                // spinner: release cancels wind-up
-      if(f.spinnerCharging){ f.spinnerCharging=false; f.spinnerChargeStart=0; const cg=document.getElementById('charge-gauge'); if(cg)cg.style.display='none'; }
-      f.spinnerFiring=false;
-    }
-  };
-
-  /* ---- input safety ---- */
-  function releaseKeys(){ keys.w=keys.a=keys.s=keys.d=keys.space=keys.shift=false; isShooting=false; }
-  window.addEventListener('blur', releaseKeys);
-  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) releaseKeys(); });
-})();
-</script>
-
-</body>
-</html>
