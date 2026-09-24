@@ -2020,8 +2020,16 @@ function showToast(msg){
 
 window.addEventListener('keydown',(e)=>{
   if(e.code==='KeyE'){
-    if(currentPhase===1.5 || currentPhase===2 || currentPhase===3){
-      goToCustomizeFromGame();
+    if(currentPhase===1.5){
+      e.preventDefault();
+      e.stopPropagation();
+      returnToLobbyFromRange();
+      return;
+    }
+    if(currentPhase===2){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
   }
   if(e.code==='KeyP'){
@@ -2208,7 +2216,7 @@ function startBattleFromRange(){
   updateTeamLifeStrip();
   document.getElementById('range-hint').style.display='none';
   document.getElementById('instructions').innerHTML =
-    '4vs4 ガチマッチ形式（陣取り）開始！ [E]でいつでも中断してカスタマイズに戻れます<br>チャージャーは長押しチャージ、ローラーは近接スイング、バケツは山なり攻撃です';
+    '4vs4 ガチマッチ形式（陣取り）開始！ 対戦中は[E]で戻れません<br>チャージャーは長押しチャージ、ローラーは近接スイング、バケツは山なり攻撃です';
   showToast('4vs4 CPU対戦スタート！');
 }
 
@@ -4173,6 +4181,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
    ===================================================================== */
 (function(){
   const L=window;
+  // Practice -> lobby return point.
+  let rangeReturnLobby={x:0,z:-18,yaw:0.25,pitch:-0.12,valid:false};
   const lobby={group:null, buildings:[], obstacles:[], npcs:[], props:[], pois:[], active:false, frame:0, last:performance.now(), player:null};
   const CITY={halfX:58,halfZ:44, streetW:10};
   const geoCache=new Map();
@@ -4460,6 +4470,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(Math.hypot(p.pos.x-target.x,p.pos.z-target.z)>6.8){
       showToast('その施設まで歩いて近づいてね');return;
     }
+    if(key!=='custom'){
+      rangeReturnLobby={x:p.pos.x,z:p.pos.z,yaw:lobbyYaw,pitch:lobbyPitch,valid:true};
+    }
     leaveLobby();
     if(key==='range'){ enterRangeSafely(); }
     else if(key==='cpu'){ enterRangeSafely(); if(currentPhase===1.5) startBattleFromRange(); }
@@ -4487,6 +4500,48 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     try{ if(renderer && document.pointerLockElement===renderer.domElement)document.exitPointerLock(); }catch(e){}
     lockRequested=false;
   }
+  function returnToLobbyFromRange(){
+    if(currentPhase!==1.5)return;
+    battleActive=false;
+    battleTimer=0;
+    fighters=fighters.filter(f=>{
+      if(f.isPlayer)return true;
+      try{scene.remove(f.root);}catch(e){}
+      return false;
+    });
+    ['battle-ui','range-hint','result-screen','online-panel'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.style.display='none';
+    });
+    buildLobby();
+    ensureLobbyPlayer();
+    lobby.active=true;
+    currentPhase=1.25;
+    lobby.group.visible=true;
+    if(rangeReturnLobby.valid){
+      lobby.player.pos.set(rangeReturnLobby.x,0,rangeReturnLobby.z);
+      lobbyYaw=rangeReturnLobby.yaw;
+      lobbyPitch=rangeReturnLobby.pitch;
+    }
+    lobby.player.root.visible=true;
+    lobby.player.human.visible=true;
+    lobby.player.squid.visible=false;
+    lobby.player.squid_mode=false;
+    lobby.player.squid=false;
+    lobby.player.alive=true;
+    lobby.player.hp=lobby.player.maxHp;
+    document.getElementById('customize-screen').style.display='none';
+    const ui=document.getElementById('lobby-ui');if(ui)ui.style.display='block';
+    updateLobbyUI();
+    moveLobbyCamera();
+    lobby.last=performance.now();
+    if(lobby.frame)cancelAnimationFrame(lobby.frame);
+    lobby.frame=requestAnimationFrame(lobbyLoop);
+    try{if(renderer&&document.pointerLockElement===renderer.domElement)document.exitPointerLock();}catch(e){}
+    lockRequested=false;
+    setTimeout(requestLobbyLock,80);
+    showToast('ロビーに戻りました');
+  }
+
   function startLobbyPhase(){
     buildLobby();ensureLobbyPlayer();
     currentPhase=1.25;lobby.active=true;lobby.group.visible=true;
@@ -4582,7 +4637,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     oldGoToCustomize();
   };
 
-  window.__V15={startLobbyPhase,leaveLobby,action};
+  window.__V15={startLobbyPhase,leaveLobby,action,returnToLobbyFromRange};
 })();
 </script>
 
