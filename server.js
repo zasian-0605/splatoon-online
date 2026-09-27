@@ -187,7 +187,14 @@ wss.on('connection', ws => {
       else send(ws, { type: 'accountBound', error: 'ログイン情報が無効です。' });
       return;
     }
-    if (m.type === 'joinQueue') { if (!player.accountName) { send(ws, { type: 'queueError', error: '先にログインしてください。' }); return; } const room = joinRoom(player); send(ws, { type: 'queue', count: room.players.size, roomId: room.id }); return; }
+    if (m.type === 'joinQueue') {
+      // Online battles can also use Render without a WEB ID.
+      // Registered users keep their account/rating; guests simply use their connection id.
+      if (!player.accountName) player.accountName = `Guest_${player.id}`;
+      const room = joinRoom(player);
+      send(ws, { type: 'queue', count: room.players.size, roomId: room.id });
+      return;
+    }
     if (m.type === 'ready') {
       const room = player.roomId ? rooms.get(player.roomId) : null; if (!room || room.started) return;
       player.ready = !!m.ready; player.weaponId = Number.isFinite(m.weaponId) ? m.weaponId : player.weaponId;
