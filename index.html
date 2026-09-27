@@ -8525,98 +8525,78 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 </script>
 
 <script>
-/* V63: reliable ink painting core
-   - one stable paint implementation at the end of the script stack
-   - continuous path painting for shooter/charger/roller/wiper
-   - explicit canvas state reset so later drawing code cannot break ink
-   - network-safe point/segment relay without remote echo
+/* V64: safe ink painting core
+   Keep each paint call O(1). The previous painter generated many canvas
+   paths/dabs per shot, which could stall the browser while holding fire.
 */
 (function(){
   'use strict';
 
-  const paintBase = paintGround;
-  let lastNetPaint = 0;
+  let lastNetPaint=0;
 
-  function paintGroundReliable(x,z,radius,colorHex,opts={}){
+  function paintGroundSafe(x,z,radius,colorHex,opts={}){
     const px=Number(x), pz=Number(z), rr=Number(radius), col=Number(colorHex);
     if(!Number.isFinite(px)||!Number.isFinite(pz)||!Number.isFinite(rr)||!Number.isFinite(col)) return;
-    const radiusSafe=Math.max(.25,Math.min(8,rr));
-    const c=Math.max(0,Math.min(0xffffff,Math.floor(col)));
+
+    const stageX=Number(STAGE_HALF_X)||30;
+    const stageZ=Number(STAGE_HALF_Z)||30;
+    const safeRadius=Math.max(.20,Math.min(5,rr));
+    const safeColor=Math.max(0,Math.min(0xffffff,Math.floor(col)));
     const a=worldToCanvas(px,pz);
-    const cr=Math.max(1,(radiusSafe/(STAGE_HALF_Z*2))*paintCanvas.height);
-    const to=opts.to;
-    const hasTo=to && Number.isFinite(Number(to.x)) && Number.isFinite(Number(to.z));
+    const cr=Math.max(1,(safeRadius/(stageZ*2))*paintCanvas.height);
+
+    let b=null;
+    if(opts && opts.to && Number.isFinite(Number(opts.to.x)) && Number.isFinite(Number(opts.to.z))){
+      b=worldToCanvas(Number(opts.to.x),Number(opts.to.z));
+    }
 
     paintCtx.save();
     paintCtx.globalAlpha=1;
     paintCtx.globalCompositeOperation='source-over';
-    paintCtx.fillStyle=hexToCss(c);
-    paintCtx.strokeStyle=hexToCss(c);
+    paintCtx.fillStyle=hexToCss(safeColor);
+    paintCtx.strokeStyle=hexToCss(safeColor);
     paintCtx.lineCap='round';
     paintCtx.lineJoin='round';
 
-    if(hasTo){
-      const b=worldToCanvas(Number(to.x),Number(to.z));
-      const dx=b.cx-a.cx,dy=b.cy-a.cy;
-      const dist=Math.hypot(dx,dy);
-      paintCtx.lineWidth=Math.max(2,cr*2.0);
+    if(b){
+      // One native canvas stroke = continuous ink from shooter to impact.
+      const maxX=paintCanvas.width*1.5, maxY=paintCanvas.height*1.5;
+      const ax=Math.max(-maxX,Math.min(maxX,a.cx));
+      const ay=Math.max(-maxY,Math.min(maxY,a.cy));
+      const bx=Math.max(-maxX,Math.min(maxX,b.cx));
+      const by=Math.max(-maxY,Math.min(maxY,b.cy));
+      paintCtx.lineWidth=Math.max(2,cr*2);
       paintCtx.beginPath();
-      paintCtx.moveTo(a.cx,a.cy);
-      paintCtx.lineTo(b.cx,b.cy);
+      paintCtx.moveTo(ax,ay);
+      paintCtx.lineTo(bx,by);
       paintCtx.stroke();
-
-      const steps=Math.max(1,Math.ceil(dist/Math.max(3,cr*.55)));
-      for(let i=0;i<=steps;i++){
-        const t=i/steps;
-        const cx=a.cx+dx*t,cy=a.cy+dy*t;
-        paintCtx.beginPath();
-        paintCtx.arc(cx,cy,cr*(.78+.10*((i*17)%7)/6),0,Math.PI*2);
-        paintCtx.fill();
-      }
     }else{
+      // Single round stamp for impacts / normal shots.
       paintCtx.beginPath();
       paintCtx.arc(a.cx,a.cy,cr,0,Math.PI*2);
       paintCtx.fill();
-
-      const blobs=Math.max(3,Math.min(8,Math.round(radiusSafe*1.5)));
-      for(let i=0;i<blobs;i++){
-        const ang=i*2.399963+(px*.017+pz*.013);
-        const dist=cr*(.22+.62*(i/(Math.max(1,blobs-1))));
-        paintCtx.beginPath();
-        paintCtx.arc(
-          a.cx+Math.cos(ang)*dist,
-          a.cy+Math.sin(ang)*dist,
-          cr*(.24+.08*(i%3)),
-          0,Math.PI*2
-        );
-        paintCtx.fill();
-      }
     }
     paintCtx.restore();
     paintTexture.needsUpdate=true;
 
-    if(onlineActive && onlineSocket && onlineSocket.readyState===1 && !opts.remote && !opts.noNetwork){
+    if(onlineActive && onlineSocket && onlineSocket.readyState===1 &&
+       !opts.remote && !opts.noNetwork){
       const now=performance.now();
-      if(now-lastNetPaint>75){
+      if(now-lastNetPaint>90){
         lastNetPaint=now;
         try{
-          const msg={
-            type:'paint',roomId:onlineRoomId,
-            x:px,z:pz,radius:radiusSafe,colorHex:c,mult:1
-          };
-          if(hasTo){msg.x2=Number(to.x);msg.z2=Number(to.z);}
+          const msg={type:'paint',roomId:onlineRoomId,x:px,z:pz,
+            radius:safeRadius,colorHex:safeColor,mult:1};
+          if(b){msg.x2=Number(opts.to.x);msg.z2=Number(opts.to.z);}
           onlineSocket.send(JSON.stringify(msg));
-        }catch{}
+        }catch(_){}
       }
     }
   }
 
-  window.paintGround=paintGroundReliable;
-  paintGround=paintGroundReliable;
-
-  /* Keep older references working: the original function is retained above,
-     while all later weapon code resolves the stable global paintGround. */
-  window.__PAINT_V63_BUILD='V63-RELIABLE-INK-2026-09-27';
+  window.paintGround=paintGroundSafe;
+  paintGround=paintGroundSafe;
+  window.__PAINT_V64_BUILD='V64-SAFE-INK-2026-09-27';
 })();
 </script>
 
