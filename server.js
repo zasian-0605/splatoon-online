@@ -123,7 +123,12 @@ function updateAccountResult(player, winnerTeam) {
 const server = http.createServer(async (req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (req.method === 'OPTIONS') {
-    return json(res, 204, {});
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    });
+    return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
     return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, time: new Date().toISOString() });
