@@ -316,7 +316,7 @@ wss.on('connection', ws => {
     lastStateAt: 0, lastStatePos: null, lastStateAlive: true,
     accountName: null, accountToken: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
-    lastCalloutAt: 0
+    lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0
   };
   sockets.set(ws, player);
   console.log(`[WS CONNECT] ${player.id} activeSockets=${sockets.size}`);
@@ -411,6 +411,26 @@ wss.on('connection', ws => {
         subType,
         weaponId
       }, player.id);
+      return;
+    }
+    if (m.type === 'special') {
+      if(!room.started) return;
+      const specialType=String(m.specialType||'');
+      const phase=String(m.phase||'');
+      if(specialType!=='chargeOrb' || (phase!=='start' && phase!=='throw')) return;
+      const now=Date.now();
+      if(phase==='start'){
+        if(now-player.lastSpecialStartAt<1200)return;
+        player.lastSpecialStartAt=now;
+        broadcast(room,{type:'special',specialType:'chargeOrb',phase:'start',id:player.id,team:player.team},player.id);
+        return;
+      }
+      if(!player.lastSpecialStartAt || now-player.lastSpecialStartAt>6000)return;
+      const nums=['x','y','z','charge'].map(k=>Number(m[k]));
+      if(nums.slice(0,3).some(v=>!Number.isFinite(v))||!Number.isFinite(nums[3]))return;
+      if(!saneWorldPosition(nums[0],nums[1],nums[2])||nums[3]<0||nums[3]>100)return;
+      player.lastSpecialAt=now;player.lastSpecialStartAt=0;
+      broadcast(room,{type:'special',specialType:'chargeOrb',phase:'throw',id:player.id,team:player.team,x:nums[0],y:nums[1],z:nums[2],charge:Math.max(0,Math.min(100,nums[3]))},player.id);
       return;
     }
     if (m.type === 'callout') {
