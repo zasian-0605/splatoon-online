@@ -7711,8 +7711,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const color=Number.isFinite(Number(rf.cfg?.inkColorHex))?Number(rf.cfg.inkColorHex):teamColor(rf);
     const mesh=makeSubMesh(def.type,color);
     mesh.position.set(x,y,z);scene.add(mesh);
+    const remoteDef=m.subType==='fizzyBomb'
+      ? Object.assign({},def,{bounces:Number(m.charge)>0.8?3:2})
+      : def;
     subInstances.push({
-      mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,colorHex:color,subType:def.type,def,age:0,
+      mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,colorHex:color,subType:def.type,def:remoteDef,age:0,
       stuck:false,exploded:false,lastPos:mesh.position.clone(),fromFighter:rf,charge:0,next:0,
       direction:new THREE.Vector3(vx,0,vz).lengthSq()>.001?new THREE.Vector3(vx,0,vz).normalize():new THREE.Vector3(0,0,1)
     });
