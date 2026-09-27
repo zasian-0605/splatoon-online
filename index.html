@@ -592,6 +592,8 @@ let isTyping=false;
 
 const playerConfig = { style:'girl', hair:0, color:0, outfit:0, weapon:0, gear:0, device:'pc' };
 const inkColorPalette = [0xe3ff00, 0xff0055, 0x00d4ff, 0x9900ff];
+const originalWeaponDisplayNames = ["ネオンランナー","クロスランチャー","ライトパルス","ロングパルス","ゴールドレイ","ノヴァコア","クラッシュコア","ラピッドコア","エリートバースト","ロングチャージャー","ヴァンガード4K","バンブースピア","ローラーロード","ダイナモギア","ペイントブラシ","ツインスパーク","デュアルフロー","ケルビン・ドライブ","バケットコア","トライバケット","フローバケット","エクスブレイカー"];
+function displayWeaponName(w){return w?.displayName||w?.name||"不明ブキ";}
 
 function loadPlayerConfig(){
   try{
@@ -654,75 +656,73 @@ const outfitList = [
    ========================================================= */
 const weaponList = [
 // --- シューター：バランス型。連射と威力と塗りのバランスが良いが、突出した強さはない ---
-{id:0,category:"shooter",name:"スプラシューター",color:0x2f059c,length:.4,thickness:.12,scope:false,
- damage:28,rate:100,speed:34,spread:.05,life:1.3,paintRadius:1.0,sub:"スプラッシュボム",special:"トリプルトルネード"},
-{id:1,category:"shooter",name:".52ガロン",color:0x555555,length:.35,thickness:.22,scope:false,
- damage:38,rate:170,speed:32,spread:.08,life:1.1,paintRadius:1.15,sub:"キューバンボム",special:"ナイスダマ"},
-{id:2,category:"shooter",name:"N-ZAP85",color:0xdddddd,length:.36,thickness:.10,scope:false,
- damage:22,rate:72,speed:33,spread:.02,life:1.2,paintRadius:0.9,sub:"クイックボム",special:"マルチミサイル"},
-{id:3,category:"shooter",name:"プライムシューター",color:0x227733,length:.55,thickness:.13,scope:false,
- damage:32,rate:135,speed:38,spread:.02,life:1.6,paintRadius:1.0,sub:"ポイントセンサー",special:"ホップソナー"},
-{id:4,category:"shooter",name:".96ガロンデコ",color:0xffd700,length:.65,thickness:.24,scope:false,
- damage:46,rate:235,speed:36,spread:.09,life:1.1,paintRadius:1.3,sub:"トーピード",special:"ジェットパック"},
+{id:0,category:"shooter",name:"スプラシューター",displayName:"ネオンランナー",color:0x2f059c,length:.4,thickness:.12,scope:false,
+ damage:28,rate:100,speed:34,spread:.05,life:1.3,paintRadius:1.0,sub:"バーストボム",special:"トライアークトルネード"},
+{id:1,category:"shooter",name:".52ガロン",displayName:"クロスランチャー",color:0x555555,length:.35,thickness:.22,scope:false,
+ damage:38,rate:170,speed:32,spread:.08,life:1.1,paintRadius:1.15,sub:"マグネットボム",special:"チャージオーブ"},
+{id:2,category:"shooter",name:"N-ZAP85",displayName:"ライトパルス",color:0xdddddd,length:.36,thickness:.10,scope:false,
+ damage:22,rate:72,speed:33,spread:.02,life:1.2,paintRadius:0.9,sub:"フラッシュボム",special:"センチネルミサイル"},
+{id:3,category:"shooter",name:"プライムシューター",displayName:"ロングパルス",color:0x227733,length:.55,thickness:.13,scope:false,
+ damage:32,rate:135,speed:38,spread:.02,life:1.6,paintRadius:1.0,sub:"バーストボム",special:"パルスノード"},
+{id:4,category:"shooter",name:".96ガロンデコ",displayName:"ゴールドレイ",color:0xffd700,length:.65,thickness:.24,scope:false,
+ damage:46,rate:235,speed:36,spread:.09,life:1.1,paintRadius:1.3,sub:"ドローンボム",special:"スカイパック"},
 
 // --- ブラスター：直撃は重いが連射が非常に遅い。直撃しなくても爆風でダメージが入る ---
-{id:5,category:"blaster",name:"ノヴァブラスター",color:0x9900ff,length:.30,thickness:.28,scope:false,
- damage:70,rate:650,speed:20,spread:.14,life:1.4,paintRadius:1.4,explosionRadius:2.6,splashDamage:36,sub:"タンサンボム",special:"アメフラシ"},
-{id:6,category:"blaster",name:"クラッシュブラスター",color:0xff0055,length:.30,thickness:.30,scope:false,
- damage:95,rate:820,speed:16,spread:.18,life:1.0,paintRadius:1.5,explosionRadius:3.2,splashDamage:55,sub:"スプラッシュボム",special:"グレートバリア"},
-{id:7,category:"blaster",name:"ラピッドブラスター",color:0xee5500,length:.55,thickness:.20,scope:true,
- damage:52,rate:420,speed:28,spread:.08,life:1.9,paintRadius:1.2,explosionRadius:2.0,splashDamage:26,sub:"トーピード",special:"サメライド"},
-{id:8,category:"blaster",name:"Rブラスターエリート",color:0xee1111,length:.42,thickness:.27,scope:false,
- damage:80,rate:700,speed:22,spread:.15,life:1.3,paintRadius:1.4,explosionRadius:2.8,splashDamage:44,sub:"ロボットボム",special:"トリプルトルネード"},
+{id:5,category:"blaster",name:"ノヴァブラスター",displayName:"ノヴァコア",color:0x9900ff,length:.30,thickness:.28,scope:false,
+ damage:70,rate:650,speed:20,spread:.14,life:1.4,paintRadius:1.4,explosionRadius:2.6,splashDamage:36,sub:"スパークボム",special:"ペイントクラウド"},
+{id:6,category:"blaster",name:"クラッシュブラスター",displayName:"クラッシュコア",color:0xff0055,length:.30,thickness:.30,scope:false,
+ damage:95,rate:820,speed:16,spread:.18,life:1.0,paintRadius:1.5,explosionRadius:3.2,splashDamage:55,sub:"バーストボム",special:"ドームシールド"},
+{id:7,category:"blaster",name:"ラピッドブラスター",displayName:"ラピッドコア",color:0xee5500,length:.55,thickness:.20,scope:true,
+ damage:52,rate:420,speed:28,spread:.08,life:1.9,paintRadius:1.2,explosionRadius:2.0,splashDamage:26,sub:"ドローンボム",special:"ラッシュカート"},
+{id:8,category:"blaster",name:"Rブラスターエリート",displayName:"エリートバースト",color:0xee1111,length:.42,thickness:.27,scope:false,
+ damage:80,rate:700,speed:22,spread:.15,life:1.3,paintRadius:1.4,explosionRadius:2.8,splashDamage:44,sub:"ハンターボム",special:"トリガーキャノン"},
 
 // --- チャージャー：長押しでチャージ、離した瞬間に着弾。フルチャージは一撃が非常に重い ---
-{id:9,category:"charger",name:"スプラチャージャー",color:0x222244,length:.85,thickness:.12,scope:true,
- chargeTime:900,tapDamage:34,fullDamage:120,speedShot:70,paintRadius:1.3,sub:"スプリンクラー",special:"ジェットパック"},
-{id:10,category:"charger",name:"リッター4K",color:0x444444,length:.9,thickness:.16,scope:true,
- chargeTime:1350,tapDamage:30,fullDamage:170,speedShot:85,paintRadius:1.1,sub:"ポイントセンサー",special:"マルチミサイル"},
-{id:11,category:"charger",name:"14式竹筒銃",color:0x338833,length:.62,thickness:.11,scope:true,
- chargeTime:640,tapDamage:26,fullDamage:100,speedShot:60,paintRadius:1.4,sub:"クイックボム",special:"サメライド"},
+{id:9,category:"charger",name:"スプラチャージャー",displayName:"ロングチャージャー",color:0x222244,length:.85,thickness:.12,scope:true,
+ chargeTime:900,tapDamage:34,fullDamage:120,speedShot:70,paintRadius:1.3,sub:"バーストボム",special:"アサルトシェル"},
+{id:10,category:"charger",name:"リッター4K",displayName:"ヴァンガード4K",color:0x444444,length:.9,thickness:.16,scope:true,
+ chargeTime:1350,tapDamage:30,fullDamage:170,speedShot:85,paintRadius:1.1,sub:"ハンターボム",special:"センチネルミサイル"},
+{id:11,category:"charger",name:"14式竹筒銃",displayName:"バンブースピア",color:0x338833,length:.62,thickness:.11,scope:true,
+ chargeTime:640,tapDamage:26,fullDamage:100,speedShot:60,paintRadius:1.4,sub:"フラッシュボム",special:"グラップラー"},
 
 // --- ローラー：射程はゼロだが、スイングは高威力かつ着地面を広く塗れる。近距離最強・遠距離無力 ---
-{id:12,category:"roller",name:"スプラローラー",color:0xe3ff00,length:.5,thickness:.22,scope:false,
- swingDamage:78,swingRate:380,swingRange:3.0,paintFan:2.1,sub:"カーリングボム",special:"グレートバリア"},
-{id:13,category:"roller",name:"ダイナモローラー",color:0x333366,length:.62,thickness:.30,scope:false,
- swingDamage:105,swingRate:560,swingRange:3.6,paintFan:2.7,sub:"スプラッシュボム",special:"ナイスダマ"},
-{id:14,category:"roller",name:"パブロ(筆)",color:0xff66cc,length:.4,thickness:.16,scope:false,
- swingDamage:45,swingRate:190,swingRange:2.2,paintFan:1.6,sub:"タンサンボム",special:"ホップソナー"},
+{id:12,category:"roller",name:"スプラローラー",displayName:"ローラーロード",color:0xe3ff00,length:.5,thickness:.22,scope:false,
+ swingDamage:78,swingRate:380,swingRange:3.0,paintFan:2.1,sub:"スライドボム",special:"ギガスタンプ"},
+{id:13,category:"roller",name:"ダイナモローラー",displayName:"ダイナモギア",color:0x333366,length:.62,thickness:.30,scope:false,
+ swingDamage:105,swingRate:560,swingRange:3.6,paintFan:2.7,sub:"バーストボム",special:"ブーストステーション"},
+{id:14,category:"roller",name:"パブロ(筆)",displayName:"ペイントブラシ",color:0xff66cc,length:.4,thickness:.16,scope:false,
+ swingDamage:45,swingRate:190,swingRange:2.2,paintFan:1.6,sub:"スパークボム",special:"オムニレーザー"},
 
 // --- マニューバー：連射が非常に速く、撃ちながらでも移動速度が落ちない。ただし威力は低い ---
-{id:15,category:"maneuver",name:"スパッタリー",color:0x00aaff,length:.28,thickness:.10,scope:false,
- damage:15,rate:60,speed:34,spread:.10,life:1.0,paintRadius:0.8,sub:"クイックボム",special:"サメライド"},
-{id:16,category:"maneuver",name:"デュアルスイーパー",color:0x888888,length:.4,thickness:.09,scope:false,
- damage:19,rate:82,speed:37,spread:.05,life:1.4,paintRadius:0.8,sub:"ポイントセンサー",special:"アメフラシ"},
-{id:17,category:"maneuver",name:"ケルビン525",color:0x556644,length:.3,thickness:.14,scope:false,
- damage:26,rate:135,speed:29,spread:.16,life:0.9,paintRadius:0.9,sub:"スプラッシュボム",special:"トリプルトルネード"},
+{id:15,category:"maneuver",name:"スパッタリー",displayName:"ツインスパーク",color:0x00aaff,length:.28,thickness:.10,scope:false,
+ damage:15,rate:60,speed:34,spread:.10,life:1.0,paintRadius:0.8,sub:"フラッシュボム",special:"スワームビーコン"},
+{id:16,category:"maneuver",name:"デュアルスイーパー",displayName:"デュアルフロー",color:0x888888,length:.4,thickness:.09,scope:false,
+ damage:19,rate:82,speed:37,spread:.05,life:1.4,paintRadius:0.8,sub:"ドローンボム",special:"コロッサス"},
+{id:17,category:"maneuver",name:"ケルビン525",displayName:"ケルビン・ドライブ",color:0x556644,length:.3,thickness:.14,scope:false,
+ damage:26,rate:135,speed:29,spread:.16,life:0.9,paintRadius:0.9,sub:"バーストボム",special:"トリプルクラッシュ"},
 
 // --- バケツ(スロッシャー)：山なり軌道で壁の向こうにも届き、着弾範囲にまとまったダメージ ---
-{id:18,category:"slosher",name:"バケツスロッシャー",color:0x2266cc,length:.34,thickness:.30,scope:false,
- damage:65,rate:520,speed:19,life:1.3,paintRadius:1.6,explosionRadius:2.4,sub:"キューバンボム",special:"ナイスダマ"},
-{id:19,category:"slosher",name:"ヒッセン",color:0x442222,length:.26,thickness:.22,scope:false,
- damage:48,rate:420,speed:21,life:1.1,paintRadius:1.3,explosionRadius:1.9,sub:"カーリングボム",special:"マルチミサイル"},
-{id:20,category:"slosher",name:"オーバーフロッシャー",color:0x774411,length:.42,thickness:.34,scope:false,
- damage:88,rate:780,speed:16,life:1.5,paintRadius:2.0,explosionRadius:3.0,sub:"ロボットボム",special:"グレートバリア"},
-{id:21,category:"slosher",name:"エクスプロッシャー",color:0x995500,length:.5,thickness:.30,scope:true,
- damage:70,rate:600,speed:24,life:1.8,paintRadius:1.7,explosionRadius:2.6,sub:"トーピード",special:"ジェットパック"}
+{id:18,category:"slosher",name:"バケツスロッシャー",displayName:"バケットコア",color:0x2266cc,length:.34,thickness:.30,scope:false,
+ damage:65,rate:520,speed:19,life:1.3,paintRadius:1.6,explosionRadius:2.4,sub:"マグネットボム",special:"ヴァキュームコア"},
+{id:19,category:"slosher",name:"ヒッセン",displayName:"トライバケット",color:0x442222,length:.26,thickness:.22,scope:false,
+ damage:48,rate:420,speed:21,life:1.1,paintRadius:1.3,explosionRadius:1.9,sub:"スライドボム",special:"スモークスクリーン"},
+{id:20,category:"slosher",name:"オーバーフロッシャー",displayName:"フローバケット",color:0x774411,length:.42,thickness:.34,scope:false,
+ damage:88,rate:780,speed:16,life:1.5,paintRadius:2.0,explosionRadius:3.0,sub:"ハンターボム",special:"ドームシールド"},
+{id:21,category:"slosher",name:"エクスプロッシャー",displayName:"エクスブレイカー",color:0x995500,length:.5,thickness:.30,scope:true,
+ damage:70,rate:600,speed:24,life:1.8,paintRadius:1.7,explosionRadius:2.6,sub:"ドローンボム",special:"チャージオーブ"}
 ];
 
 const categoryLabel = {shooter:"シューター",blaster:"ブラスター",charger:"チャージャー",roller:"ローラー",maneuver:"マニューバー",slosher:"バケツ(スロッシャー)"};
 
 /* サブウェポンの挙動定義 */
 const subDefs = {
- "スプラッシュボム":{type:"timed",fuse:1.1,radius:3.4,damage:60,speed:16},
- "キューバンボム":{type:"stick",fuse:1.5,radius:4.0,damage:70,speed:15},
- "クイックボム":{type:"instant",fuse:0.12,radius:2.1,damage:38,speed:14},
- "カーリングボム":{type:"slide",fuse:1.4,radius:2.8,damage:48,speed:13},
- "タンサンボム":{type:"bounce",fuse:1.8,radius:1.8,damage:30,speed:12,bounces:3},
- "ロボットボム":{type:"seek",fuse:2.6,radius:3.6,damage:62,speed:12},
- "トーピード":{type:"homing",fuse:2.8,radius:2.8,damage:52,speed:18},
- "ポイントセンサー":{type:"sensor",duration:6.0,radius:14,speed:14},
- "スプリンクラー":{type:"turret",duration:8.0,radius:5,speed:10}
+ "バーストボム":{type:"timed",fuse:1.10,radius:3.4,damage:180,farDamage:30,speed:16,inkCost:70},
+ "マグネットボム":{type:"stick",fuse:1.50,radius:4.0,damage:180,farDamage:30,speed:15,inkCost:70},
+ "フラッシュボム":{type:"instant",fuse:0.12,radius:2.1,damage:60,farDamage:25,speed:14,inkCost:45},
+ "スパークボム":{type:"bounce",fuse:1.80,radius:1.8,damage:50,speed:12,bounces:3,farDamage:35,inkCost:60},
+ "ハンターボム":{type:"seek",fuse:2.60,radius:3.6,damage:180,farDamage:30,speed:12,inkCost:55},
+ "スライドボム":{type:"slide",fuse:1.40,radius:2.8,damage:180,farDamage:30,speed:13,inkCost:65},
+ "ドローンボム":{type:"homing",fuse:2.80,radius:2.8,damage:60,speed:18,farDamage:35,inkCost:65}
 };
 
 /* スペシャルの効果定義（発動は fireSpecial 内でディスパッチ） */
@@ -856,7 +856,7 @@ function updateWeaponInfo(){
     stat = `与ダメ:${w.damage} / 連射:${w.rate}ms`;
   }
   document.getElementById('weapon-info').textContent =
-    `【${categoryLabel[w.category]}】\n${stat}\nサブ:${w.sub} / スペシャル:${w.special}`;
+    `【${categoryLabel[w.category]}】\n${stat}\nブキ:${displayWeaponName(w)}\nサブ:${w.sub} / スペシャル:${w.special}`;
 }
 
 function applyDeviceSetting(){
@@ -884,7 +884,7 @@ function setupCustomizeUI(){
   selectWeapon.innerHTML='';
   weaponList.forEach(item=>{
     const opt=document.createElement('option');
-    opt.value=item.id; opt.textContent=`[${categoryLabel[item.category]}] ${item.name}`;
+    opt.value=item.id; opt.textContent=`[${categoryLabel[item.category]}] ${displayWeaponName(item)}`;
     selectWeapon.appendChild(opt);
   });
   selectWeapon.value = playerConfig.weapon;
@@ -2102,9 +2102,12 @@ function performRollerSwing(fighter, now){
 function tryThrowSub(fighter, aimDir, now){
   const wp = fighter.weapon;
   const def = subDefs[wp.sub];
-  const cd = 3000;
-  if(now - fighter.lastSub < cd) return;
-  fighter.lastSub = now;
+  if(!def)return;
+  const cd=3000;
+  if(now-fighter.lastSub<cd)return;
+  if(fighter.ink<def.inkCost){if(fighter.isPlayer)showToast('インクが足りません');return;}
+  fighter.lastSub=now;
+  fighter.ink=Math.max(0,fighter.ink-def.inkCost);
   const col = fighter.team==='A'?teamAHex:teamBHex;
   const geo = new THREE.SphereGeometry(0.3, 8, 8);
   const mat = new THREE.MeshBasicMaterial({color: col});
@@ -2117,7 +2120,7 @@ function tryThrowSub(fighter, aimDir, now){
   subsList.push({
     mesh, velocity:vel, team:fighter.team, subType:def.type, def,
     age:0, fuse:def.fuse, exploded:false, stuckAt:null, bounceCount:0,
-    colorHex:getFighterInkHex(fighter),
+    colorHex:getFighterInkHex(fighter),fromFighter:fighter,
     facing: new THREE.Vector3(aimDir.x,0,aimDir.z).normalize()
   });
 }
@@ -3428,7 +3431,7 @@ function animate3D(token){
     if(inkText) inkText.textContent=Math.round(inkNow)+'%';
   }
   const wh=document.getElementById('weapon-hud');
-  if(wh) wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${playerFighter.weapon.name}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]}　/　サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?'　★ READY':''}</div>`;
+  if(wh) wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${displayWeaponName(playerFighter.weapon)}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]}　/　サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?'　★ READY':''}</div>`;
 
   if(currentPhase===2){
     turfTick += delta;
