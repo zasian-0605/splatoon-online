@@ -1129,6 +1129,10 @@ function buildPlayerModelGroup(cfg){
   addBox(bodyGroup,.12,.14,.08,matTrim,-.23,-.01,-.12);
   addBox(bodyGroup,.12,.14,.08,matTrim,.23,-.01,-.12);
 
+  // 胴体とパンツの境目を自然につなぐ裾。脚との境界が見えにくいように少しだけ重ねる。
+  addBox(bodyGroup,.43,.055,.285,matPantsLight,0,-.085,.01);
+  addBox(bodyGroup,.39,.025,.30,matShirtDark,0,-.045,.145);
+
   const tankG = new THREE.Group(); tankG.position.set(0,.2,-.2); bodyGroup.add(tankG);
   addSubdividedCyl(tankG,.12,.4,matGlass,0,0,0);
   addSubdividedCyl(tankG,.1,.35,matInk,0,-.02,0);
