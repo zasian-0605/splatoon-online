@@ -4233,6 +4233,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           }
           return;
         }
+        if(m.type==='special' && (m.specialName || m.specialType)){
+          const name=m.specialName || (m.specialType==='chargeOrb'?'チャージオーブ':'');
+          const rf=fighters.find(f=>f.id===m.id);
+          if(rf && window.__receiveOriginalSpecial){
+            window.__receiveOriginalSpecial(rf,name,new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0),m.extra||{});
+          }
+          return;
+        }
         if(m.type==='state'){applyRemoteState(m);return;}
         if(m.type==='paint'){paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true});return;}
         if(m.type==='serverToast'){showToast(m.text);return;}
@@ -6326,6 +6334,242 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+<script>
+/* V51: fixed original loadouts + 19 original special actions */
+(function(){
+  const SPECIALS=[
+    "トリガーキャノン","ドームシールド","グラップラー","センチネルミサイル","ペイントクラウド",
+    "ギガスタンプ","オムニレーザー","チャージオーブ","パルスノード","ヴァキュームコア",
+    "ブーストステーション","ラッシュカート","トライアークトルネード","スカイパック",
+    "アサルトシェル","スワームビーコン","コロッサス","トリプルクラッシュ","スモークスクリーン"
+  ];
+  const fx={beams:[],nodes:[],stations:[],storms:[],drones:[],screens:[],rushers:[],stamps:[],shells:[],marks:[]};
+
+  function col(f){return getFighterInkHex(f);}
+  function floor(p){const q=p.clone();q.y=getSupportHeight(q.x,q.z,50)+.05;return q;}
+  function targetFor(f){
+    const d=new THREE.Vector3();
+    if(f.isPlayer&&camera)camera.getWorldDirection(d);
+    else d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+    d.normalize();
+    return floor(f.pos.clone().addScaledVector(d,18));
+  }
+  function ringFx(p,color,radius){
+    const g=new THREE.Group();
+    const m=new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,depthWrite:false});
+    const r=new THREE.Mesh(new THREE.TorusGeometry(.7,.09,8,28),m);
+    r.rotation.x=Math.PI/2;g.position.copy(floor(p));g.add(r);scene.add(g);
+    fx.marks.push({g,r,start:performance.now(),end:performance.now()+500,radius});
+  }
+  function hit(p,team,damage,radius,paint,src){
+    explodeAt(floor(p),radius,damage,team,{colorHex:src?col(src):(team==='A'?teamAHex:teamBHex),paintRadius:paint,sourceFighter:src||null});
+  }
+  function send(f,name,p,extra){
+    try{
+      if(onlineSocket&&onlineSocket.readyState===1&&onlineStarted){
+        onlineSocket.send(JSON.stringify({type:'special',specialName:name,x:p.x,y:p.y,z:p.z,extra:extra||{}}));
+      }
+    }catch{}
+  }
+
+  function activate(f,name,p,remote){
+    if(!f||!f.alive||!SPECIALS.includes(name))return;
+    const now=performance.now(),q=floor(p||targetFor(f)),c=col(f);
+    if(name==="チャージオーブ"){
+      if(!f.specialChargeMode)startChargeOrbSpecial(f,{remote:!!remote});
+      else if(f.specialCharge>=100)releaseChargeOrbSpecial(f,{remote:!!remote,target:q});
+      return;
+    }
+    if(name==="トリガーキャノン"){
+      const d=new THREE.Vector3().subVectors(q,f.pos).normalize();
+      for(let i=0;i<3;i++)setTimeout(()=>{if(f.alive)spawnBullet(f,d,{speed:40,damage:220,radius:.34,life:2,explosive:true,explosionRadius:2.8,splashDamage:40,paintRadius:2.8});},i*180);
+      f.invulnUntil=now+450;
+    }else if(name==="ドームシールド"){
+      shields.push({pos:f.pos.clone(),team:f.team,radius:5.5,endTime:now+8000,hp:2000});
+      ringFx(f.pos,c,5.5);
+    }else if(name==="グラップラー"){
+      const v=new THREE.Vector3().subVectors(q,f.pos);v.y=0;
+      const dist=Math.min(24,v.length());
+      if(v.lengthSq()>0.01){v.normalize();f.grappleDir=v;f.grappleDist=dist;f.grappleUntil=now+850;}
+      f.invulnUntil=now+350;
+    }else if(name==="センチネルミサイル"){
+      const es=fighters.filter(x=>x.alive&&x.team!==f.team).sort((a,b)=>a.pos.distanceTo(q)-b.pos.distanceTo(q)).slice(0,3);
+      es.forEach((x,i)=>setTimeout(()=>hit(x.pos,f.team,150,3.0,3.4,f),700+i*180));
+    }else if(name==="ペイントクラウド"){
+      activeClouds.push({pos:q.clone(),team:f.team,endTime:now+8000,nextTick:0,customDamage:true});
+    }else if(name==="ギガスタンプ"){
+      f.stampUntil=now+9000;f.invulnUntil=now+700;f.speedBoostUntil=now+900;fx.stamps.push({f,end:f.stampUntil,last:0,big:false});
+    }else if(name==="オムニレーザー"){
+      fx.beams.push({f,end:now+5000,next:0,angle:0});
+    }else if(name==="パルスノード"){
+      fx.nodes.push({p:q.clone(),team:f.team,end:now+7500,next:0});
+      ringFx(q,c,3);
+    }else if(name==="ヴァキュームコア"){
+      f.vacuumUntil=now+5000;f.vacuumCharge=0;ringFx(f.pos,c,3);
+    }else if(name==="ブーストステーション"){
+      fx.stations.push({p:f.pos.clone(),team:f.team,end:now+15000});
+      ringFx(f.pos,c,4.5);
+    }else if(name==="ラッシュカート"){
+      const d=new THREE.Vector3().subVectors(q,f.pos).setY(0);
+      if(d.lengthSq()<.01)d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      d.normalize();f.invulnUntil=now+2200;fx.rushers.push({f,end:now+2200,dir:d,last:0});
+    }else if(name==="トライアークトルネード"){
+      [-3,0,3].forEach((dx,i)=>{
+        const p2=q.clone();p2.x+=dx;
+        fx.storms.push({p:floor(p2),team:f.team,end:now+7000,next:0,phase:i});
+      });
+    }else if(name==="スカイパック"){
+      f.jetpackUntil=now+7500;f.invulnUntil=now+650;
+    }else if(name==="アサルトシェル"){
+      for(let i=0;i<3;i++){const p2=q.clone();p2.x+=(i-1)*2.5;fx.shells.push({p:p2,at:now+550+i*180,team:f.team,src:f});}
+    }else if(name==="スワームビーコン"){
+      fx.drones.push({p:q.clone(),team:f.team,end:now+8000,next:0,angle:0});
+      ringFx(q,c,2.5);
+    }else if(name==="コロッサス"){
+      f.colossusUntil=now+6000;f.invulnUntil=now+700;f.root.scale.set(1.5,1.5,1.5);f.speedBoostUntil=now+6000;
+      fx.stamps.push({f,end:now+6000,last:0,big:true});
+    }else if(name==="トリプルクラッシュ"){
+      [-3,0,3].forEach((dx,i)=>{const p2=q.clone();p2.x+=dx;setTimeout(()=>hit(p2,f.team,300,3.2,4.0,f),i*140);});
+    }else if(name==="スモークスクリーン"){
+      const d=new THREE.Vector3().subVectors(q,f.pos).setY(0).normalize();
+      if(d.lengthSq()<.01)d.set(0,0,1);
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(12,.12,4.8),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.48,depthWrite:false}));
+      mesh.position.copy(f.pos).addScaledVector(d,7);mesh.position.y=2.1;mesh.rotation.y=Math.atan2(d.x,d.z);scene.add(mesh);
+      fx.screens.push({mesh,team:f.team,end:now+10000,center:mesh.position.clone()});
+    }
+  }
+  window.__receiveOriginalSpecial=function(f,name,p,extra){activate(f,name,p,true);};
+
+  const baseFire=window.fireSpecial;
+  window.fireSpecial=function(f){
+    if(!f||!f.alive)return;
+    const name=f.weapon?.special;
+    if(!SPECIALS.includes(name))return baseFire(f);
+    if(name==="チャージオーブ"){
+      if(f.specialChargeMode){if(f.specialCharge>=100)releaseChargeOrbSpecial(f,{remote:false});return;}
+      if(f.specialGauge<100){if(f.isPlayer)showToast("スペシャルゲージをためてください");return;}
+      f.specialGauge=0;startChargeOrbSpecial(f,{remote:false});sfx("special");return;
+    }
+    if(f.specialGauge<100){if(f.isPlayer)showToast("スペシャルゲージをためてください");return;}
+    f.specialGauge=0;
+    const p=targetFor(f);
+    activate(f,name,p,false);
+    send(f,name,p);
+    sfx("special");
+  };
+
+  function update(delta){
+    const now=performance.now();
+    for(let i=fx.beams.length-1;i>=0;i--){
+      const b=fx.beams[i];if(now>b.end){fx.beams.splice(i,1);continue;}
+      b.next-=delta;b.angle+=delta*1.9;
+      if(b.next<=0){
+        b.next=.17;
+        for(let k=0;k<6;k++){
+          const a=b.angle+k*Math.PI/3;
+          const p=b.f.pos.clone().add(new THREE.Vector3(Math.sin(a)*3,1.1,Math.cos(a)*3));
+          effectBeam(p,b.f.team,c);
+        }
+      }
+    }
+    for(let i=fx.nodes.length-1;i>=0;i--){
+      const n=fx.nodes[i];if(now>n.end){fx.nodes.splice(i,1);continue;}
+      n.next-=delta;
+      if(n.next<=0){
+        n.next=2.3;ringFx(n.p,col({team:n.team}),3.5);
+        fighters.forEach(o=>{if(o.alive&&o.team!==n.team&&o.pos.distanceTo(n.p)<7)applyDamage(o,45,null);});
+      }
+    }
+    for(let i=fx.stations.length-1;i>=0;i--){
+      const st=fx.stations[i];if(now>st.end){fx.stations.splice(i,1);continue;}
+      fighters.forEach(o=>{
+        if(o.alive&&o.team===st.team&&o.pos.distanceTo(st.p)<7){
+          o.speedBoostUntil=Math.max(o.speedBoostUntil,now+320);
+        }
+      });
+    }
+    for(let i=fx.storms.length-1;i>=0;i--){
+      const x=fx.storms[i];if(now>x.end){fx.storms.splice(i,1);continue;}
+      x.next-=delta;if(x.next<=0){x.next=.65;hit(x.p,x.team,300/10,3.2,3.7,null);}
+      x.p.x+=Math.sin((now+x.phase*900)*.0012)*delta*.6;
+    }
+    for(let i=fx.drones.length-1;i>=0;i--){
+      const d=fx.drones[i];if(now>d.end){fx.drones.splice(i,1);continue;}
+      d.angle+=delta*2.4;d.next-=delta;
+      const orbit=d.p.clone().add(new THREE.Vector3(Math.cos(d.angle)*2.2,1.5,Math.sin(d.angle)*2.2));
+      if(d.next<=0){
+        d.next=.8;
+        const t=fighters.find(o=>o.alive&&o.team!==d.team&&o.pos.distanceTo(orbit)<11);
+        if(t)hit(t.pos,d.team,30,2.2,2,null);
+      }
+    }
+    for(let i=fx.rushers.length-1;i>=0;i--){
+      const r=fx.rushers[i];
+      if(!r.f.alive||now>r.end){if(r.f.alive)hit(r.f.pos,r.f.team,220,4.0,4.5,r.f);fx.rushers.splice(i,1);continue;}
+      r.f.pos.addScaledVector(r.dir,23*delta);
+      r.last-=delta;if(r.last<=0){r.last=.35;hit(r.f.pos,r.f.team,30,2.0,1.8,r.f);}
+    }
+    for(let i=fx.shells.length-1;i>=0;i--){const sh=fx.shells[i];if(now<sh.at)continue;hit(sh.p,sh.team,120,3.0,3.4,sh.src);fx.shells.splice(i,1);}
+    for(let i=fx.stamps.length-1;i>=0;i--){
+      const st=fx.stamps[i];
+      if(now>st.end){if(st.big){st.f.root.scale.set(1,1,1);st.f.colossusUntil=0;}else st.f.stampUntil=0;fx.stamps.splice(i,1);continue;}
+      st.last-=delta;
+      if(st.last<=0){
+        st.last=.55;
+        const d=new THREE.Vector3(Math.sin(st.f.root.rotation.y),0,Math.cos(st.f.root.rotation.y));
+        const p=st.f.pos.clone().addScaledVector(d,st.big?3:2.2);
+        hit(p,st.f.team,st.big?120:220,st.big?3.1:2.8,st.big?3.6:3.2,st.f);
+      }
+      if(st.big)st.f.root.scale.set(1.5,1.5,1.5);
+    }
+    fighters.forEach(f=>{
+      if(f.vacuumUntil&&now>=f.vacuumUntil){
+        const d=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+        const p=f.pos.clone().addScaledVector(d,8);
+        hit(p,f.team,Math.min(220,100+(f.vacuumCharge||0)),4.2,4.8,f);
+        f.vacuumUntil=0;f.vacuumCharge=0;
+      }
+      if(f.grappleUntil&&now<f.grappleUntil){
+        const step=Math.min(f.grappleDist,(f.grappleDist)*(delta/.85));
+        f.pos.addScaledVector(f.grappleDir,step);
+      }else if(f.grappleUntil)f.grappleUntil=0;
+      if(f.colossusUntil&&now>=f.colossusUntil){f.colossusUntil=0;f.root.scale.set(1,1,1);}
+    });
+    for(let i=fx.screens.length-1;i>=0;i--){if(now>fx.screens[i].end){scene.remove(fx.screens[i].mesh);fx.screens.splice(i,1);}}
+    for(let i=fx.marks.length-1;i>=0;i--){const m=fx.marks[i];const t=(now-m.start)/(m.end-m.start);m.r.scale.setScalar(.3+t*1.8);m.r.material.opacity=1-t;if(now>m.end){scene.remove(m.g);fx.marks.splice(i,1);}}
+  }
+  function effectBeam(p,team,color){
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(.035,.07,3.5,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.62}));
+    m.position.copy(p);m.rotation.x=Math.PI/2;scene.add(m);
+    setTimeout(()=>scene.remove(m),90);
+    fighters.forEach(o=>{if(o.alive&&o.team!==team&&o.pos.distanceTo(p)<1.8)applyDamage(o,25,null);});
+  }
+
+  const oldUpdateOngoing=window.updateOngoingEffects;
+  if(oldUpdateOngoing)window.updateOngoingEffects=function(delta){oldUpdateOngoing(delta);update(delta);};
+
+  // Vacuum core: absorbed damage becomes the final charge.
+  const oldDamage=window.applyDamage;
+  if(oldDamage)window.applyDamage=function(target,dmg,from){
+    if(target?.vacuumUntil&&performance.now()<target.vacuumUntil){
+      target.vacuumCharge=Math.min(120,(target.vacuumCharge||0)+Math.max(0,dmg));
+      return;
+    }
+    return oldDamage(target,dmg,from);
+  };
+
+  // Custom fixed loadout text.
+  if(window.updateWeaponInfo){
+    const baseInfo=window.updateWeaponInfo;
+    window.updateWeaponInfo=function(){
+      baseInfo();
+      const w=weaponList[playerConfig.weapon];
+      const el=document.getElementById("weapon-info");
+      if(el&&w)el.textContent=el.textContent.replace(w.name,displayWeaponName(w));
+    };
+  }
+})();
+</script>
 <script>
 /* V50: communication UI + result feedback */
 (function(){
