@@ -266,8 +266,9 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (p === '/') p = '/index.html';
-  const file = path.join(ROOT, p.replace(/^\/+/, ''));
-  if (!file.startsWith(ROOT)) return res.writeHead(403).end();
+  const file = path.resolve(ROOT, p.replace(/^\/+/, ''));
+  const relativeFile = path.relative(ROOT, file);
+  if (relativeFile.startsWith('..') || path.isAbsolute(relativeFile)) return res.writeHead(403).end();
   fs.readFile(file, (err, data) => {
     if (err) return res.writeHead(404).end('Not found');
     const ext = path.extname(file).toLowerCase();
@@ -378,6 +379,7 @@ wss.on('connection', ws => {
     }
     const room = player.roomId ? rooms.get(player.roomId) : null; if (!room) return;
     if (m.type === 'shot') {
+      if (!room.started || !player.team) return;
       const nums = ['x','y','z','dx','dy','dz'].map(k => Number(m[k]));
       if (nums.some(v => !Number.isFinite(v))) return;
       const dirLen = Math.hypot(nums[3], nums[4], nums[5]);
@@ -394,6 +396,7 @@ wss.on('connection', ws => {
       return;
     }
     if (m.type === 'sub') {
+      if (!room.started || !player.team) return;
       const nums = ['x','y','z','vx','vy','vz'].map(k => Number(m[k]));
       if (nums.some(v => !Number.isFinite(v))) return;
       const subType = String(m.subType || '');
@@ -413,11 +416,11 @@ wss.on('connection', ws => {
       }, player.id);
       return;
     }
-    if (m.type === 'special') {
-      if(!room.started) return;
-      const specialType=String(m.specialType||'');
+    // Charge Orb has a dedicated two-phase protocol. Only handle that
+    // protocol here; other special messages must reach the generic handler below.
+    if (m.type === 'special' && String(m.specialType || '') === 'chargeOrb') {
+      if(!room.started || !player.team) return;
       const phase=String(m.phase||'');
-      if(specialType!=='chargeOrb' || (phase!=='start' && phase!=='throw')) return;
       const now=Date.now();
       if(phase==='start'){
         if(now-player.lastSpecialStartAt<1200)return;
@@ -425,6 +428,7 @@ wss.on('connection', ws => {
         broadcast(room,{type:'special',specialType:'chargeOrb',phase:'start',id:player.id,team:player.team},player.id);
         return;
       }
+      if(phase!=='throw') return;
       if(!player.lastSpecialStartAt || now-player.lastSpecialStartAt>6000)return;
       const nums=['x','y','z','charge'].map(k=>Number(m[k]));
       if(nums.slice(0,3).some(v=>!Number.isFinite(v))||!Number.isFinite(nums[3]))return;
@@ -518,6 +522,7 @@ wss.on('connection', ws => {
       return;
     }
     if (m.type === 'paint') {
+      if (!room.started || !player.team) return;
       const x = Number(m.x), z = Number(m.z), radius = Number(m.radius); if (![x,z,radius].every(Number.isFinite) || radius < 0.2 || radius > 8) return;
       const colorHex = Number.isFinite(Number(player.config?.inkColorHex)) ? Number(player.config.inkColorHex) : (player.team === 'A' ? 0xe3ff00 : 0xff2255);
       broadcast(room, { type:'paint', id:player.id, team:player.team, x,z,radius,colorHex,mult:1 }, player.id); return;
