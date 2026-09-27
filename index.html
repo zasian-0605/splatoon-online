@@ -199,6 +199,13 @@ body.pointer-lock-ready{cursor:none !important;}
 <div id="customize-preview"></div>
 <div class="custom-panel">
 <div class="custom-title">スタイル決定！</div>
+<div class="custom-group"><span class="custom-label">操作設定</span>
+<div class="opt-btns" id="grp-device">
+<button class="opt-btn active" data-val="pc">パソコン設定</button>
+<button class="opt-btn" data-val="mobile">携帯設定</button>
+</div>
+<div style="font:12px/1.5 Arial,sans-serif;color:#ccc;margin-top:6px;">ゲーム中の操作方法と画面ボタン表示を切り替えます。</div>
+</div>
 <div class="custom-group"><span class="custom-label">スタイル (性別)</span>
 <div class="opt-btns" id="grp-style">
 <button class="opt-btn active" data-val="girl">ガール</button>
@@ -305,11 +312,11 @@ body.pointer-lock-ready{cursor:none !important;}
   <div id="online-card">
     <h2>オンラインルーム</h2>
     <div id="online-profile">プロフィール未読込</div>
-    <div id="online-status">接続準備中…</div>
+    <div id="online-status">オンライン接続中</div>
     <div id="online-progress">
       <div id="online-progress-label">オンライン接続 <span id="online-dots">...</span></div>
-      <div id="online-count">0 / 8</div>
-      <div id="online-progress-note" style="font:700 12px/1.4 Arial,sans-serif;color:#ddd;">対戦相手を探しています</div>
+      <div id="online-count">1 / 8</div>
+      <div id="online-progress-note" style="font:700 12px/1.4 Arial,sans-serif;color:#ddd;">自分が参加中。対戦相手を探しています</div>
     </div>
     <div id="online-match-note">部屋に入ると、参加者それぞれが「準備OK」を押します。</div>
     <div id="online-room">マッチング待機中…</div>
@@ -391,7 +398,7 @@ let currentLineIndex=0;
 let typeWriterInterval=null;
 let isTyping=false;
 
-const playerConfig = { style:'girl', hair:0, color:0, outfit:0, weapon:0, gear:0 };
+const playerConfig = { style:'girl', hair:0, color:0, outfit:0, weapon:0, gear:0, device:'pc' };
 const inkColorPalette = [0xe3ff00, 0xff0055, 0x00d4ff, 0x9900ff];
 let teamAHex = inkColorPalette[0];
 let teamBHex = 0xff2255;
@@ -639,6 +646,16 @@ function updateWeaponInfo(){
     `【${categoryLabel[w.category]}】\n${stat}\nサブ:${w.sub} / スペシャル:${w.special}`;
 }
 
+function applyDeviceSetting(){
+  const mobile = playerConfig.device==='mobile';
+  document.querySelectorAll('.mobile-btn').forEach(el=>{
+    el.style.display = mobile ? 'flex' : 'none';
+  });
+  const joy=document.getElementById('joystick-area');
+  if(joy) joy.style.display = mobile ? 'block' : 'none';
+  document.body.dataset.controlMode = mobile ? 'mobile' : 'pc';
+}
+
 function setupCustomizeUI(){
   const selectOutfit = document.getElementById('select-outfit');
   selectOutfit.innerHTML='';
@@ -691,14 +708,18 @@ function setupCustomizeUI(){
         const val = btn.getAttribute('data-val');
         playerConfig[key] = isNaN(val) ? val : parseInt(val);
         if(key==='style'){ playerConfig.hair=0; renderHairButtons(); }
+        if(key==='device'){ applyDeviceSetting(); }
         updateCustomPlayerModel();
       });
     });
   };
 
+  bindGroup('grp-device','device');
   bindGroup('grp-style','style');
   renderHairButtons();
   bindGroup('grp-color','color');
+  bindGroup('grp-gear','gear');
+  applyDeviceSetting();
   bindGroup('grp-gear','gear');
 
   document.getElementById('btn-confirm').addEventListener('click',(e)=>{
@@ -3236,7 +3257,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     return origin.replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
   }
   function setOnlineCount(n, note){
-    const safe=Math.max(0,Math.min(8,Number(n)||0));
+    const requested=Number(n);
+    const safe=Math.max(1,Math.min(8,Number.isFinite(requested)?requested:1));
     const count=document.getElementById('online-count');
     const noteEl=document.getElementById('online-progress-note');
     if(count) count.textContent=`${safe} / 8`;
@@ -3309,7 +3331,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(m.type==='queue'){
           onlineRoomId=m.roomId;
           setOnlineConnecting('マッチング中');
-          setOnlineCount(m.count||0,'対戦相手を探しています');
+          setOnlineCount(Math.max(1,Number(m.count)||1),'対戦相手を探しています');
           return;
         }
         if(m.type==='room'){
@@ -3317,7 +3339,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           renderOnlineRoom(m.players||[]);
           // 準備OKはプレイヤー自身が押す。全員がreadyになるまでサーバーは開始しない。
           setOnlineConnecting(m.players.length<2 ? '対戦相手を探しています' : '参加者を確認しています');
-          setOnlineCount(m.players.length,m.players.length<2?'対戦相手を探しています':'参加者がそろっています。準備OKを確認中');
+          setOnlineCount(Math.max(1,m.players.length),m.players.length<2?'対戦相手を探しています':'参加者がそろっています。準備OKを確認中');
           const readyBtn=document.getElementById('online-ready');
           if(readyBtn){
             readyBtn.disabled=!(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted);
@@ -3330,7 +3352,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           onlineActive=true;onlineStarted=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;onlineResultSent=false;
           renderOnlineRoom(m.players||[]);
           setOnlineConnecting('マッチング成立');
-          setOnlineCount((m.players||[]).length,'対戦開始準備中');
+          setOnlineCount(Math.max(1,(m.players||[]).length),'対戦開始準備中');
           const wait=Math.max(0,(m.startAt||Date.now()+1200)-Date.now());
           setTimeout(()=>startOnlineBattle(m),wait);
           
