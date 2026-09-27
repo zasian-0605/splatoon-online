@@ -451,6 +451,7 @@ wss.on('connection', ws => {
       if(!saneWorldPosition(x,y,z)) return;
       let extra=(m.extra && typeof m.extra==='object')?m.extra:{};
       const compact={};
+      if(legacyOrb && m.phase) compact.phase=String(m.phase).slice(0,12);
       for(const k of ['angle','targetId']) if(extra[k]!==undefined) compact[k]=String(extra[k]).slice(0,40);
       player.lastSpecialAt=now;
       broadcast(room,{
