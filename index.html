@@ -2393,46 +2393,40 @@ function clampStageXY(x,z){
 }
 
 function tryMoveWithCollision(f, vel, delta, isSquid){
-  const rawNx = f.pos.x + vel.x*delta;
-  const rawNz = f.pos.z + vel.z*delta;
-
-  // Step beyond the rectangular arena -> fall into surrounding water.
-  if(Math.abs(rawNx) > STAGE_HALF_X+3 || Math.abs(rawNz) > STAGE_HALF_Z+3){
-    f.pos.x = rawNx;
-    f.pos.z = rawNz;
+  const rawNx=f.pos.x+vel.x*delta, rawNz=f.pos.z+vel.z*delta;
+  if(Math.abs(rawNx)>STAGE_HALF_X+3 || Math.abs(rawNz)>STAGE_HALF_Z+3){
+    f.pos.x=rawNx; f.pos.z=rawNz;
     if(f.isPlayer){
-      f.alive = false;
-      f.deathLocation = f.pos.clone();
-      f.human.visible = false;
-      f.squid.visible = false;
+      f.alive=false; f.deathLocation=f.pos.clone();
+      f.human.visible=false; f.squid.visible=false;
       showToastFor(f,'水に落ちた！');
-      if(typeof respawnFighter==='function') setTimeout(()=>{ if(f && currentPhase===2) respawnFighter(f); }, 900);
+      if(typeof respawnFighter==='function') setTimeout(()=>{ if(f&&currentPhase===2) respawnFighter(f); },900);
     }
     return false;
   }
-
-  const clamped = clampStageXY(rawNx,rawNz);
-  const nx = clamped.x;
-  const nz = clamped.z;
-  const wall = getBlockingWall(nx, nz, f.pos.y);
-  if(wall){
-    const isMine = wall.paintTeam===f.team && wall.paintLevel>=20 && wall.climbable;
-    if(isSquid && isMine && (vel.x!==0||vel.z!==0)){
-      // Move vertically while hugging the wall; stop at the top.
-      const climbSpeed=8.5;
-      const topY=Math.max(f.pos.y,wall.maxY);
-      f.pos.y=Math.min(wall.maxY, f.pos.y + climbSpeed*delta);
-      f.pos.x = Math.max(wall.minX-0.18, Math.min(wall.maxX+0.18, f.pos.x));
-      f.pos.z = Math.max(wall.minZ-0.18, Math.min(wall.maxZ+0.18, f.pos.z));
-      return true;
+  const p=clampStageXY(rawNx,rawNz), nx=p.x, nz=p.z;
+  const wall=getBlockingWall(nx,nz,f.pos.y);
+  if(!wall){ f.pos.x=nx; f.pos.z=nz; return false; }
+  const mine=wall.paintTeam===f.team && wall.paintLevel>=20 && wall.climbable;
+  if(isSquid && mine && f.pos.y<wall.maxY-0.08 && (Math.abs(vel.x)+Math.abs(vel.z))>0.001){
+    const dx=Math.min(Math.abs(f.pos.x-wall.minX),Math.abs(f.pos.x-wall.maxX));
+    const dz=Math.min(Math.abs(f.pos.z-wall.minZ),Math.abs(f.pos.z-wall.maxZ));
+    if(dx<=dz){
+      const side=f.pos.x<=(wall.minX+wall.maxX)/2?-1:1;
+      f.pos.x=side<0?wall.minX-0.46:wall.maxX+0.46;
+      f.pos.z=Math.max(wall.minZ-0.46,Math.min(wall.maxZ+0.46,f.pos.z+vel.z*delta));
+    }else{
+      const side=f.pos.z<=(wall.minZ+wall.maxZ)/2?-1:1;
+      f.pos.z=side<0?wall.minZ-0.46:wall.maxZ+0.46;
+      f.pos.x=Math.max(wall.minX-0.46,Math.min(wall.maxX+0.46,f.pos.x+vel.x*delta));
     }
-    const wallX = getBlockingWall(nx, f.pos.z, f.pos.y);
-    const wallZ = getBlockingWall(f.pos.x, nz, f.pos.y);
-    if(!wallX) f.pos.x = nx;
-    if(!wallZ) f.pos.z = nz;
-    return false;
+    f.pos.y=Math.min(wall.maxY+0.04,f.pos.y+9.5*delta);
+    if(f.pos.y>=wall.maxY-0.04) f.pos.y=wall.maxY+0.04;
+    return true;
   }
-  f.pos.x = nx; f.pos.z = nz;
+  const wallX=getBlockingWall(nx,f.pos.z,f.pos.y), wallZ=getBlockingWall(f.pos.x,nz,f.pos.y);
+  if(!wallX) f.pos.x=nx;
+  if(!wallZ) f.pos.z=nz;
   return false;
 }
 
@@ -2446,7 +2440,7 @@ function updateAI(f, delta, now){
   });
 
   const wp = f.weapon;
-  const engageRange = wp.category==='roller' ? wp.swingRange+1.5 : wp.category==='charger' ? 20 : 12;
+  const engageRange = wp.category==='roller' ? wp.swingRange+1.5 : wp.category==='charger' ? 16 : 12;
 
   let moveTarget = null;
   let wantShoot = false;
@@ -2513,7 +2507,7 @@ function updateAI(f, delta, now){
     dir.y = 0.05;
     dir.normalize();
     if(wp.category!=='roller'){
-      const jitterBase=wp.category==='charger' ? (0.10+Math.min(.20,nearestD/100)) : 0.045;
+      const jitterBase=wp.category==='charger' ? (0.20+Math.min(.28,nearestD/70)) : 0.045;
       dir.x += (Math.random()-.5)*jitterBase;
       dir.z += (Math.random()-.5)*jitterBase;
       dir.y += (Math.random()-.5)*jitterBase*.25;
@@ -2524,19 +2518,19 @@ function updateAI(f, delta, now){
     } else if(wp.category==='charger'){
       if(!f.chargeStart) f.chargeStart = now;
       const cooldownUntil=f.ai.chargerNextShot||0;
-      const chargeNeed=(wp.chargeTime||800)*1.55;
+      const chargeNeed=(wp.chargeTime||800)*2.0;
       if(now >= cooldownUntil && now-f.chargeStart >= chargeNeed){
         // Deliberate aim error: AI chargers should not track the player perfectly.
-        const jitter=0.10 + Math.min(.18,nearestD/120);
+        const jitter=0.20 + Math.min(.22,nearestD/80);
         const aiDir=dir.clone();
         aiDir.x += (Math.random()-.5)*jitter;
         aiDir.z += (Math.random()-.5)*jitter;
         aiDir.y += (Math.random()-.5)*jitter*.35;
         aiDir.normalize();
         if(f.ink>=(wp.inkCost||8)){
-          fireChargerShot(f, aiDir, 0.68 + Math.random()*0.18);
+          fireChargerShot(f, aiDir, 0.50 + Math.random()*0.15);
         }
-        f.ai.chargerNextShot=now+1600+Math.random()*1000;
+        f.ai.chargerNextShot=now+3200+Math.random()*1600;
         f.chargeStart=0;
       }
     } else {
