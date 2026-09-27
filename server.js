@@ -128,6 +128,7 @@ function assignTeamsAndStart(room) {
     p.spawn = p.team === 'A' ? { x, y: 0, z: -64 } : { x, y: 0, z: 64 };
   });
   room.started = true; room.startsAt = Date.now() + 1500; room.timer = 180;
+  console.log(`[MATCH START] ${room.id} players=${ps.map(p => p.id+'('+ (p.accountName||'-') +')').join(',')} totalSockets=${sockets.size}`);
   const r = roster(room);
   for (const p of ps) send(p.ws, { type: 'matchFound', roomId: room.id, selfId: p.id, team: p.team, spawn: p.spawn, startAt: room.startsAt, players: r });
 }
@@ -147,7 +148,7 @@ function joinRoom(player) {
     send(p.ws, roomPayload);
     send(p.ws, queuePayload);
   }
-  console.log(`[MATCH] ${room.id}: ${players.length}/8 players joined`);
+  console.log(`[MATCH] ${room.id}: ${players.length}/8 players joined | player=${player.id} account=${player.accountName || '-'} totalSockets=${sockets.size} waitingRooms=${[...rooms.values()].filter(r=>!r.started).map(r=>r.id+':'+r.players.size).join(',') || '-'}`);
   return room;
 }
 function leaveRoom(player) {
@@ -233,31 +234,52 @@ wss.on('connection', ws => {
   const id = `Player_${String(nextPlayerNo++).padStart(4, '0')}`;
   const player = { id, ws, roomId: null, team: null, ready: false, weaponId: 0, spawn: { x: 0, y: 0, z: 0 }, lastStateAt: 0, accountName: null, accountToken: null };
   sockets.set(ws, player);
+  console.log(`[WS CONNECT] ${player.id} activeSockets=${sockets.size}`);
   send(ws, { type: 'hello', id });
   broadcastGlobalOnlineCount();
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
     if (m.type === 'bindAccount') {
-      const s = sessions.get(String(m.token || ''));
-      if (s && accounts[s.name]) { player.accountName = s.name; player.accountToken = String(m.token); send(ws, { type: 'accountBound', profile: profile(accounts[s.name]) }); }
-      else send(ws, { type: 'accountBound', error: 'ログイン情報が無効です。' });
+      const token = String(m.token || '');
+      const s = sessions.get(token);
+      if (s && accounts[s.name]) {
+        player.accountName = s.name;
+        player.accountToken = token;
+        console.log(`[WS BIND] ${player.id} account=${player.accountName}`);
+        send(ws, { type: 'accountBound', profile: profile(accounts[s.name]) });
+      } else {
+        console.log(`[WS BIND FAIL] ${player.id} tokenInvalid=true`);
+        send(ws, { type: 'accountBound', error: 'ログイン情報が無効です。' });
+      }
       return;
     }
     if (m.type === 'joinQueue') {
       // Online battles can also use Render without a WEB ID.
       // Registered users keep their account/rating; guests simply use their connection id.
       if (!player.accountName) player.accountName = `Guest_${player.id}`;
+      console.log(`[WS JOIN REQUEST] ${player.id} account=${player.accountName} currentRoom=${player.roomId || '-'}`);
       const room = joinRoom(player);
+      console.log(`[WS JOIN RESULT] ${player.id} account=${player.accountName} room=${room ? room.id : '-'} roomPlayers=${room ? room.players.size : 0} totalSockets=${sockets.size}`);
       send(ws, { type: 'queue', count: room.players.size, roomId: room.id });
       return;
     }
     if (m.type === 'ready') {
-      const room = player.roomId ? rooms.get(player.roomId) : null; if (!room || room.started) return;
+      const room = player.roomId ? rooms.get(player.roomId) : null;
+      if (!room || room.started) {
+        console.log(`[WS READY IGNORED] ${player.id} room=${player.roomId || '-'} reason=no-waiting-room-or-started`);
+        return;
+      }
       player.ready = !!m.ready; player.weaponId = Number.isFinite(m.weaponId) ? m.weaponId : player.weaponId;
+      console.log(`[WS READY] ${player.id} room=${room.id} ready=${player.ready} roomPlayers=${room.players.size}`);
       broadcast(room, { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 });
       assignTeamsAndStart(room); return;
     }
-    if (m.type === 'leaveQueue') { leaveRoom(player); return; }
+    if (m.type === 'leaveQueue') {
+      console.log(`[WS LEAVE REQUEST] ${player.id} room=${player.roomId || '-'} account=${player.accountName || '-'}`);
+      leaveRoom(player);
+      console.log(`[WS LEAVE RESULT] ${player.id} room=- totalSockets=${sockets.size} rooms=${rooms.size}`);
+      return;
+    }
     const room = player.roomId ? rooms.get(player.roomId) : null; if (!room) return;
     if (m.type === 'state') {
       const now = Date.now(); if (now - player.lastStateAt < 28) return; player.lastStateAt = now;
@@ -278,7 +300,15 @@ wss.on('connection', ws => {
       setTimeout(() => { if (rooms.get(room.id) === room) rooms.delete(room.id); }, 5000); return;
     }
   });
-  ws.on('close', () => { sockets.delete(ws); leaveRoom(player); broadcastGlobalOnlineCount(); });
+  ws.on('close', (code, reason) => {
+    const beforeRoom = player.roomId || '-';
+    const beforeAccount = player.accountName || '-';
+    console.log(`[WS CLOSE] ${player.id} account=${beforeAccount} room=${beforeRoom} code=${code} reason=${String(reason || '')} activeSocketsBefore=${sockets.size}`);
+    sockets.delete(ws);
+    leaveRoom(player);
+    console.log(`[WS CLOSE AFTER] ${player.id} rooms=${rooms.size} activeSockets=${sockets.size}`);
+    broadcastGlobalOnlineCount();
+  });
 });
 setInterval(() => {
   const now = Date.now();
