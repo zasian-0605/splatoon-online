@@ -3741,44 +3741,77 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   const pctx=paintStamp.getContext('2d');
   pctx.fillStyle='#fff';
   pctx.beginPath(); pctx.arc(32,32,28,0,Math.PI*2); pctx.fill();
-  const stampPattern = paintCtx.createPattern(paintStamp,'no-repeat');
 
+  /* Final paint primitive.
+     opts.to = continuous stroke endpoint.
+     opts.noNetwork / opts.remote = local/remote-only application.
+  */
   paintGround = function(x,z,radius,colorHex,opts={}){
-    const mult = opts.mult || 1;
+    const mult = Number(opts.mult)||1;
     const baseR = Math.max(.45, radius*1.18*mult);
-    const {cx,cy}=worldToCanvas(x,z);
+    const start=worldToCanvas(x,z);
     const cr=(baseR/(STAGE_HALF_Z*2))*paintCanvas.height;
+    const to=opts.to;
+
     paintCtx.save();
     paintCtx.fillStyle=hexToCss(colorHex);
-    // Main soft stamp
-    paintCtx.beginPath();
-    paintCtx.arc(cx,cy,cr,0,Math.PI*2);
-    paintCtx.fill();
-    // Several organic satellites => much better coverage
-    const n = Math.max(3, Math.min(10, Math.round(radius*1.7)));
-    for(let i=0;i<n;i++){
-      const a=i*2.399963 + (x*0.03+z*0.07);
-      const rr=cr*(.25+.65*((i%5)/4));
-      const px=cx+Math.cos(a)*rr*.85, py=cy+Math.sin(a)*rr*.85;
-      paintCtx.beginPath(); paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2); paintCtx.fill();
-    }
-    // short trail segment when requested (roller/brush/wiper)
-    if(opts.to){
-      const to=worldToCanvas(opts.to.x,opts.to.z);
-      paintCtx.lineWidth=Math.max(2,cr*1.5);
+
+    if(to && Number.isFinite(Number(to.x)) && Number.isFinite(Number(to.z))){
+      const finish=worldToCanvas(Number(to.x),Number(to.z));
+
+      /* The important part: the whole trajectory becomes ink, not only impact. */
+      paintCtx.strokeStyle=hexToCss(colorHex);
+      paintCtx.lineWidth=Math.max(2,cr*2);
       paintCtx.lineCap='round';
-      paintCtx.beginPath(); paintCtx.moveTo(cx,cy); paintCtx.lineTo(to.cx,to.cy); paintCtx.stroke();
+      paintCtx.lineJoin='round';
+      paintCtx.beginPath();
+      paintCtx.moveTo(start.cx,start.cy);
+      paintCtx.lineTo(finish.cx,finish.cy);
+      paintCtx.stroke();
+
+      const dist=Math.hypot(finish.cx-start.cx,finish.cy-start.cy);
+      const steps=Math.max(1,Math.ceil(dist/Math.max(6,cr*.85)));
+      for(let i=0;i<=steps;i++){
+        const t=i/steps;
+        const cx=start.cx+(finish.cx-start.cx)*t;
+        const cy=start.cy+(finish.cy-start.cy)*t;
+        paintCtx.beginPath();
+        paintCtx.arc(cx,cy,cr*(.70+.12*((i*7)%3)),0,Math.PI*2);
+        paintCtx.fill();
+      }
+    }else{
+      paintCtx.beginPath();
+      paintCtx.arc(start.cx,start.cy,cr,0,Math.PI*2);
+      paintCtx.fill();
+      const n=Math.max(3,Math.min(10,Math.round(radius*1.7)));
+      for(let i=0;i<n;i++){
+        const angle=i*2.399963+(x*0.03+z*0.07);
+        const rr=cr*(.25+.65*((i%5)/4));
+        const px=start.cx+Math.cos(angle)*rr*.85;
+        const py=start.cy+Math.sin(angle)*rr*.85;
+        paintCtx.beginPath();
+        paintCtx.arc(px,py,cr*(.32+.12*(i%3)),0,Math.PI*2);
+        paintCtx.fill();
+      }
     }
     paintCtx.restore();
     paintTexture.needsUpdate=true;
+
     if(onlineActive && onlineSocket && onlineSocket.readyState===1 && !opts.remote && !opts.noNetwork){
       const t=performance.now();
-      if(!paintGround._netLast || t-paintGround._netLast>80){
+      if(!paintGround._netLast || t-paintGround._netLast>50){
         paintGround._netLast=t;
-        try{onlineSocket.send(JSON.stringify({type:'paint',roomId:onlineRoomId,x,z,radius:baseR,colorHex, mult}));}catch{}
+        try{
+          onlineSocket.send(JSON.stringify({
+            type:'paint',roomId:onlineRoomId,
+            x,z,x2:to?Number(to.x):undefined,z2:to?Number(to.z):undefined,
+            radius:baseR,colorHex,mult
+          }));
+        }catch{}
       }
     }
   };
+
 
   /* ---------- Sound FX (WebAudio generated, no external assets) ---------- */
   let audioCtx=null;
