@@ -4780,5 +4780,84 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+
+<script>
+/* V38 result hotfix: stop battle first, then show result. */
+(function(){
+  let busy=false;
+  window.__forceEndBattleV38=function(){
+    if(busy)return;
+    busy=true;
+    try{
+      let a=0,b=0;
+      try{computeTurf();a=turfPct.a;b=turfPct.b;}catch(e){}
+      let winner='DRAW';
+      if(playerFighter) winner=playerFighter.team==='A' ? (a>=b?'A':'B') : (b>=a?'A':'B');
+
+      try{
+        if(window.__v36OnlineReport) window.__v36OnlineReport(winner);
+        else if(window.__v36LocalRecordResult) window.__v36LocalRecordResult(winner);
+      }catch(e){}
+
+      battleActive=false;
+      window.__battleDeadline=0;
+      gameLoopToken++;
+      currentPhase=3;
+
+      try{
+        if(window.__V10 && window.__V10.releaseLock) window.__V10.releaseLock();
+        if(window.__V10 && window.__V10.showMaps) window.__V10.showMaps(false);
+      }catch(e){}
+
+      bullets.forEach(x=>{try{scene.remove(x.mesh);}catch(e){}});
+      bullets.length=0;
+      subsList.forEach(x=>{try{scene.remove(x.mesh);}catch(e){}});
+      subsList.length=0;
+
+      const title=document.getElementById('result-title');
+      const detail=document.getElementById('result-detail');
+      const rs=document.getElementById('result-screen');
+      const ui=document.getElementById('battle-ui');
+      const top=document.getElementById('top-battle-status');
+      const feed=document.getElementById('kill-feed');
+      const ready=document.getElementById('special-ready');
+      const respawn=document.getElementById('respawn-overlay');
+
+      const won=playerFighter ? (playerFighter.team==='A' ? a>=b : b>=a) : false;
+      if(title){title.textContent=won?'WIN!!':'LOSE...';title.style.color=won?'#e3ff00':'#ff0055';}
+      if(detail)detail.textContent='自陣(A) '+a+'%　対　敵陣(B) '+b+'%';
+      if(ui)ui.style.display='none';
+      if(top)top.style.display='none';
+      if(feed)feed.innerHTML='';
+      if(ready)ready.style.display='none';
+      if(respawn)respawn.style.display='none';
+      if(rs)rs.style.display='flex';
+    }catch(err){
+      console.error('result hotfix',err);
+      battleActive=false;
+      window.__battleDeadline=0;
+      gameLoopToken++;
+      currentPhase=3;
+      const rs=document.getElementById('result-screen');
+      if(rs)rs.style.display='flex';
+      const ui=document.getElementById('battle-ui');
+      if(ui)ui.style.display='none';
+    }finally{
+      setTimeout(()=>busy=false,0);
+    }
+  };
+
+  // Replace the active function used by the main loop.
+  endBattle=window.__forceEndBattleV38;
+
+  // Independent timeout fallback.
+  setInterval(()=>{
+    if(battleActive && currentPhase===2 && window.__battleDeadline && Date.now()>=window.__battleDeadline){
+      window.__forceEndBattleV38();
+    }
+  },250);
+})();
+</script>
+
 </body>
 </html>
