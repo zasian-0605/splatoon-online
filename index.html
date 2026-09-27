@@ -5289,84 +5289,260 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   }
 
-  function toggleSquidV37(e){
-    if(e){ e.preventDefault(); e.stopImmediatePropagation(); }
-    if(currentPhase!==1.5 && currentPhase!==2) return;
-    squidWanted=!squidWanted;
-    if(!squidWanted && playerFighter) setSquidVisual(playerFighter,false);
+  /* V66: Hold-to-squid control.
+     Shift = squid only while physically held.
+     Releasing Shift immediately returns to human.
+     Attack input while squid first breaks squid, then executes the action as human.
+  */
+  let squidPhysicalHold=false;
+  let squidBreakUntilShiftRelease=false;
+  let lastSquidVisual=false;
+
+  function setSquidVisualV66(on){
+    if(!playerFighter)return;
+    playerFighter.squid_mode=!!on;
+    if(typeof setSquidVisual==='function')setSquidVisual(playerFighter,!!on);
+    if(typeof updateFighterAnimation==='function')
+      updateFighterAnimation(playerFighter,!!playerFighter._moving,!!on);
+  }
+
+  function beginSquidHoldV66(e){
+    if(e){e.preventDefault();e.stopImmediatePropagation();}
+    if(currentPhase!==1.5&&currentPhase!==2)return;
+    squidPhysicalHold=true;
+    squidBreakUntilShiftRelease=false;
+    squidWanted=true;
+    keys.shift=true;
+    if(playerFighter&&!playerFighter.squid_mode){
+      playerFighter._squidBurstUntil=performance.now()+230;
+    }
+  }
+
+  function endSquidHoldV66(e){
+    if(e){e.preventDefault();e.stopImmediatePropagation();}
+    squidPhysicalHold=false;
+    squidBreakUntilShiftRelease=false;
+    squidWanted=false;
+    keys.shift=false;
+    if(playerFighter){
+      playerFighter.squid_mode=false;
+      playerFighter._neutralSquid=false;
+      setSquidVisualV66(false);
+    }
+  }
+
+  function breakSquidForAttackV66(reason){
+    const f=playerFighter;
+    if(!f||!f.alive||!f.squid_mode)return false;
+    squidBreakUntilShiftRelease=true;
+    squidPhysicalHold=false;
+    squidWanted=false;
+    keys.shift=false;
+    f.squid_mode=false;
+    f._neutralSquid=false;
+    f._squidAttackBreak=performance.now();
+    f.isCharging=false;
+    f.wiperChargeStart=0;
+    const gauge=document.getElementById('charge-gauge');
+    if(gauge)gauge.style.display='none';
+    setSquidVisualV66(false);
+    if(typeof showToast==='function'){
+      const labels={shoot:'ヒト化 → シュート！',sub:'ヒト化 → ボム！',special:'ヒト化 → スペシャル！'};
+      showToast(labels[reason]||'ヒトに戻った！');
+    }
+    return true;
   }
 
   window.addEventListener('keydown',e=>{
-    if((e.code==='ShiftLeft'||e.code==='ShiftRight')&&!e.repeat){
-      toggleSquidV37(e);
-    }
+    if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
+    if(currentPhase!==1.5&&currentPhase!==2)return;
+    if(e.repeat)return;
+    beginSquidHoldV66(e);
   },true);
 
   window.addEventListener('keyup',e=>{
-    if(e.code==='ShiftLeft'||e.code==='ShiftRight'){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }
+    if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
+    endSquidHoldV66(e);
   },true);
+
+  window.addEventListener('blur',()=>{
+    if(squidPhysicalHold||keys.shift||squidWanted)endSquidHoldV66();
+  });
 
   const squidBtn=document.getElementById('btn-squid');
   if(squidBtn){
-    squidBtn.addEventListener('pointerdown',toggleSquidV37,true);
+    squidBtn.addEventListener('pointerdown',beginSquidHoldV66,true);
+    squidBtn.addEventListener('pointerup',endSquidHoldV66,true);
+    squidBtn.addEventListener('pointercancel',endSquidHoldV66,true);
+    squidBtn.addEventListener('touchend',endSquidHoldV66,true);
+    squidBtn.addEventListener('contextmenu',e=>{e.preventDefault();e.stopImmediatePropagation();},true);
   }
 
-  const stableMoveBeforeSquid = updatePlayerMovement;
+  const stableMoveBeforeSquid=updatePlayerMovement;
   updatePlayerMovement=function(delta){
     const f=playerFighter;
-    if(!f || !f.alive){ stableMoveBeforeSquid(delta); return; }
+    if(!f||!f.alive){stableMoveBeforeSquid(delta);return;}
     if(f.specialChargeMode){
       updateChargeOrbFighterMotion(f,delta);
       return;
     }
 
     const now=performance.now();
+    const wasSquid=!!f.squid_mode;
     const enemy=sampleEnemyInkCached(f);
+    const physicalHold=!!squidPhysicalHold&&!squidBreakUntilShiftRelease;
+    let requested=physicalHold;
 
     if(enemy){
-      if(squidWanted && !enemySquidUntil) enemySquidUntil=now+1000;
-      if(now>=enemySquidUntil) squidWanted=false;
+      if(physicalHold&&!enemySquidUntil)enemySquidUntil=now+1000;
+      if(now>=enemySquidUntil)requested=false;
     }else{
       enemySquidUntil=0;
     }
 
-    // Let the existing movement/weapon code do the actual movement.
-    // We only control the requested form and prevent tank-drain bugs.
-    keys.shift=squidWanted;
+    squidWanted=requested;
+    keys.shift=requested;
     stableMoveBeforeSquid(delta);
 
-    if(squidWanted && !enemy && !onFighterInk(f)){
-      // Re-scale the already-computed horizontal velocity for neutral floor.
+    if(!!f.squid_mode&&!wasSquid)f._squidBurstUntil=now+230;
+
+    if(f.squid_mode&&f._squidBurstUntil&&now<f._squidBurstUntil){
+      playerVelocity.x*=1.16;
+      playerVelocity.z*=1.16;
+    }
+
+    if(requested&&!enemy&&!onFighterInk(f)){
       f._neutralSquid=true;
       playerVelocity.x*=0.55;
       playerVelocity.z*=0.55;
     }
 
-    if(squidWanted){
+    if(requested){
       f.squid_mode=true;
-      setSquidVisual(f,true);
-      // Neutral floor is deliberately slower than human speed.
-      if(!enemy && !onFighterInk(f)){
-        f._neutralSquid=true;
-      }else{
-        f._neutralSquid=false;
-      }
+      setSquidVisualV66(true);
+      f._neutralSquid=(!enemy&&!onFighterInk(f));
     }else{
       f.squid_mode=false;
       f._neutralSquid=false;
-      setSquidVisual(f,false);
+      setSquidVisualV66(false);
+    }
+
+    if(lastSquidVisual!==f.squid_mode){
+      lastSquidVisual=f.squid_mode;
+      const h=document.getElementById('v66-form-hud');
+      if(h){
+        h.textContent=f.squid_mode
+          ? '🦑 イカ中　｜ Shiftを離す→人　｜ 攻撃入力→即ヒト化'
+          : '🧍 ヒト　｜ Shiftを押している間だけイカ';
+        h.style.opacity='1';
+        clearTimeout(h._fadeTimer);
+        h._fadeTimer=setTimeout(()=>{h.style.opacity='.68';},900);
+      }
     }
   };
 
-  // Keep the old mobile hold handlers from immediately undoing the toggle.
-  if(squidBtn){
-    squidBtn.addEventListener('pointerup',e=>{e.preventDefault();e.stopImmediatePropagation();keys.shift=squidWanted;},true);
-    squidBtn.addEventListener('pointercancel',e=>{e.preventDefault();e.stopImmediatePropagation();keys.shift=squidWanted;},true);
-  }
+  /* Actual squid form cannot attack. The input itself converts to human first. */
+  (function(){
+    const isSquid=f=>!!(f&&f.alive&&f.squid_mode);
 
+    if(typeof tryShoot==='function'&&!window.__V66_tryShootWrapped){
+      const base=tryShoot;
+      window.__V66_tryShootWrapped=true;
+      tryShoot=function(f,aimDir,now){
+        if(isSquid(f))return false;
+        return base(f,aimDir,now);
+      };
+    }
+
+    if(typeof tryThrowSub==='function'&&!window.__V66_tryThrowSubWrapped){
+      const base=tryThrowSub;
+      window.__V66_tryThrowSubWrapped=true;
+      tryThrowSub=function(f,aimDir,now){
+        if(isSquid(f))return false;
+        return base(f,aimDir,now);
+      };
+      window.tryThrowSub=tryThrowSub;
+    }
+
+    if(typeof fireChargerShot==='function'&&!window.__V66_chargerWrapped){
+      const base=fireChargerShot;
+      window.__V66_chargerWrapped=true;
+      fireChargerShot=function(f,aimDir,frac){
+        if(isSquid(f))return false;
+        return base(f,aimDir,frac);
+      };
+    }
+
+    if(typeof doWiperSlash==='function'&&!window.__V66_wiperWrapped){
+      const base=doWiperSlash;
+      window.__V66_wiperWrapped=true;
+      doWiperSlash=function(f,frac){
+        if(isSquid(f))return false;
+        return base(f,frac);
+      };
+    }
+
+    if(typeof doPlayerSubThrow==='function'&&!window.__V66_playerSubWrapped){
+      const base=doPlayerSubThrow;
+      window.__V66_playerSubWrapped=true;
+      doPlayerSubThrow=function(){
+        const f=playerFighter;
+        if(!f||!f.alive)return;
+        if(f.squid_mode)breakSquidForAttackV66('sub');
+        return base();
+      };
+    }
+
+    if(typeof fireSpecial==='function'&&!window.__V66_playerSpecialWrapped){
+      const base=fireSpecial;
+      window.__V66_playerSpecialWrapped=true;
+      fireSpecial=function(f){
+        if(f&&f.isPlayer&&f.squid_mode)breakSquidForAttackV66('special');
+        return base(f);
+      };
+    }
+
+    /* Mouse attack pressed during squid: humanize before the old handler sees the click. */
+    document.addEventListener('mousedown',function(e){
+      if(currentPhase!==1.5&&currentPhase!==2)return;
+      if(e.target?.closest?.('#minimap,#fullmap,#online-panel,#result-screen,.mobile-btn,#gear-panel'))return;
+      const f=playerFighter;
+      if(!f||!f.alive||!f.squid_mode)return;
+      if(e.button===0)breakSquidForAttackV66('shoot');
+      else if(e.button===2)breakSquidForAttackV66('sub');
+    },true);
+
+    /* Holding Shift cannot leave a charger/wiper half-charged after form changes. */
+    window.addEventListener('keyup',function(e){
+      if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
+      const f=playerFighter;
+      if(f){
+        f.isCharging=false;
+        f.wiperChargeStart=0;
+        const gauge=document.getElementById('charge-gauge');
+        if(gauge)gauge.style.display='none';
+      }
+    },true);
+  })();
+
+  window.__V66_SQUID_PHYSICAL_HOLD=()=>squidPhysicalHold;
+
+  const v66FormHud=document.createElement('div');
+  v66FormHud.id='v66-form-hud';
+  v66FormHud.textContent='🧍 ヒト　｜ Shiftを押している間だけイカ';
+  Object.assign(v66FormHud.style,{
+    position:'absolute',bottom:'82px',left:'50%',transform:'translateX(-50%)',
+    padding:'6px 13px',borderRadius:'999px',border:'2px solid #fff',
+    background:'rgba(16,5,34,.82)',color:'#fff',font:'900 12px Arial,Meiryo,sans-serif',
+    textShadow:'1px 1px 0 #000',zIndex:'23',pointerEvents:'none',
+    opacity:'.68',transition:'opacity .2s',whiteSpace:'nowrap',display:'none'
+  });
+  document.body.appendChild(v66FormHud);
+  const updateV66Hud=()=>{
+    v66FormHud.style.display=(currentPhase===1.5||currentPhase===2)?'block':'none';
+  };
+  updateV66Hud();
+  setInterval(updateV66Hud,500);
   // Report online result before the stable v25 result screen is shown.
   const baseEndBattleForV36=endBattle;
   endBattle=function(){
