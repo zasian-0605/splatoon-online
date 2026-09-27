@@ -1974,6 +1974,27 @@ function spawnBullet(fighter, dir, opts){
   });
 }
 
+/* V58: 全射撃系の発射角を統一
+   ユーザー指定の角度系：上=0° / 正面=90° / 下=180°
+   35°は「正面から55°上」ではなく「真上から35°」。
+   したがって水平成分=sin(35°)、上成分=cos(35°)。 */
+function getLaunchDirection35(aimDir, spread=0, fallbackYaw=0){
+  const raw=aimDir?.clone ? aimDir.clone() : new THREE.Vector3();
+  raw.y=0;
+  if(raw.lengthSq()<0.0001){
+    raw.set(Math.sin(fallbackYaw),0,Math.cos(fallbackYaw));
+  }
+  raw.normalize();
+  if(spread){
+    const yawJitter=(Math.random()-0.5)*spread*2;
+    raw.applyAxisAngle(new THREE.Vector3(0,1,0),yawJitter).normalize();
+  }
+  const angleFromUp=THREE.MathUtils.degToRad(35);
+  const horizontal=Math.sin(angleFromUp);
+  const vertical=Math.cos(angleFromUp);
+  return new THREE.Vector3(raw.x*horizontal,vertical,raw.z*horizontal).normalize();
+}
+
 function tryShoot(fighter, aimDir, now){
   const wp = fighter.weapon;
   if(wp.category==='charger') return; // チャージャーは別ロジック
@@ -1982,17 +2003,13 @@ function tryShoot(fighter, aimDir, now){
   if(now - fighter.lastShot < wp.rate) return;
   fighter.lastShot = now;
   const spread = wp.spread||0.05;
-  const dir = aimDir.clone();
-  dir.x += (Math.random()-0.5)*spread;
-  dir.y += (Math.random()-0.5)*spread;
-  dir.z += (Math.random()-0.5)*spread;
-  dir.normalize();
+  const dir = getLaunchDirection35(aimDir,spread,fighter.root?.rotation.y||0);
 
   if(wp.category==='blaster'){
     spawnBullet(fighter, dir, {speed:wp.speed, damage:wp.damage, gravity:16, radius:0.22, life:wp.life,
       explosive:true, explosionRadius:wp.explosionRadius, splashDamage:wp.splashDamage, paintRadius:wp.paintRadius});
   } else if(wp.category==='slosher'){
-    const d = dir.clone(); d.y += 0.55; d.normalize();
+    const d = dir.clone();
     spawnBullet(fighter, d, {speed:wp.speed, damage:wp.damage, gravity:26, radius:0.3, life:wp.life,
       explosive:true, explosionRadius:wp.explosionRadius, splashDamage:wp.damage*0.5, paintRadius:wp.paintRadius});
   } else if(wp.category==='maneuver'){
@@ -2011,7 +2028,7 @@ function fireChargerShot(fighter, aimDir, chargeFrac){
   if(window.__consumeInkForGame && !window.__consumeInkForGame(fighter,shotCost)) return false;
   const damage = wp.tapDamage + (wp.fullDamage-wp.tapDamage)*frac;
   const origin = fighter.pos.clone(); origin.y += 1.2;
-  const dir = aimDir.clone().normalize();
+  const dir = getLaunchDirection35(aimDir,0,fighter.root?.rotation.y||0);
   const step = 0.6, maxDist = 60;
   const col = getFighterInkHex(fighter);
   let traveled = 0;
@@ -2115,13 +2132,13 @@ function tryThrowSub(fighter, aimDir, now){
   const spawnPos = fighter.pos.clone(); spawnPos.y += 1.2;
   mesh.position.copy(spawnPos);
   scene.add(mesh);
-  const vel = aimDir.clone().multiplyScalar(def.speed);
-  vel.y += 7;
+  const launchDir=getLaunchDirection35(aimDir,0,fighter.root?.rotation.y||0);
+  const vel = launchDir.clone().multiplyScalar(def.speed);
   subsList.push({
     mesh, velocity:vel, team:fighter.team, subType:def.type, def,
     age:0, fuse:def.fuse, exploded:false, stuckAt:null, bounceCount:0,
     colorHex:getFighterInkHex(fighter),fromFighter:fighter,
-    facing: new THREE.Vector3(aimDir.x,0,aimDir.z).normalize()
+    facing: new THREE.Vector3(launchDir.x,0,launchDir.z).normalize()
   });
 }
 
@@ -3324,16 +3341,9 @@ function updateAI(f, delta, now){
 
   if(wantShoot && aimAt){
     const dir = new THREE.Vector3().subVectors(aimAt, f.pos);
-    // Keep the upper-body aim and give the AI shot a visible upward trajectory.
-    dir.y = Math.max(0.34, dir.y);
+    dir.y = 0;
+    if(dir.lengthSq()<0.0001) dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
     dir.normalize();
-    if(wp.category!=='roller'){
-      const jitterBase=wp.category==='charger' ? (0.20+Math.min(.28,nearestD/70)) : 0.045;
-      dir.x += (Math.random()-.5)*jitterBase;
-      dir.z += (Math.random()-.5)*jitterBase;
-      dir.y += (Math.random()-.5)*jitterBase*.25;
-      dir.normalize();
-    }
     if(wp.category==='roller'){
       performRollerSwing(f, now);
     } else if(wp.category==='charger'){
@@ -3897,13 +3907,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!consumeInk(fighter,cost)) return;
     fighter.lastShot=now;
     const spread=wp.spread||.05;
-    const dir=aimDir.clone();
-    dir.x+=(Math.random()-.5)*spread;dir.y+=(Math.random()-.5)*spread;dir.z+=(Math.random()-.5)*spread;dir.normalize();
+    const dir=getLaunchDirection35(aimDir,spread,fighter.root?.rotation.y||0);
     let networkDir=dir.clone();
     if(wp.category==="blaster"){
       spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:16,radius:.22,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.splashDamage,paintRadius:wp.paintRadius*1.18});
     }else if(wp.category==="slosher"){
-      networkDir.y+=.55;networkDir.normalize();
       spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:26,radius:.3,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.damage*.5,paintRadius:wp.paintRadius*1.25});
     }else{
       spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:18,radius:.14,life:wp.life,paintRadius:wp.paintRadius*1.18});
@@ -6445,7 +6453,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       return;
     }
     if(name==="トリガーキャノン"){
-      const d=new THREE.Vector3().subVectors(q,f.pos).normalize();
+      const aim=new THREE.Vector3().subVectors(q,f.pos);
+      const d=getLaunchDirection35(aim,0,f.root?.rotation.y||0);
       for(let i=0;i<3;i++)setTimeout(()=>{if(f.alive)spawnBullet(f,d,{speed:40,damage:220,radius:.34,life:2,explosive:true,explosionRadius:2.8,splashDamage:40,paintRadius:2.8});},i*180);
       f.invulnUntil=now+450;
     }else if(name==="ドームシールド"){
