@@ -1489,9 +1489,9 @@ function tryShoot(fighter, aimDir, now){
   fighter.specialGauge = Math.min(100, fighter.specialGauge + 0.7);
 }
 
-function fireChargerShot(fighter, aimDir, frac){
+function fireChargerShot(fighter, aimDir, chargeFrac){
   const wp = fighter.weapon;
-  const frac = Math.max(0,Math.min(1,Number(frac)||0));
+  const frac = Math.max(0,Math.min(1,Number(chargeFrac)||0));
   const shotCost = (wp.inkCost||8) * (0.75 + 0.75*frac);
   if(window.__consumeInkForGame && !window.__consumeInkForGame(fighter,shotCost)) return false;
   const damage = wp.tapDamage + (wp.fullDamage-wp.tapDamage)*frac;
@@ -2242,6 +2242,7 @@ function endBattle(){
   }
   battleActive = false;
   window.__battleDeadline = 0;
+  gameLoopToken++;
   currentPhase = 3;
   computeTurf();
   const winA = turfPct.a >= turfPct.b;
@@ -2690,6 +2691,7 @@ function animate3D(token){
     document.getElementById('alive-count').textContent = `生存 A:${aliveA}/4  B:${aliveB}/4`;
     updateTeamLifeStrip();
     if(window.__battleDeadline && Date.now()>=window.__battleDeadline) battleTimer=0;
+    if((aliveA===0 || aliveB===0) && battleActive){ battleTimer=0; }
     if(battleTimer<=0 && battleActive){ endBattle(); return; }
   }
 
@@ -3219,14 +3221,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function normalizeServerOrigin(v){
     v=String(v||'').trim();
     if(!v) return '';
-    if(!/^https?:\\/\\//i.test(v)) v='https://'+v;
-    return v.replace(/\\/$/,'');
+    if(!/^https?:\/\//i.test(v)) v='https://'+v;
+    return v.replace(/\/$/,'');
   }
   function getOnlineServerOrigin(){
     const saved=normalizeServerOrigin(localStorage.getItem('splatoonOnlineServer')||'');
     if(saved) return saved;
     // The bundled server works on the same host when the app itself is served by Node/Render.
-    if(location.hostname && !/github\\.io$/i.test(location.hostname)){
+    if(location.hostname && !/github\.io$/i.test(location.hostname)){
       return location.origin;
     }
     return '';
