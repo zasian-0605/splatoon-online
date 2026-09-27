@@ -1489,9 +1489,12 @@ function tryShoot(fighter, aimDir, now){
   fighter.specialGauge = Math.min(100, fighter.specialGauge + 0.7);
 }
 
-function fireChargerShot(fighter, aimDir, chargeFrac){
+function fireChargerShot(fighter, aimDir, frac){
   const wp = fighter.weapon;
-  const damage = wp.tapDamage + (wp.fullDamage-wp.tapDamage)*chargeFrac;
+  const frac = Math.max(0,Math.min(1,Number(frac)||0));
+  const shotCost = (wp.inkCost||8) * (0.75 + 0.75*frac);
+  if(typeof consumeInk==='function' && !consumeInk(fighter,shotCost)) return false;
+  const damage = wp.tapDamage + (wp.fullDamage-wp.tapDamage)*frac;
   const origin = fighter.pos.clone(); origin.y += 1.2;
   const dir = aimDir.clone().normalize();
   const step = 0.6, maxDist = 60;
@@ -1537,7 +1540,7 @@ function fireChargerShot(fighter, aimDir, chargeFrac){
   } else {
     paintGround(hitPoint.x, hitPoint.z, wp.paintRadius||1.3, col);
   }
-  fighter.specialGauge = Math.min(100, fighter.specialGauge + 8 + chargeFrac*8);
+  fighter.specialGauge = Math.min(100, fighter.specialGauge + 8 + frac*8);
 }
 
 function performRollerSwing(fighter, now){
@@ -2227,6 +2230,10 @@ function startBattleFromRange(){
 }
 
 function endBattle(){
+  if(!battleActive && currentPhase===3){
+    const rs=document.getElementById('result-screen'); if(rs) rs.style.display='flex';
+    return;
+  }
   battleActive = false;
   window.__battleDeadline = 0;
   currentPhase = 3;
@@ -2432,7 +2439,7 @@ function updateAI(f, delta, now){
   });
 
   const wp = f.weapon;
-  const engageRange = wp.category==='roller' ? wp.swingRange+1.5 : wp.category==='charger' ? 30 : 12;
+  const engageRange = wp.category==='roller' ? wp.swingRange+1.5 : wp.category==='charger' ? 20 : 12;
 
   let moveTarget = null;
   let wantShoot = false;
@@ -2502,9 +2509,21 @@ function updateAI(f, delta, now){
       performRollerSwing(f, now);
     } else if(wp.category==='charger'){
       if(!f.chargeStart) f.chargeStart = now;
-      if(now - f.chargeStart >= wp.chargeTime){
-        fireChargerShot(f, dir, 1.0);
-        f.chargeStart = 0;
+      const cooldownUntil=f.ai.chargerNextShot||0;
+      const chargeNeed=(wp.chargeTime||800)*1.55;
+      if(now >= cooldownUntil && now-f.chargeStart >= chargeNeed){
+        // Deliberate aim error: AI chargers should not track the player perfectly.
+        const jitter=0.10 + Math.min(.18,nearestD/120);
+        const aiDir=dir.clone();
+        aiDir.x += (Math.random()-.5)*jitter;
+        aiDir.z += (Math.random()-.5)*jitter;
+        aiDir.y += (Math.random()-.5)*jitter*.35;
+        aiDir.normalize();
+        if(f.ink>=(wp.inkCost||8)){
+          fireChargerShot(f, aiDir, 0.68 + Math.random()*0.18);
+        }
+        f.ai.chargerNextShot=now+1600+Math.random()*1000;
+        f.chargeStart=0;
       }
     } else {
       tryShoot(f, dir, now);
@@ -2657,6 +2676,7 @@ function animate3D(token){
     const aliveB = fighters.filter(f=>f.team==='B'&&f.alive).length;
     document.getElementById('alive-count').textContent = `生存 A:${aliveA}/4  B:${aliveB}/4`;
     updateTeamLifeStrip();
+    if(window.__battleDeadline && Date.now()>=window.__battleDeadline) battleTimer=0;
     if(battleTimer<=0 && battleActive){ endBattle(); return; }
   }
 
@@ -4621,7 +4641,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       document.getElementById('kill-feed').innerHTML='';
       document.getElementById('special-ready').style.display='none';
       document.getElementById('death-location-marker').style.display='none';
-      document.getElementById('hud').style.display='none';
+      document.getElementById('hud').style.display='block';
       document.getElementById('alive-count').style.display='none';
       document.getElementById('range-hint').style.display='block';
       document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] ロビーに戻る　[O] CPU対戦(4vs4)　[P] オンライン';
