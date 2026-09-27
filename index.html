@@ -1273,13 +1273,16 @@ function computeTurf(){
   sampleCtx.clearRect(0,0,96,96);
   sampleCtx.drawImage(paintCanvas,0,0,96,96);
   const data = sampleCtx.getImageData(0,0,96,96).data;
-  const aC = new THREE.Color(teamAHex), bC = new THREE.Color(teamBHex);
+  const teamColors=(team)=>[team==='A'?teamAHex:teamBHex]
+    .concat((fighters||[]).filter(f=>f&&f.team===team).map(f=>getFighterInkHex(f)));
+  const aColors=teamColors('A').map(h=>new THREE.Color(h));
+  const bColors=teamColors('B').map(h=>new THREE.Color(h));
   let aCount=0,bCount=0,total=0;
   for(let i=0;i<data.length;i+=4){
     const r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
     total++;
-    const da = (r-aC.r)**2+(g-aC.g)**2+(b-aC.b)**2;
-    const db = (r-bC.r)**2+(g-bC.g)**2+(b-bC.b)**2;
+    const da=Math.min(...aColors.map(aC=>(r-aC.r)**2+(g-aC.g)**2+(b-aC.b)**2));
+    const db=Math.min(...bColors.map(bC=>(r-bC.r)**2+(g-bC.g)**2+(b-bC.b)**2));
     if(da<0.06) aCount++;
     else if(db<0.06) bCount++;
   }
@@ -1593,7 +1596,7 @@ function spawnParticle(x,y,z,colorHex){
    汎用ダメージ処理：地点爆発（爆風/サブ/スペシャル共通）
    ========================================================= */
 function explodeAt(pos, radius, damage, team, opts={}){
-  const col = team==='A'?teamAHex:teamBHex;
+  const col = opts.colorHex ?? (team==='A'?teamAHex:teamBHex);
   paintGround(pos.x, pos.z, opts.paintRadius||radius, col);
   for(let p=0;p<16;p++) spawnParticle(pos.x, pos.y+0.2, pos.z, col);
   fighters.forEach(o=>{
@@ -1623,7 +1626,7 @@ function explodeAt(pos, radius, damage, team, opts={}){
    ========================================================= */
 function spawnBullet(fighter, dir, opts){
   const wp = fighter.weapon;
-  const teamColor = fighter.team==='A'? teamAHex : teamBHex;
+  const teamColor = getFighterInkHex(fighter);
   const geo = new THREE.SphereGeometry(opts.visRadius||0.12, 8, 8);
   const mat = new THREE.MeshBasicMaterial({color: teamColor});
   const bullet = new THREE.Mesh(geo, mat);
@@ -1634,7 +1637,7 @@ function spawnBullet(fighter, dir, opts){
     mesh: bullet, velocity: dir.clone().multiplyScalar(opts.speed), age:0,
     gravity: opts.gravity!==undefined?opts.gravity:22,
     radius: opts.radius||0.35,
-    team: fighter.team, damage: opts.damage, fromId: fighter.id,
+    team: fighter.team, colorHex: teamColor, damage: opts.damage, fromId: fighter.id,
     explosive: !!opts.explosive, explosionRadius: opts.explosionRadius||0, splashDamage: opts.splashDamage||0,
     paintRadius: opts.paintRadius||1.2, life: opts.life||1.5
   });
@@ -1679,7 +1682,7 @@ function fireChargerShot(fighter, aimDir, chargeFrac){
   const origin = fighter.pos.clone(); origin.y += 1.2;
   const dir = aimDir.clone().normalize();
   const step = 0.6, maxDist = 60;
-  const col = fighter.team==='A'?teamAHex:teamBHex;
+  const col = getFighterInkHex(fighter);
   let traveled = 0;
   let hitFighterObj = null;
   let hitPoint = null, hitBlock=null;
@@ -1790,7 +1793,7 @@ function tryThrowSub(fighter, aimDir, now){
 function subExplode(s){
   if(s.exploded) return;
   s.exploded = true;
-  explodeAt(s.mesh.position.clone(), s.def.radius, s.def.damage, s.team, {});
+  explodeAt(s.mesh.position.clone(), s.def.radius, s.def.damage, s.team, {colorHex:s.colorHex});
   scene.remove(s.mesh);
 }
 
@@ -1916,10 +1919,10 @@ function updateSubs(delta){
     if(willExplode){
       if(s.subType==='bounce'){
         // 分裂して小爆発を複数
-        explodeAt(s.mesh.position.clone(), s.def.radius, s.def.damage, s.team, {});
+        explodeAt(s.mesh.position.clone(), s.def.radius, s.def.damage, s.team, {colorHex:s.colorHex});
         for(let e=0;e<2;e++){
           const off = new THREE.Vector3((Math.random()-0.5)*3,0,(Math.random()-0.5)*3);
-          explodeAt(s.mesh.position.clone().add(off), s.def.radius*0.7, s.def.damage*0.7, s.team, {});
+          explodeAt(s.mesh.position.clone().add(off), s.def.radius*0.7, s.def.damage*0.7, s.team, {colorHex:s.colorHex});
         }
         scene.remove(s.mesh); subsList.splice(i,1); continue;
       }
@@ -2495,7 +2498,7 @@ function onFighterInk(f){
   let v=false;
   if(cx>=0&&cy>=0&&cx<paintCanvas.width&&cy<paintCanvas.height){
     const d=paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data;
-    const teamColor = new THREE.Color(f.team==='A'?teamAHex:teamBHex);
+    const teamColor = new THREE.Color(getFighterInkHex(f));
     const r=d[0]/255,g=d[1]/255,b=d[2]/255;
     v=((r-teamColor.r)**2+(g-teamColor.g)**2+(b-teamColor.b)**2)<0.07;
   }
@@ -2764,7 +2767,7 @@ function updateBullets(delta){
 
     const wall = getBlockingWall(b.mesh.position.x, b.mesh.position.z, b.mesh.position.y);
     const groundH = getSupportHeight(b.mesh.position.x, b.mesh.position.z, b.mesh.position.y);
-    const col = b.team==='A'?teamAHex:teamBHex;
+    const col = b.colorHex ?? (b.team==='A'?teamAHex:teamBHex);
 
     if(hitFighter){
       if(b.explosive){
@@ -3278,7 +3281,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
     // Immediate paint mark guarantees the tank/paint loop is visible even before the projectile lands.
     const paintDist=wp.category==='blaster'?4.2:wp.category==='slosher'?3.5:6.0;
-    paintGround(fighter.pos.x+dir.x*paintDist,fighter.pos.z+dir.z*paintDist,Math.max(.7,(wp.paintRadius||1)*.75),fighter.team==='A'?teamAHex:teamBHex,{noNetwork:true});
+    paintGround(fighter.pos.x+dir.x*paintDist,fighter.pos.z+dir.z*paintDist,Math.max(.7,(wp.paintRadius||1)*.75),getFighterInkHex(fighter),{noNetwork:true});
     fighter.specialGauge=Math.min(100,fighter.specialGauge+.9*(fighter.gearProfile?.specialGain||1));
     sfx("shoot");
   };
@@ -3295,7 +3298,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const geo=new THREE.SphereGeometry(.3,8,8), mat=new THREE.MeshBasicMaterial({color:col}), mesh=new THREE.Mesh(geo,mat);
     const spawnPos=fighter.pos.clone();spawnPos.y+=1.2;mesh.position.copy(spawnPos);scene.add(mesh);
     const vel=aimDir.clone().multiplyScalar(def.speed);vel.y+=7;
-    subsList.push({mesh,velocity:vel,team:fighter.team,subType:def.type,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(aimDir.x,0,aimDir.z).normalize()});
+    subsList.push({mesh,velocity:vel,team:fighter.team,colorHex:col,subType:def.type,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(aimDir.x,0,aimDir.z).normalize()});
     if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&fighter.isPlayer){
       try{onlineSocket.send(JSON.stringify({
         type:'sub',
@@ -3595,7 +3598,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
         if(m.type==='matchFound'){
-          onlineActive=true;onlineStarted=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;onlineResultSent=false;
+          onlineActive=true;onlineStarted=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;onlineResultSent=false;window.__onlineMatchEnded=false;
           renderOnlineRoom(m.players||[]);
           setOnlineConnecting('マッチング成立');
           setOnlineCount(Math.max(1,(m.players||[]).length),'対戦開始準備中');
@@ -3608,7 +3611,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           const wp=weaponList[Number(m.weaponId)||0]||weaponList[0];
           const d=new THREE.Vector3(Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||1);
           if(d.lengthSq()<0.0001)d.set(0,0,1);else d.normalize();
-          const rf={id:m.id,team:m.team,weapon:wp,pos:new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0)};
+          const rf={id:m.id,team:m.team,weapon:wp,cfg:{inkColorHex:Number(m.colorHex)},pos:new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0)};
           if(wp.category==='blaster'){
             spawnBullet(rf,d,{speed:wp.speed,damage:wp.damage,gravity:16,radius:.22,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.splashDamage,paintRadius:wp.paintRadius*1.18});
           }else if(wp.category==='slosher'){
@@ -3621,12 +3624,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(m.type==='sub'){
           const def=Object.values(subDefs).find(v=>v.type===m.subType);
           if(!def)return;
-          const col=m.team==='A'?teamAHex:teamBHex;
+          const col=Number.isFinite(Number(m.colorHex))?Number(m.colorHex):(m.team==='A'?teamAHex:teamBHex);
           const mesh=new THREE.Mesh(new THREE.SphereGeometry(.3,8,8),new THREE.MeshBasicMaterial({color:col}));
           mesh.position.set(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0);
           scene.add(mesh);
           const vx=Number(m.vx)||0,vy=Number(m.vy)||0,vz=Number(m.vz)||0;
-          subsList.push({mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,subType:m.subType,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(vx,0,vz).normalize()});
+          subsList.push({mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,colorHex:Number.isFinite(Number(m.colorHex))?Number(m.colorHex):getFighterInkHex({team:m.team}),subType:m.subType,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(vx,0,vz).normalize()});
           return;
         }
         if(m.type==='state'){applyRemoteState(m);return;}
@@ -3637,9 +3640,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
         if(m.type==='matchEnd'){
+          window.__onlineMatchEnded=true;
+          endBattle();
           onlineActive=false;onlineStarted=false;
           if(m.results){const me=m.results.find(x=>x.id===onlinePlayerId);if(me&&me.profile){showOnlineProfile(me.profile);playerAccount.profile=me.profile;localStorage.setItem('splatoonAccountProfile',JSON.stringify(me.profile));updateAccountProfileUI(me.profile);}}
-          endBattle();
           return;
         }
       };
@@ -4518,7 +4522,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(window.__v36OnlineReport && onlineActive && onlineStarted && !onlineResultSent){
       window.__v36OnlineReport(winner);
     }
-    if(!onlineActive && window.__v36LocalRecordResult) window.__v36LocalRecordResult(winner);
+    if(!onlineActive && !window.__onlineMatchEnded && window.__v36LocalRecordResult) window.__v36LocalRecordResult(winner);
     baseEndBattleForV36();
   };
   window.__v36OnlineReport=reportOnlineResult;
