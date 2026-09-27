@@ -1556,20 +1556,58 @@ function worldToCanvas(x,z){
 
 function hexToCss(hex){ return '#' + hex.toString(16).padStart(6,'0'); }
 
-function paintGround(x,z,radius,colorHex){
-  const {cx,cy} = worldToCanvas(x,z);
-  const cr = (radius/(STAGE_HALF_Z*2)) * paintCanvas.height;
+function paintGround(x,z,radius,colorHex,opts={}){
+  const start = worldToCanvas(x,z);
+  const cr = Math.max(1,(radius/(STAGE_HALF_Z*2)) * paintCanvas.height);
+  const to = opts && opts.to;
   paintCtx.fillStyle = hexToCss(colorHex);
-  paintCtx.beginPath();
-  const pts = 10 + Math.floor(Math.random()*6);
-  for(let i=0;i<pts;i++){
-    const ang = (i/pts)*Math.PI*2;
-    const rr = cr * (0.6 + Math.random()*0.6);
-    const px = cx + Math.cos(ang)*rr, py = cy + Math.sin(ang)*rr;
-    if(i===0) paintCtx.moveTo(px,py); else paintCtx.lineTo(px,py);
+
+  if(to && Number.isFinite(Number(to.x)) && Number.isFinite(Number(to.z))){
+    const finish = worldToCanvas(Number(to.x),Number(to.z));
+
+    // Continuous stroke: this is what makes shooter/charger ink connect from
+    // muzzle to impact instead of painting only the final point.
+    paintCtx.save();
+    paintCtx.lineCap='round';
+    paintCtx.lineJoin='round';
+    paintCtx.strokeStyle=hexToCss(colorHex);
+    paintCtx.lineWidth=cr*2;
+    paintCtx.beginPath();
+    paintCtx.moveTo(start.cx,start.cy);
+    paintCtx.lineTo(finish.cx,finish.cy);
+    paintCtx.stroke();
+    paintCtx.restore();
+
+    // Irregular dabs keep the edges from looking like a sterile vector line.
+    const distance=Math.hypot(finish.cx-start.cx,finish.cy-start.cy);
+    const steps=Math.max(1,Math.ceil(distance/Math.max(5,cr*.85)));
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      const cx=start.cx+(finish.cx-start.cx)*t;
+      const cy=start.cy+(finish.cy-start.cy)*t;
+      paintCtx.beginPath();
+      const pts=8+Math.floor(Math.random()*5);
+      for(let j=0;j<pts;j++){
+        const ang=(j/pts)*Math.PI*2;
+        const rr=cr*(0.72+Math.random()*0.36);
+        const px=cx+Math.cos(ang)*rr,py=cy+Math.sin(ang)*rr;
+        if(j===0)paintCtx.moveTo(px,py);else paintCtx.lineTo(px,py);
+      }
+      paintCtx.closePath();
+      paintCtx.fill();
+    }
+  }else{
+    paintCtx.beginPath();
+    const pts = 10 + Math.floor(Math.random()*6);
+    for(let i=0;i<pts;i++){
+      const ang = (i/pts)*Math.PI*2;
+      const rr = cr * (0.6 + Math.random()*0.6);
+      const px = start.cx + Math.cos(ang)*rr, py = start.cy + Math.sin(ang)*rr;
+      if(i===0) paintCtx.moveTo(px,py); else paintCtx.lineTo(px,py);
+    }
+    paintCtx.closePath();
+    paintCtx.fill();
   }
-  paintCtx.closePath();
-  paintCtx.fill();
   paintTexture.needsUpdate = true;
 }
 
