@@ -4337,6 +4337,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
         if(m.type==='sub'){
+          if(window.__receiveOnlineSubV60){ window.__receiveOnlineSubV60(m); return; }
           const def=Object.values(subDefs).find(v=>v.type===m.subType);
           if(!def)return;
           const col=Number.isFinite(Number(m.colorHex))?Number(m.colorHex):(m.team==='A'?teamAHex:teamBHex);
@@ -7081,6 +7082,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const b=spawnBulletV60(f,d,{speed:vel.length(),gravity:14,damage:(w.tapDamage||22)+(w.fullDamage-w.tapDamage)*frac,
         radius:.13,paintRadius:w.paintRadius||.7,life:1.6,kind:'stringer'});
       b.velocity.copy(vel);
+      if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+        try{onlineSocket.send(JSON.stringify({type:'shot',x:spawn.x,y:spawn.y,z:spawn.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      }
       // Stringers paint the whole bow-like flight path on release.
       const path=traceBallistic(spawn,vel,14,1/30).point;
       trailPath(spawn,path,(w.paintRadius||.7)*(.75+.3*frac),color,1);
@@ -7128,6 +7132,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       if(wall)paintWallSurface(wall,end,color,f.team,(w.paintRadius||.9)*(.7+.3*frac));
       else paintGround(end.x,end.z,(w.paintRadius||.9)*(.75+.3*frac),color,{noNetwork:true});
     }
+    if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:origin.x,y:origin.y,z:origin.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+    }
     f.specialGauge=Math.min(100,f.specialGauge+7+7*frac);
     sfx('shoot');
     return true;
@@ -7161,6 +7168,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     for(let i=0;i<count;i++){
       setTimeout(()=>{
         if(!f.alive)return;
+        if(!consumeInk(f,inkCost(f,w.inkCost||1.3)))return;
         const spread=(w.spread||.02)*(1.2+Math.random()*.8);
         const d=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*spread);
         fireLineShot(f,d,w,{kind:'splatling',paintMult:.82});
@@ -7223,7 +7231,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     for(let i=0;i<pellets;i++){
       const ang=(i-(pellets-1)/2)*.075;
       const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),ang);
-      fireLineShot(f,d,w,{paintMult:.72,kind:'brella'});
+      fireLineShot(f,d,w,{paintMult:.72,kind:'brella',noNetwork:true});
+    }
+    if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id}));}catch{}
     }
     if(f._moving===false){
       f.brellaOpenUntil=performance.now()+850;
@@ -7240,13 +7251,18 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(w.category==='wiper')return;
     if(w.category==='spinner')return;
     if(now-f.lastShot<(w.rate||100))return;
-    if(f.ink < inkCost(f,w.inkCost||1))return;
+
+    const specialMode=!!(f.v60Trizooka||f.v60CrabUntil&&now<f.v60CrabUntil||f.v60InkjetUntil&&now<f.v60InkjetUntil||f.v60UltraStampUntil&&now<f.v60UltraStampUntil||f.v60KrakenUntil&&now<f.v60KrakenUntil);
+    if(!specialMode && f.ink < inkCost(f,w.inkCost||1))return;
     f.lastShot=now;
 
     if(f.v60Trizooka && f.v60Trizooka.shots>0){
       const color=getFighterInkHex(f);
       const b=spawnBulletV60(f,aimDir,{speed:48,damage:220,gravity:5,radius:.3,paintRadius:2.2,life:1.5,explosive:true,explosionRadius:3.0,splashDamage:53,kind:'trizooka'});
       b.paintTrail=false;
+      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aimDir.x,dy:aimDir.y,dz:aimDir.z,weaponId:w.id}));}catch{}
+      }
       f.v60Trizooka.shots--;
       if(f.v60Trizooka.shots<=0)f.v60Trizooka=null;
       return;
@@ -7262,6 +7278,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const d=aimDir.clone();d.normalize();
       const b=spawnBulletV60(f,d,{speed:38,damage:50,gravity:4,radius:.25,paintRadius:1.3,life:1.3,explosive:true,explosionRadius:1.8,splashDamage:30,kind:'inkjet'});
       trailPath(f.pos,traceForward(f.pos,d,20,.5),1.2,getFighterInkHex(f),false);
+      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      }
       return;
     }
     if(f.v60UltraStampUntil && now<f.v60UltraStampUntil){
@@ -7271,6 +7290,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const hitPos=f.pos.clone().addScaledVector(d,2.4);
       explodeAt(hitPos,2.4,100,f.team,{paintRadius:3.1,colorHex:getFighterInkHex(f),sourceFighter:f});
       trailPath(f.pos,hitPos,1.6,getFighterInkHex(f),false);
+      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+0.8,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      }
       return;
     }
     if(f.v60KrakenUntil && now<f.v60KrakenUntil){
@@ -7279,6 +7301,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const d=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
       f.pos.addScaledVector(d,2.0);
       explodeAt(f.pos,2.2,60,f.team,{paintRadius:2.8,colorHex:getFighterInkHex(f),sourceFighter:f});
+      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+0.8,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      }
       return;
     }
 
@@ -7571,6 +7596,26 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   }
 
+  window.__receiveOnlineSubV60=function(m){
+    const def=Object.values(subDefs).find(v=>v.type===m.subType);
+    if(!def)return;
+    let rf=fighters.find(x=>x.id===m.id);
+    if(!rf){
+      rf=ensureRemoteFighter({id:m.id,team:m.team,weaponId:Number(m.weaponId)||0,spawn:{x:Number(m.x)||0,z:Number(m.z)||0},config:{weapon:Number(m.weaponId)||0}});
+    }
+    rf.weapon=weaponList[Number(m.weaponId)||0]||rf.weapon;
+    const x=Number(m.x)||0,y=Number(m.y)||0,z=Number(m.z)||0;
+    const vx=Number(m.vx)||0,vy=Number(m.vy)||0,vz=Number(m.vz)||0;
+    const color=Number.isFinite(Number(rf.cfg?.inkColorHex))?Number(rf.cfg.inkColorHex):teamColor(rf);
+    const mesh=makeSubMesh(def.type,color);
+    mesh.position.set(x,y,z);scene.add(mesh);
+    subInstances.push({
+      mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,colorHex:color,subType:def.type,def,age:0,
+      stuck:false,exploded:false,lastPos:mesh.position.clone(),fromFighter:rf,charge:0,next:0,
+      direction:new THREE.Vector3(vx,0,vz).lengthSq()>.001?new THREE.Vector3(vx,0,vz).normalize():new THREE.Vector3(0,0,1)
+    });
+  };
+
   /* ---------- Special effects ---------- */
   const sp={
     storms:[],waves:[],beacons:[],screens:[],beams:[],decoys:[],stations:[],bubbles:[],
@@ -7617,7 +7662,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       sp.waves.push({pos:q.clone(),team:f.team,color,start:now,next:now+1100,wave:0,end:now+7000});
       addRing(q,color,2,900);
     }else if(name==='グレートバリア'){
-      sp.bubbles.push({pos:f.pos.clone(),team:f.team,color,end:now+10000,radius:6,hp:2000});
+      const bubble={pos:f.pos.clone(),team:f.team,color,end:now+10000,radius:6,hp:2000};
+      sp.bubbles.push(bubble);
+      shields.push(bubble);
       addRing(f.pos,color,6,900);
     }else if(name==='サメライド'){
       const dir=new THREE.Vector3().subVectors(q,f.pos);dir.y=0;
@@ -7789,9 +7836,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
     if(f.v60InkjetUntil && now<f.v60InkjetUntil){
       const base=f.v60InkjetHome||f.pos.clone();
-      f.pos.y=Math.max(3.0,base.y+2.8+Math.sin(now*.004)*.3);
-      // Let base movement run with muted shooting, then restore.
+      const hoverY=Math.max(3.0,base.y+2.8+Math.sin(now*.004)*.3);
+      // Let base movement run with muted shooting, then restore, then re-apply hover height.
       const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
+      f.pos.y=hoverY;f.root.position.copy(f.pos);
       return;
     }
     if(f.v60Zip && now<f.v60Zip.until){
@@ -7940,8 +7988,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     for(let i=sp.bubbles.length-1;i>=0;i--){
       const b=sp.bubbles[i];
-      if(now>b.end){sp.bubbles.splice(i,1);continue;}
-      addRing(b.pos,b.color,b.radius,400);
+      if(now>b.end){
+        sp.bubbles.splice(i,1);
+        const si=shields.indexOf(b);if(si>=0)shields.splice(si,1);
+        continue;
+      }
+      if(!b.nextFx||now>=b.nextFx){
+        b.nextFx=now+900;
+        addRing(b.pos,b.color,b.radius,500);
+      }
     }
 
     for(let i=sp.stations.length-1;i>=0;i--){
