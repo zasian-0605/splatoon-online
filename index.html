@@ -369,8 +369,8 @@ html.cursor-force-visible canvas{
 
 <div id="global-online-hud" aria-live="polite">
   <span class="label">ONLINE PLAYERS</span>
-  <span id="global-online-count" class="count">1 / 8</span>
-  <span id="global-online-note" class="note">対戦相手を探しています</span>
+  <span id="global-online-count" class="count">0人</span>
+  <span id="global-online-note" class="note">現在オンラインの全プレイヤー</span>
 </div>
 <div id="online-panel">
   <div id="online-card">
@@ -3360,6 +3360,17 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const hud=document.getElementById('global-online-hud');
     if(hud) hud.style.display=show?'block':'none';
   }
+  function setGlobalOnlineCount(n){
+    const safe=Math.max(0,Math.floor(Number.isFinite(Number(n))?Number(n):0));
+    const count=document.getElementById('global-online-count');
+    const note=document.getElementById('global-online-note');
+    if(count) count.textContent=`${safe}人`;
+    if(note) note.textContent='現在オンラインの全プレイヤー';
+  }
+  function showGlobalOnlineHud(show){
+    const hud=document.getElementById('global-online-hud');
+    if(hud) hud.style.display=show?'block':'none';
+  }
   function setOnlineCount(n, note){
     const requested=Number(n);
     const safe=Math.max(1,Math.min(8,Number.isFinite(requested)?requested:1));
@@ -3367,12 +3378,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const message=note||'対戦相手を探しています';
     const count=document.getElementById('online-count');
     const noteEl=document.getElementById('online-progress-note');
-    const globalCount=document.getElementById('global-online-count');
-    const globalNote=document.getElementById('global-online-note');
     if(count) count.textContent=text;
     if(noteEl) noteEl.textContent=message;
-    if(globalCount) globalCount.textContent=text;
-    if(globalNote) globalNote.textContent=message;
   }
   function setOnlineConnecting(label){
     const status=document.getElementById('online-status');
@@ -3421,6 +3428,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       };
       onlineSocket.onmessage=(ev)=>{
         let m;try{m=JSON.parse(ev.data);}catch{return;}
+        if(m.type==='globalOnlineCount'){
+          setGlobalOnlineCount(m.count);
+          showGlobalOnlineHud(true);
+          return;
+        }
         if(m.type==='accountBound'){
           if(m.error){
             setOnlineConnecting('ログイン情報が切れています');
@@ -3483,6 +3495,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         setOnlineCount(0,'Renderサーバーに接続できません');
       };
       onlineSocket.onclose=()=>{
+        setGlobalOnlineCount(0);
+        showGlobalOnlineHud(false);
         if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}
       };
     }catch{setOnlineStatus('WebSocket開始に失敗しました。');}
