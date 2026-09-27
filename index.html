@@ -3260,6 +3260,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     fighters=fighters.filter(f=>{if(f.remote){scene.remove(f.root);return false;}return true;});
   }
   function openOnlinePanel(){
+    // オンライン画面ではマウスを自由に動かせるよう、最初に確実にロック解除。
+    try{ window.__V10?.releaseLock?.(); }catch(e){}
     document.getElementById('online-panel').style.display='flex';
     setOnlineCount(1,'自分が参加しました。対戦相手を探しています');
     setOnlineConnecting('オンライン接続中');
@@ -3356,6 +3358,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function hideOnlinePanel(){document.getElementById('online-panel').style.display='none';}
   function closeOnlinePanel(){
+    // オンライン画面を閉じた瞬間は必ずマウスロックを解除する。
+    try{ window.__V10?.releaseLock?.(); }catch(e){}
     hideOnlinePanel();onlineReady=false;
     if(onlineSocket&&onlineSocket.readyState<=1){try{onlineSocket.send(JSON.stringify({type:'leaveQueue'}));}catch{} try{onlineSocket.close();}catch{}}
     onlineSocket=null;onlineActive=false;onlineStarted=false;
@@ -3580,11 +3584,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   document.addEventListener('pointerlockchange',()=>{
     const locked=document.pointerLockElement===renderer?.domElement;
-    if(locked){ setCursorHard(true); }
-    else if(battleScreen()){
-      // The browser may release the lock with Esc. Keep the game usable and hide the cursor;
-      // the next click will lock it again.
+    if(locked){
       setCursorHard(true);
+    }else if(pointerLockWanted && battleScreen()){
+      // Esc / browser release中は、ゲーム操作継続のため次のクリックで再ロックする。
+      setCursorHard(true);
+    }else{
+      // オンラインUI・結果画面・診断画面など、解除が要求された場合は
+      // pointerlockchange後にも再びカーソルを隠さない。
+      setCursorHard(false);
     }
   });
 
