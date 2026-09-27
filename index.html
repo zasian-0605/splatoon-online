@@ -300,6 +300,11 @@ body.pointer-lock-ready{cursor:none !important;}
     <h2>オンラインルーム</h2>
     <div id="online-profile">プロフィール未読込</div>
     <div id="online-status">接続準備中…</div>
+    <div style="display:flex;gap:8px;align-items:center;margin:8px 0;">
+      <input id="online-server-url" type="text" placeholder="オンラインサーバーURL（例：https://xxxxx.onrender.com）"
+        style="flex:1;padding:9px 10px;border-radius:8px;border:2px solid #555;background:#0c0c12;color:#fff;font:700 12px sans-serif;">
+      <button id="online-server-save" style="padding:9px 12px;border:0;border-radius:8px;background:#00d4ff;color:#07101a;font-weight:900;cursor:pointer;">保存</button>
+    </div>
     <div id="online-room">部屋を作成しています…</div>
     <div id="online-actions">
       <button id="online-start">部屋に入る</button>
@@ -2397,6 +2402,12 @@ function tryMoveWithCollision(f, vel, delta, isSquid){
   if(wall){
     const isMine = wall.paintTeam===f.team && wall.paintLevel>=CLIMB_THRESHOLD && wall.climbable;
     if(isSquid && isMine && (vel.x!==0||vel.z!==0)){
+      // Move vertically while hugging the wall; stop at the top.
+      const climbSpeed=8.5;
+      const topY=Math.max(f.pos.y,wall.maxY);
+      f.pos.y=Math.min(wall.maxY, f.pos.y + climbSpeed*delta);
+      f.pos.x = Math.max(wall.minX-0.18, Math.min(wall.maxX+0.18, f.pos.x));
+      f.pos.z = Math.max(wall.minZ-0.18, Math.min(wall.maxZ+0.18, f.pos.z));
       return true;
     }
     const wallX = getBlockingWall(nx, f.pos.z, f.pos.y);
@@ -2615,6 +2626,13 @@ function animate3D(token){
   document.getElementById('special-bar-bg').classList.toggle('sp-ready',specialReady);
   document.getElementById('special-ready').style.display=specialReady?'block':'none';
   document.getElementById('btn-special').classList.toggle('sp-ready',specialReady);
+  const inkBar=document.getElementById('ink-bar'), inkText=document.getElementById('ink-text');
+  if(inkBar && playerFighter){
+    const inkNow=Math.max(0,Math.min(100,Number(playerFighter.ink)||0));
+    inkBar.style.width=inkNow+'%';
+    inkBar.style.opacity=inkNow<=15?'0.55':'1';
+    if(inkText) inkText.textContent=Math.round(inkNow)+'%';
+  }
   const wh=document.getElementById('weapon-hud');
   if(wh) wh.innerHTML=`<div class="weapon-name">${weaponCategoryIcon(playerFighter)} ${playerFighter.weapon.name}</div><div class="weapon-kind">${categoryLabel[playerFighter.weapon.category]}　/　サブ:${playerFighter.weapon.sub}</div><div class="weapon-kind">SP:${playerFighter.weapon.special}${specialReady?'　★ READY':''}</div>`;
 
@@ -3154,7 +3172,26 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   let onlineReady=false, onlineStarted=false, onlineResultSent=false;
   const remoteMap=new Map();
   function setOnlineStatus(t){const e=document.getElementById('online-status');if(e)e.textContent=t;}
-  function onlineUrl(){ return (location.protocol==='https:'?'wss://':'ws://') + location.host; }
+  function normalizeServerOrigin(v){
+    v=String(v||'').trim();
+    if(!v) return '';
+    if(!/^https?:\\/\\//i.test(v)) v='https://'+v;
+    return v.replace(/\\/$/,'');
+  }
+  function getOnlineServerOrigin(){
+    const saved=normalizeServerOrigin(localStorage.getItem('splatoonOnlineServer')||'');
+    if(saved) return saved;
+    // The bundled server works on the same host when the app itself is served by Node/Render.
+    if(location.hostname && !/github\\.io$/i.test(location.hostname)){
+      return location.origin;
+    }
+    return '';
+  }
+  function onlineUrl(){
+    const origin=getOnlineServerOrigin();
+    if(!origin) return '';
+    return origin.replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
+  }
   function renderOnlineRoom(players=[]){
     const r=document.getElementById('online-room'); if(!r)return;
     const lines=players.map((p,i)=>`[${p.ready?'✓':'　'}] ${p.name||p.id}${p.team?' ['+p.team+']':''}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n');
@@ -3170,7 +3207,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function openOnlinePanel(){
     document.getElementById('online-panel').style.display='flex';
-    setOnlineStatus('サーバーに接続します…');
+    const serverInput=document.getElementById('online-server-url');
+    const savedServer=localStorage.getItem('splatoonOnlineServer')||'';
+    if(serverInput) serverInput.value=savedServer || (/github\\.io$/i.test(location.hostname)?'':'');
+    if(!savedServer && /github\\.io$/i.test(location.hostname)){
+      setOnlineStatus('GitHub PagesからはWebSocketへ直接つなげません。上のオンラインサーバーURLを設定してください。');
+    }else{
+      setOnlineStatus('サーバーに接続します…');
+    }
     onlineReady=false;onlineActive=false;onlineStarted=false;onlineResultSent=false;
     if(onlineSocket){try{onlineSocket.close();}catch{} onlineSocket=null;}
     const token=localStorage.getItem('splatoonAccountToken');
@@ -3267,6 +3311,17 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted){onlineReady=!onlineReady;onlineSocket.send(JSON.stringify({type:'ready',ready:onlineReady,weaponId:playerConfig.weapon}));}
   });
   document.getElementById('online-cancel').addEventListener('click',closeOnlinePanel);
+  document.getElementById('online-server-save')?.addEventListener('click',()=>{
+    const input=document.getElementById('online-server-url');
+    const value=normalizeServerOrigin(input?.value||'');
+    if(!value){
+      localStorage.removeItem('splatoonOnlineServer');
+      setOnlineStatus('サーバーURLを消しました。');
+      return;
+    }
+    localStorage.setItem('splatoonOnlineServer',value);
+    setOnlineStatus('サーバーURLを保存しました。もう一度オンライン接続を開始します。');
+  });
   /* room counts update without changing the stable v25 combat core */
   const _oldTryShoot=tryShoot;
   tryShoot=function(f,dir,now){
