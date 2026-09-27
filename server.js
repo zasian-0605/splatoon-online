@@ -81,18 +81,63 @@ function roster(room) {
 function broadcast(room, obj, exceptId = null) {
   for (const p of room.players.values()) if (p.id !== exceptId) send(p.ws, obj);
 }
-function waitingRoomFor() {
-  // まず「人がいる待機部屋」を探す。同じ部屋へ優先的に合流させる。
-  for (const room of rooms.values()) {
-    if (!room.started && room.players.size > 0 && room.players.size < 8) return room;
+function mergeWaitingRooms() {
+  const waiting = [...rooms.values()]
+    .filter(room => !room.started && room.players.size > 0)
+    .sort((a, b) => b.players.size - a.players.size || a.id.localeCompare(b.id));
+
+  if (waiting.length === 0) return null;
+
+  // すでに分かれてしまった待機部屋があれば、最大8人まで最大人数の部屋へ統合する。
+  const primary = waiting[0];
+  for (const room of waiting.slice(1)) {
+    while (primary.players.size < 8 && room.players.size > 0) {
+      const player = room.players.values().next().value;
+      room.players.delete(player.id);
+      player.roomId = primary.id;
+      player.team = null;
+      player.ready = false;
+      player.spawn = { x: 0, y: 0, z: 0 };
+      primary.players.set(player.id, player);
+    }
+
+    if (room.players.size === 0) {
+      rooms.delete(room.id);
+    } else {
+      // 8人を超える場合は、この部屋を残して次の参加者を待つ。
+      const players = roster(room);
+      const payload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+      const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
+      for (const p of room.players.values()) {
+        send(p.ws, payload);
+        send(p.ws, queuePayload);
+      }
+    }
   }
 
-  // 人がいる部屋がなければ、既存の空部屋を再利用する。
+  if (primary.players.size > 0) {
+    const players = roster(primary);
+    const payload = { type: 'room', roomId: primary.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+    const queuePayload = { type: 'queue', roomId: primary.id, count: players.length, maxPlayers: 8 };
+    for (const p of primary.players.values()) {
+      send(p.ws, payload);
+      send(p.ws, queuePayload);
+    }
+  }
+  return primary;
+}
+
+function waitingRoomFor() {
+  // まず、分かれてしまった待機部屋を統合してから参加先を決める。
+  const merged = mergeWaitingRooms();
+  if (merged && merged.players.size < 8) return merged;
+
+  // 人がいる待機部屋が満員なら、空部屋を再利用する。
   for (const room of rooms.values()) {
     if (!room.started && room.players.size === 0) return room;
   }
 
-  // 待機部屋自体がなければ新しく作る。
+  // 待機部屋がなければ新しく作る。
   const id = `ROOM-${String(nextRoomNo++).padStart(3, '0')}`;
   const room = { id, players: new Map(), started: false, resultReported: false, startsAt: 0, timer: 180 };
   rooms.set(id, room);
