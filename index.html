@@ -281,6 +281,19 @@ body.pointer-lock-ready{cursor:none !important;}
 <div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">試し撃ち場へ</button></div>
 
 
+<div id="online-test-panel" style="position:absolute;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(3,0,18,.94);font-family:Arial,Meiryo,sans-serif;color:#fff;">
+  <div style="width:min(720px,92vw);max-height:88vh;overflow:auto;background:#121225;border:4px solid #e3ff00;border-radius:18px;padding:22px;box-shadow:10px 10px 0 #000;">
+    <h2 style="margin:0 0 8px;text-align:center;color:#e3ff00;font-size:30px;">オンライン接続テスト</h2>
+    <div style="text-align:center;color:#ccc;font-size:13px;margin-bottom:12px;">Tキーで開く / ESCで閉じる</div>
+    <div id="online-test-server" style="background:#07070d;border:2px solid #444;border-radius:10px;padding:10px;margin-bottom:12px;font-family:monospace;word-break:break-all;"></div>
+    <div id="online-test-result" style="display:flex;flex-direction:column;gap:7px;font-size:15px;"></div>
+    <div id="online-test-log" style="margin-top:14px;background:#050509;border:2px solid #333;border-radius:10px;padding:10px;height:180px;overflow:auto;font:12px/1.5 monospace;white-space:pre-wrap;"></div>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button id="online-test-run" style="flex:1;padding:12px;border:0;border-radius:10px;background:#e3ff00;color:#2f059c;font-weight:900;font-size:16px;cursor:pointer;">もう一度テスト</button>
+      <button id="online-test-close" style="flex:1;padding:12px;border:0;border-radius:10px;background:#ff0055;color:#fff;font-weight:900;font-size:16px;cursor:pointer;">閉じる</button>
+    </div>
+  </div>
+</div>
 <div id="online-panel">
   <div id="online-card">
     <h2>オンラインルーム</h2>
@@ -4905,6 +4918,161 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(playerFighter.specialGauge<100)
       playerFighter.specialGauge=Math.min(100,playerFighter.specialGauge+2.4);
   },100);
+})();
+</script>
+<script>
+/* V40: standalone online connectivity diagnostic */
+(function(){
+  const DEFAULT='https://splatoon-online-8r1r.onrender.com';
+
+  function origin(){
+    let v=String(localStorage.getItem('splatoonOnlineServer')||'').trim();
+    if(!v){
+      if(location.hostname && !/github\\.io$/i.test(location.hostname)) v=location.origin;
+      else v=DEFAULT;
+    }
+    if(!/^https?:\\/\\//i.test(v)) v='https://'+v;
+    return v.replace(/\\/$/,'');
+  }
+  function wsUrl(){
+    return origin().replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
+  }
+  function panel(){return document.getElementById('online-test-panel');}
+  function result(){return document.getElementById('online-test-result');}
+  function logEl(){return document.getElementById('online-test-log');}
+  function serverEl(){return document.getElementById('online-test-server');}
+
+  function add(name,state,detail){
+    const r=result(); if(!r)return;
+    const row=document.createElement('div');
+    row.style.cssText='padding:9px 10px;border-radius:8px;background:#1b1b30;border:2px solid #444;';
+    const icon=state==='ok'?'✅':state==='fail'?'❌':state==='wait'?'⏳':'ℹ️';
+    row.innerHTML='<strong>'+icon+' '+name+'</strong><div style="font-size:12px;color:#ccc;margin-top:3px;">'+detail+'</div>';
+    r.appendChild(row);
+  }
+  function log(msg){
+    const el=logEl(); if(!el)return;
+    el.textContent += '['+new Date().toLocaleTimeString()+'] '+msg+'\n';
+    el.scrollTop=el.scrollHeight;
+  }
+
+  async function run(){
+    const p=panel(); if(!p)return;
+    p.style.display='flex';
+    result().innerHTML='';
+    logEl().textContent='';
+    const o=origin(), w=wsUrl();
+    serverEl().textContent='HTTP: '+o+'\nWebSocket: '+w;
+    add('1. サーバーURL', 'ok', o);
+    log('テスト開始');
+
+    // HTTP health check
+    add('2. Render HTTP /health', 'wait', 'サーバーの生存確認中…');
+    try{
+      const ctl=new AbortController();
+      const timer=setTimeout(()=>ctl.abort(),7000);
+      const r=await fetch(o+'/health',{cache:'no-store',signal:ctl.signal});
+      clearTimeout(timer);
+      const txt=await r.text();
+      if(r.ok){
+        add('2. Render HTTP /health', 'ok', 'HTTP '+r.status+' / '+txt.slice(0,220));
+        log('HTTP health OK');
+      }else{
+        add('2. Render HTTP /health','fail','HTTP '+r.status+' / '+txt.slice(0,220));
+        log('HTTP health FAILED');
+        return;
+      }
+    }catch(err){
+      add('2. Render HTTP /health','fail',String(err&&err.message||err));
+      log('HTTP health ERROR: '+(err&&err.message||err));
+      return;
+    }
+
+    // WebSocket handshake
+    add('3. WebSocket接続','wait',w+' へ接続中…');
+    let ws=null;
+    try{
+      ws=new WebSocket(w);
+    }catch(err){
+      add('3. WebSocket接続','fail',String(err&&err.message||err));
+      log('WebSocket constructor ERROR');
+      return;
+    }
+
+    let finished=false;
+    let hello=false;
+    let queue=false;
+
+    const done=()=>{try{ws&&ws.close();}catch{}};
+
+    ws.onopen=()=>{
+      add('3. WebSocket接続','ok','WebSocketの接続に成功');
+      log('WebSocket OPEN');
+    };
+    ws.onerror=()=>{
+      if(!finished){
+        add('3. WebSocket接続','fail','WebSocketエラー。Render側またはURL/HTTPS設定を確認してください。');
+        log('WebSocket ERROR');
+      }
+    };
+    ws.onclose=(ev)=>{
+      log('WebSocket CLOSE code='+ev.code);
+    };
+    ws.onmessage=(ev)=>{
+      let m;try{m=JSON.parse(ev.data);}catch{log('受信データ: '+String(ev.data).slice(0,200));return;}
+      log('受信: '+JSON.stringify(m));
+      if(m.type==='hello'&&!hello){
+        hello=true;
+        add('4. サーバー応答','ok','hello を受信。RenderのWebSocketサーバーまで到達しています。');
+        // Guest diagnostic: no account token is required by the current server.
+        try{
+          ws.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig?.weapon||0}));
+          log('joinQueue を送信');
+        }catch(err){}
+      }else if(m.type==='queue'&&!queue){
+        queue=true;
+        add('5. マッチング参加','ok','部屋 '+m.roomId+' に参加成功。現在 '+m.count+'人。');
+        add('6. 診断結果','ok','オンラインサーバーへの接続と、部屋参加まで成功しています。');
+        finished=true;
+        setTimeout(done,250);
+      }else if(m.type==='queueError'){
+        add('5. マッチング参加','fail',m.error||'queueError');
+        add('6. 診断結果','fail','WebSocketは通るが、マッチング参加で止まっています。');
+        finished=true;done();
+      }else if(m.type==='accountBound'){
+        // This diagnostic does not need account binding. Ignore it if present.
+        log('accountBound received');
+      }
+    };
+
+    setTimeout(()=>{
+      if(finished)return;
+      if(!hello){
+        add('4. サーバー応答','fail','10秒以内に hello が返ってきませんでした。');
+        add('6. 診断結果','fail','RenderへのWebSocket接続後、サーバー応答で止まっています。');
+      }else if(!queue){
+        add('5. マッチング参加','fail','queue が返ってきませんでした。');
+        add('6. 診断結果','fail','WebSocketは通るが、部屋参加処理で止まっています。');
+      }
+      finished=true;done();
+    },10000);
+  }
+
+  window.__runOnlineDiagnostic=run;
+  document.getElementById('online-test-run')?.addEventListener('click',run);
+  document.getElementById('online-test-close')?.addEventListener('click',()=>{
+    const p=panel();if(p)p.style.display='none';
+  });
+  window.addEventListener('keydown',e=>{
+    if(e.code==='KeyT' && currentPhase!==0){
+      e.preventDefault();e.stopImmediatePropagation();
+      run();return;
+    }
+    if(e.code==='Escape'){
+      const p=panel();
+      if(p&&p.style.display!=='none'){e.preventDefault();p.style.display='none';}
+    }
+  },true);
 })();
 </script>
 </body>
