@@ -352,7 +352,7 @@ wss.on('connection', ws => {
     }
     if (m.type === 'paint') {
       const x = Number(m.x), z = Number(m.z), radius = Number(m.radius); if (![x,z,radius].every(Number.isFinite) || radius < 0.2 || radius > 8) return;
-      const colorHex = player.team === 'A' ? 0xe3ff00 : 0xff2255;
+      const colorHex = Number.isFinite(Number(player.config?.inkColorHex)) ? Number(player.config.inkColorHex) : (player.team === 'A' ? 0xe3ff00 : 0xff2255);
       broadcast(room, { type:'paint', id:player.id, team:player.team, x,z,radius,colorHex,mult:1 }, player.id); return;
     }
     if (m.type === 'matchResult' && !room.resultReported) {
