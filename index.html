@@ -4921,6 +4921,67 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 <script>
+/* V41: temporarily release pointer lock for T/M overlays */
+(function(){
+  function releaseForOverlay(){
+    try{ window.__V10?.releaseLock?.(); }catch(e){
+      try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(_){}
+      document.documentElement.classList.remove('battle-cursor-hidden');
+      document.body.classList.remove('pointer-lock-ready');
+      document.body.style.setProperty('cursor','auto','important');
+      if(renderer?.domElement) renderer.domElement.style.setProperty('cursor','auto','important');
+    }
+  }
+  function relockGame(){
+    if((currentPhase===1.5||currentPhase===2)){
+      try{ window.__V10?.requestLock?.(); }catch(e){}
+    }
+  }
+
+  // This runs in capture phase so the old M handler cannot immediately re-lock it.
+  window.addEventListener('keydown',e=>{
+    if(e.code==='KeyT' && currentPhase!==0 && currentPhase!==3){
+      e.preventDefault(); e.stopImmediatePropagation();
+      releaseForOverlay();
+      if(window.__runOnlineDiagnostic) window.__runOnlineDiagnostic();
+      return;
+    }
+
+    if(e.code==='KeyM' && (currentPhase===1.5||currentPhase===2)){
+      const full=document.getElementById('fullmap');
+      if(!full) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      releaseForOverlay();
+      full.style.display=(full.style.display==='flex')?'none':'flex';
+      return;
+    }
+
+    if(e.code==='Escape'){
+      const test=document.getElementById('online-test-panel');
+      const full=document.getElementById('fullmap');
+      if(test && test.style.display!=='none'){
+        e.preventDefault(); e.stopImmediatePropagation();
+        test.style.display='none';
+        relockGame();
+        return;
+      }
+      if(full && full.style.display==='flex'){
+        e.preventDefault(); e.stopImmediatePropagation();
+        full.style.display='none';
+        relockGame();
+        return;
+      }
+    }
+  },true);
+
+  document.getElementById('online-test-close')?.addEventListener('click',()=>{
+    const p=document.getElementById('online-test-panel');
+    if(p) p.style.display='none';
+    relockGame();
+  },true);
+
+  document.getElementById('online-test-run')?.addEventListener('click',releaseForOverlay,true);
+})();
 /* V40: standalone online connectivity diagnostic */
 (function(){
   const DEFAULT='https://splatoon-online-8r1r.onrender.com';
