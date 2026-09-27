@@ -411,6 +411,7 @@ wss.on('connection', ws => {
       const speed = Math.hypot(nums[3], nums[4], nums[5]);
       if (speed < 0.01 || speed > 40) return;
       const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1.4, Number(m.charge))) : 0;
       broadcast(room, {
         type: 'sub',
         id: player.id,
@@ -418,7 +419,7 @@ wss.on('connection', ws => {
         x: nums[0], y: nums[1], z: nums[2],
         vx: nums[3], vy: nums[4], vz: nums[5],
         subType,
-        weaponId
+        weaponId, charge
       }, player.id);
       return;
     }
