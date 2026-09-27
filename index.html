@@ -2432,7 +2432,7 @@ function tryMoveWithCollision(f, vel, delta, isSquid){
 
 function updateAI(f, delta, now){
   if(!f.alive) return;
-  const enemies = fighters.filter(o=>o.team!==f.team && o.alive);
+  const enemies = fighters.filter(o=>o.team!==f.team && o.alive && !o.squid_mode);
   let nearest=null, nearestD=Infinity;
   enemies.forEach(o=>{
     const d = f.pos.distanceTo(o.pos);
@@ -2448,7 +2448,8 @@ function updateAI(f, delta, now){
 
   if(nearest && nearestD < 28){
     f.ai.target = nearest;
-    aimAt = nearest.pos;
+    // AI aims around the opponent's upper body, not the feet.
+    aimAt = new THREE.Vector3(nearest.pos.x, nearest.pos.y + 1.25, nearest.pos.z);
     if(nearestD > engageRange){
       moveTarget = nearest.pos;
     } else {
@@ -3259,19 +3260,28 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     onlineReady=false;onlineActive=false;onlineStarted=false;onlineResultSent=false;
     if(onlineSocket){try{onlineSocket.close();}catch{} onlineSocket=null;}
     const token=localStorage.getItem('splatoonAccountToken');
-    if(!token){setOnlineStatus('先にWEB IDへログインしてください。');return;}
     const url=location.protocol==='file:' ? '' : onlineUrl();
     if(!url){setOnlineStatus('公開URLではないためオンライン接続できません。');return;}
     try{
       onlineSocket=new WebSocket(url);
       onlineSocket.onopen=()=>{
-        setOnlineStatus('接続OK。部屋に入ります…');
-        onlineSocket.send(JSON.stringify({type:'bindAccount',token}));
+        setOnlineStatus('接続OK。Renderの部屋に入ります…');
+        if(token){
+          onlineSocket.send(JSON.stringify({type:'bindAccount',token}));
+        }else{
+          onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+        }
       };
       onlineSocket.onmessage=(ev)=>{
         let m;try{m=JSON.parse(ev.data);}catch{return;}
         if(m.type==='accountBound'){
-          if(m.error){setOnlineStatus(m.error);return;}
+          if(m.error){
+            // Render再起動などで古いセッションが消えていても、
+            // マッチング自体はゲストとして続行する。
+            setOnlineStatus('ログイン情報が切れています。ゲストで接続します…');
+            onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+            return;
+          }
           showOnlineProfile(m.profile);
           onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
           return;
@@ -3346,7 +3356,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     try{onlineSocket.send(JSON.stringify({type:'matchResult',winnerTeam}));}catch{}
   }
   document.getElementById('online-start').addEventListener('click',()=>{
-    if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));document.getElementById('online-start').disabled=true;setOnlineStatus('部屋に入っています…');}
+    if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));document.getElementById('online-start').disabled=true;setOnlineStatus('Renderの部屋に入っています…');}
   });
   document.getElementById('online-ready').addEventListener('click',()=>{
     if(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted){onlineReady=!onlineReady;onlineSocket.send(JSON.stringify({type:'ready',ready:onlineReady,weaponId:playerConfig.weapon}));}
