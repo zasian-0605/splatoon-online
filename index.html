@@ -864,7 +864,19 @@ function setupCustomizeUI(){
   bindGroup('grp-color','color');
   bindGroup('grp-gear','gear');
   applyDeviceSetting();
-  bindGroup('grp-gear','gear');
+
+  // 保存済み設定をボタンの見た目にも反映。
+  ['grp-device','grp-style','grp-color','grp-gear'].forEach(id=>{
+    const box=document.getElementById(id);
+    if(!box) return;
+    const key=id==='grp-device'?'device':id==='grp-style'?'style':id==='grp-color'?'color':'gear';
+    box.querySelectorAll('.opt-btn').forEach(btn=>{
+      const v=btn.getAttribute('data-val');
+      const normalized=isNaN(v)?v:Number(v);
+      btn.classList.toggle('active',String(normalized)===String(playerConfig[key]));
+    });
+  });
+  renderHairButtons();
 
   document.getElementById('btn-confirm').addEventListener('click',(e)=>{
     e.stopPropagation();
