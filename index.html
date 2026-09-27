@@ -3291,12 +3291,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   const DEFAULT_ONLINE_SERVER='https://splatoon-online-8r1r.onrender.com';
   function getOnlineServerOrigin(){
-    const saved=normalizeServerOrigin(localStorage.getItem('splatoonOnlineServer')||'');
-    if(saved) return saved;
-    // GitHub Pages itself cannot host the WebSocket server, so use the bundled Render service.
-    if(location.hostname && !/github\.io$/i.test(location.hostname)){
-      return location.origin;
-    }
+    // オンライン対戦は全端末で同じRenderサーバーを使う。
+    // 端末ごとに保存されたURLは使わない。これで「1/8のまま別サーバーにいる」状態を防ぐ。
     return DEFAULT_ONLINE_SERVER;
   }
   function onlineUrl(){
@@ -3337,13 +3333,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     setOnlineCount(1,'自分が参加しました。対戦相手を探しています');
     setOnlineConnecting('オンライン接続中');
     const serverInput=document.getElementById('online-server-url');
-    const savedServer=localStorage.getItem('splatoonOnlineServer')||'';
-    if(serverInput) serverInput.value=savedServer || (/github\.io$/i.test(location.hostname)?'':'');
-    if(!savedServer && /github\.io$/i.test(location.hostname)){
-      setOnlineStatus('オンラインサーバーを自動設定しました。接続します…');
-    }else{
-      setOnlineStatus('サーバーに接続します…');
-    }
+    if(serverInput) serverInput.value=DEFAULT_ONLINE_SERVER;
+    setOnlineStatus('Renderオンラインサーバーへ接続します…');
     onlineReady=false;onlineActive=false;onlineStarted=false;onlineResultSent=false;
     if(onlineSocket){try{onlineSocket.close();}catch{} onlineSocket=null;}
     const token=localStorage.getItem('splatoonAccountToken');
