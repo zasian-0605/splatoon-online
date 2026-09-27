@@ -311,12 +311,13 @@ body.pointer-lock-ready{cursor:none !important;}
       <div id="online-count">0 / 8</div>
       <div id="online-progress-note" style="font:700 12px/1.4 Arial,sans-serif;color:#ddd;">対戦相手を探しています</div>
     </div>
-    <div id="online-match-note">自動で対戦相手を探しています。準備OKを押す必要はありません。</div>
+    <div id="online-match-note">部屋に入ると、参加者それぞれが「準備OK」を押します。</div>
     <div id="online-room">マッチング待機中…</div>
     <div id="online-actions">
+      <button id="online-ready" disabled>準備OK</button>
       <button id="online-cancel">戻る</button>
     </div>
-    <div id="online-note">2〜8人でマッチング。人数がそろうと自動で対戦を開始します。</div>
+    <div id="online-note">2〜8人でマッチング。参加者全員が準備OKになると対戦開始します。</div>
   </div>
 </div>
 
@@ -3314,13 +3315,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(m.type==='room'){
           onlineRoomId=m.roomId;
           renderOnlineRoom(m.players||[]);
-          // 自動準備: 「準備OK」ボタンを押さなくてよい。
-          if(!onlineStarted && onlineSocket && onlineSocket.readyState===1 && !onlineReady){
-            onlineReady=true;
-            onlineSocket.send(JSON.stringify({type:'ready',ready:true,weaponId:playerConfig.weapon}));
+          // 準備OKはプレイヤー自身が押す。全員がreadyになるまでサーバーは開始しない。
+          setOnlineConnecting(m.players.length<2 ? '対戦相手を探しています' : '参加者を確認しています');
+          setOnlineCount(m.players.length,m.players.length<2?'対戦相手を探しています':'参加者がそろっています。準備OKを確認中');
+          const readyBtn=document.getElementById('online-ready');
+          if(readyBtn){
+            readyBtn.disabled=!(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted);
+            readyBtn.textContent=onlineReady?'準備解除':'準備OK';
+            readyBtn.classList.toggle('ready',onlineReady);
           }
-          setOnlineConnecting(m.players.length<2 ? 'オンライン接続中 / マッチング中' : 'マッチング成立待ち');
-          setOnlineCount(m.players.length,m.players.length<2?'対戦相手を探しています':'自動準備完了・対戦開始待ち');
           return;
         }
         if(m.type==='matchFound'){
@@ -3394,8 +3397,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     onlineResultSent=true;
     try{onlineSocket.send(JSON.stringify({type:'matchResult',winnerTeam}));}catch{}
   }
-  document.getElementById('online-start').addEventListener('click',()=>{
-    if(onlineSocket&&onlineSocket.readyState===1){onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));document.getElementById('online-start').disabled=true;setOnlineStatus('Renderの部屋に入っています…');}
+  document.getElementById('online-start')?.addEventListener('click',()=>{
+    if(onlineSocket&&onlineSocket.readyState===1){
+      onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+      const start=document.getElementById('online-start');
+      if(start) start.disabled=true;
+      setOnlineStatus('Renderの部屋に入っています…');
+    }
   });
   document.getElementById('online-ready').addEventListener('click',()=>{
     if(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted){onlineReady=!onlineReady;onlineSocket.send(JSON.stringify({type:'ready',ready:onlineReady,weaponId:playerConfig.weapon}));}
@@ -3451,9 +3459,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   openOnlinePanel=function(){
     _oldOpenOnline();
     setOnlineConnecting('オンライン接続中');
-    setOnlineCount(0,'Renderへ接続しています');
+    setOnlineCount(1,'自分が参加中。対戦相手を探しています');
     const start=document.getElementById('online-start');
     if(start) start.style.display='none';
+    const ready=document.getElementById('online-ready');
+    if(ready){ ready.disabled=true; ready.textContent='準備OK'; ready.classList.remove('ready'); }
   };
 
   /* ---------- Patch remote paint + matchFound color roster ---------- */
