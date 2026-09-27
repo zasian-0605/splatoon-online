@@ -4731,5 +4731,54 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+
+<script>
+/* V38 control hotfix: Q=sub, R=special, P=online (including lobby). */
+(function(){
+  function openOnline(){
+    try{ openOnlinePanel(); }
+    catch(err){ console.error('[ONLINE]',err); }
+  }
+  window.addEventListener('keydown',(e)=>{
+    if(currentPhase===1.25 && e.code==='KeyP'){
+      e.preventDefault(); e.stopImmediatePropagation(); openOnline(); return;
+    }
+    if(currentPhase!==1.5 && currentPhase!==2) return;
+
+    if(e.code==='KeyQ'){
+      e.preventDefault(); e.stopImmediatePropagation();
+      doPlayerSubThrow();
+      return;
+    }
+    if(e.code==='KeyR'){
+      e.preventDefault(); e.stopImmediatePropagation();
+      if(playerFighter && playerFighter.alive){
+        if(currentPhase===1.5) playerFighter.specialGauge=100;
+        fireSpecial(playerFighter);
+      }
+      return;
+    }
+    if(e.code==='KeyP'){
+      e.preventDefault(); e.stopImmediatePropagation();
+      openOnline();
+      return;
+    }
+  },true);
+
+  // Practice always recovers test resources instead of staying at zero.
+  setInterval(()=>{
+    if(currentPhase!==1.5 || !playerFighter) return;
+    const now=performance.now();
+    if(!Number.isFinite(playerFighter.ink)) playerFighter.ink=100;
+    if(playerFighter.ink<100 && now>(playerFighter.inkRegenBlockedUntil||0)){
+      playerFighter.ink=Math.min(100,playerFighter.ink+42/10);
+    }
+    if(playerFighter.specialGauge<100){
+      playerFighter.specialGauge=Math.min(100,playerFighter.specialGauge+2.4);
+    }
+  },100);
+})();
+</script>
+
 </body>
 </html>
