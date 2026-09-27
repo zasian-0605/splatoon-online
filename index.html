@@ -5234,5 +5234,48 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   },true);
 })();
 </script>
+<script>
+/* V44: P navigates to the actual Render game; T is a strict diagnostic toggle */
+(function(){
+  const RENDER_GAME_URL='https://splatoon-online-8r1r.onrender.com';
+
+  function isDiagnosticOpen(){
+    const p=document.getElementById('online-test-panel');
+    return !!p && p.style.display!=='none';
+  }
+  function openDiagnostic(){
+    try{ window.__V10?.releaseLock?.(); }catch(e){}
+    if(window.__runOnlineDiagnostic) window.__runOnlineDiagnostic();
+  }
+  function closeDiagnostic(){
+    const p=document.getElementById('online-test-panel');
+    if(p) p.style.display='none';
+    try{ window.__V10?.releaseLock?.(); }catch(e){}
+  }
+
+  window.addEventListener('keydown',function(e){
+    if(e.code==='KeyP'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      // Login must be completed before leaving this page for the online game.
+      if(window.__accountReady!==true){
+        if(window.showAccountScreen) window.showAccountScreen();
+        return;
+      }
+      // This is intentionally a real navigation to the Render-hosted game.
+      window.location.assign(RENDER_GAME_URL);
+      return;
+    }
+
+    if(e.code==='KeyT'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if(isDiagnosticOpen()) closeDiagnostic();
+      else if(currentPhase!==0) openDiagnostic();
+      return;
+    }
+  },true);
+})();
+</script>
 </body>
 </html>
