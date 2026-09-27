@@ -4237,7 +4237,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           const name=m.specialName || (m.specialType==='chargeOrb'?'チャージオーブ':'');
           const rf=fighters.find(f=>f.id===m.id);
           if(rf && window.__receiveOriginalSpecial){
-            window.__receiveOriginalSpecial(rf,name,new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0),m.extra||{});
+            const extra=m.extra||{};
+            if(name==='チャージオーブ' && extra.phase==='throw'){
+              rf.specialChargeMode=true;
+              rf.specialCharge=100;
+            }
+            window.__receiveOriginalSpecial(rf,name,new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0),extra);
           }
           return;
         }
