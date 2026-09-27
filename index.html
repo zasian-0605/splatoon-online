@@ -950,7 +950,13 @@ function buildPlayerModelGroup(cfg){
 
   const selectedOutfit = outfitList[cfg.outfit] || outfitList[0];
   const matShirt = new THREE.MeshLambertMaterial({color:selectedOutfit.color});
+  const shadeHex=(hex,m)=>new THREE.Color(hex).multiplyScalar(m).getHex();
+  const matShirtDark = new THREE.MeshLambertMaterial({color:shadeHex(selectedOutfit.color,.58)});
+  const matShirtLight = new THREE.MeshLambertMaterial({color:shadeHex(selectedOutfit.color,1.18)});
+  const matTrim = new THREE.MeshLambertMaterial({color:shadeHex(selectedOutfit.color,.78)});
+  const matStitch = new THREE.MeshLambertMaterial({color:0xe9edf4});
   const matPants = new THREE.MeshLambertMaterial({color:0x222222});
+  const matPantsLight = new THREE.MeshLambertMaterial({color:0x3a3a46});
   const matShoes = new THREE.MeshLambertMaterial({color:0x992222});
 
   const human = new THREE.Group();
@@ -1028,19 +1034,100 @@ function buildPlayerModelGroup(cfg){
   const bodyGroup = new THREE.Group();
   bodyGroup.position.y = .9;
   const pat = selectedOutfit.pattern;
+  const outfitId = Number(selectedOutfit.id)||0;
+
+  // ベースシルエット
   if(pat==='hoodie'||pat==='jacket'||pat==='coat'){
     addSubdividedBox(bodyGroup,.44,.54,.28,matShirt,0,.2,0);
-    if(pat==='hoodie') addBox(bodyGroup,.35,.1,.12,matShirt,0,.42,-.15,Math.PI/6,0,0);
   } else if(pat==='armor'){
     addSubdividedBox(bodyGroup,.46,.52,.30,matShirt,0,.2,0);
-    addBox(bodyGroup,.25,.20,.32,matMetal,0,.25,0);
   } else {
     addSubdividedBox(bodyGroup,.4,.5,.25,matShirt,0,.2,0);
   }
-  addSubdividedBox(bodyGroup,.2,.05,.15,matBlack,0,.46,0);
-  addSubdividedBox(bodyGroup,.42,.05,.27,matShirt,0,-.05,0);
-  addSubdividedBox(bodyGroup,.38,.08,.26,matBlack,0,-.12,0);
-  addBox(bodyGroup,.1,.1,.28,matMetal,0,-.12,0);
+
+  // 胸元の折り返し・襟
+  if(pat==='hoodie'){
+    addBox(bodyGroup,.16,.10,.11,matShirtDark,-.11,.44,.125,-Math.PI/9,0,0);
+    addBox(bodyGroup,.16,.10,.11,matShirtDark,.11,.44,.125,Math.PI/9,0,0);
+    addBox(bodyGroup,.07,.26,.025,matTrim,0,.33,.145);
+    addBox(bodyGroup,.035,.26,.03,matStitch,-.06,.32,.153);
+    addBox(bodyGroup,.035,.26,.03,matStitch,.06,.32,.153);
+    // フードの左右の縁＋ドローコード
+    addBox(bodyGroup,.07,.16,.18,matShirtDark,-.21,.46,.03,-Math.PI/8,0,Math.PI/12);
+    addBox(bodyGroup,.07,.16,.18,matShirtDark,.21,.46,.03,-Math.PI/8,0,-Math.PI/12);
+    addCyl(bodyGroup,.018,.018,.20,8,matStitch,-.07,.29,.16,Math.PI/2,0,0);
+    addCyl(bodyGroup,.018,.018,.20,8,matStitch,.07,.29,.16,Math.PI/2,0,0);
+  } else if(pat==='jacket'){
+    // ジャケットの左右ラペル・センタージッパー・肩パネル
+    addBox(bodyGroup,.16,.34,.035,matShirtLight,-.12,.34,.16,0,0,-Math.PI/14);
+    addBox(bodyGroup,.16,.34,.035,matShirtLight,.12,.34,.16,0,0,Math.PI/14);
+    addBox(bodyGroup,.035,.46,.035,matMetal,0,.22,.165);
+    addBox(bodyGroup,.07,.07,.02,matMetal,0,.05,.17);
+    addBox(bodyGroup,.06,.12,.30,matShirtDark,-.22,.42,0,0,0,-Math.PI/12);
+    addBox(bodyGroup,.06,.12,.30,matShirtDark,.22,.42,0,0,0,Math.PI/12);
+    addBox(bodyGroup,.14,.08,.24,matTrim,-.16,.12,.15,0,0,-Math.PI/12);
+    addBox(bodyGroup,.14,.08,.24,matTrim,.16,.12,.15,0,0,Math.PI/12);
+  } else if(pat==='coat'){
+    addBox(bodyGroup,.17,.40,.035,matShirtLight,-.13,.33,.16,0,0,-Math.PI/16);
+    addBox(bodyGroup,.17,.40,.035,matShirtLight,.13,.33,.16,0,0,Math.PI/16);
+    addBox(bodyGroup,.035,.48,.035,matTrim,0,.19,.165);
+    for(let k=0;k<3;k++){
+      addCyl(bodyGroup,.024,.024,.035,8,matMetal,0,.30-k*.13,.19,Math.PI/2,0,0);
+    }
+    addBox(bodyGroup,.42,.07,.30,matShirtDark,0,-.03,.02);
+    addBox(bodyGroup,.42,.045,.20,matTrim,0,-.015,.135);
+  } else if(pat==='sailor'){
+    // セーラー襟＋胸当て＋リボン
+    addBox(bodyGroup,.48,.10,.09,matWhite,0,.47,.09,0,0,Math.PI/18);
+    addBox(bodyGroup,.12,.22,.035,matWhite,-.19,.39,.15,0,0,-Math.PI/8);
+    addBox(bodyGroup,.12,.22,.035,matWhite,.19,.39,.15,0,0,Math.PI/8);
+    addBox(bodyGroup,.08,.13,.035,matShirtDark,0,.35,.18);
+    addBox(bodyGroup,.18,.08,.035,matShirtDark,0,.29,.19,0,0,Math.PI/8);
+    addBox(bodyGroup,.12,.08,.035,matShirtDark,0,.25,.19,0,0,-Math.PI/8);
+  } else if(pat==='armor'){
+    // 多層装甲：胸板・腹部・脇・肩のパーツ
+    addSubdividedBox(bodyGroup,.29,.25,.10,matMetal,0,.30,.17);
+    addBox(bodyGroup,.16,.07,.06,matShirtLight,0,.42,.20);
+    addBox(bodyGroup,.16,.09,.055,matShirtDark,0,.19,.20);
+    addBox(bodyGroup,.08,.26,.08,matMetal,-.24,.26,.02,0,0,-.10);
+    addBox(bodyGroup,.08,.26,.08,matMetal,.24,.26,.02,0,0,.10);
+    addBox(bodyGroup,.07,.14,.20,matTrim,-.27,.46,0);
+    addBox(bodyGroup,.07,.14,.20,matTrim,.27,.46,0);
+  } else {
+    // Tシャツ系：胸ポケット＋裾＋縫い目
+    addBox(bodyGroup,.12,.13,.03,matShirtDark,-.14,.30,.14);
+    addBox(bodyGroup,.035,.035,.035,matStitch,-.08,.36,.165);
+    addBox(bodyGroup,.035,.035,.035,matStitch,-.08,.24,.165);
+    addBox(bodyGroup,.42,.045,.025,matTrim,0,-.045,.14);
+  }
+
+  // 服IDごとの柄を追加。色違いだけでなく、ストライプ／ワンポイント／配色を変える。
+  const variant=outfitId%6;
+  if(variant===0){
+    addBox(bodyGroup,.035,.38,.018,matShirtLight,-.08,.22,.158,0,0,-.03);
+    addBox(bodyGroup,.035,.38,.018,matShirtLight,.08,.22,.158,0,0,.03);
+  }else if(variant===1){
+    addBox(bodyGroup,.32,.035,.018,matShirtLight,0,.24,.16);
+    addBox(bodyGroup,.32,.035,.018,matShirtDark,0,.15,.16);
+  }else if(variant===2){
+    addBox(bodyGroup,.11,.11,.025,matShirtLight,.14,.32,.16,0,0,Math.PI/8);
+    addBox(bodyGroup,.035,.18,.025,matShirtLight,.14,.21,.165);
+  }else if(variant===3){
+    addBox(bodyGroup,.22,.035,.025,matStitch,0,.38,.17);
+    addBox(bodyGroup,.22,.035,.025,matStitch,0,.18,.17);
+  }else if(variant===4){
+    addBox(bodyGroup,.045,.40,.02,matShirtDark,0,.22,.17);
+    addBox(bodyGroup,.10,.10,.025,matShirtLight,0,.34,.18);
+  }else{
+    addBox(bodyGroup,.08,.22,.025,matShirtLight,-.13,.22,.17);
+    addBox(bodyGroup,.08,.22,.025,matShirtLight,.13,.22,.17);
+  }
+
+  // ウエストベルト＋バックル＋腰ポーチ
+  addBox(bodyGroup,.42,.07,.30,matShirtDark,0,-.04,.02);
+  addBox(bodyGroup,.10,.08,.035,matMetal,0,-.04,.165);
+  addBox(bodyGroup,.12,.14,.08,matTrim,-.23,-.01,-.12);
+  addBox(bodyGroup,.12,.14,.08,matTrim,.23,-.01,-.12);
 
   const tankG = new THREE.Group(); tankG.position.set(0,.2,-.2); bodyGroup.add(tankG);
   addSubdividedCyl(tankG,.12,.4,matGlass,0,0,0);
@@ -1174,6 +1261,103 @@ function buildPlayerModelGroup(cfg){
       addSubdividedBox(weaponGroup,wT,wT,wL,c,0,0,0);
       barrel(wL*.8,wT*.25); grip(-.16);
     }
+
+    // ===== 武器ごとの追加ディテール =====
+    const detailDark=new THREE.MeshLambertMaterial({color:shadeHex(selectedWeapon.color,.42)});
+    const detailLight=new THREE.MeshLambertMaterial({color:shadeHex(selectedWeapon.color,1.32)});
+    const white=new THREE.MeshLambertMaterial({color:0xeef3ff});
+    const black=new THREE.MeshLambertMaterial({color:0x0a0a10});
+
+    if(name==='スプラシューター'){
+      addBox(weaponGroup,.16,.05,.34,detailLight,0,.15,.03);
+      addCyl(weaponGroup,.075,.075,.07,10,white,0,.02,.42,Math.PI/2,0,0);
+      addBox(weaponGroup,.06,.04,.18,black,0,.20,-.30);
+    }else if(name==='.52ガロン'){
+      addSubdividedCyl(weaponGroup,.18,.28,detailLight,0,.08,-.04,0,0,0);
+      addCyl(weaponGroup,.10,.10,.07,12,white,0,.10,.39,Math.PI/2,0,0);
+      addBox(weaponGroup,.08,.13,.24,detailDark,0,-.18,.02,0,0,.12);
+    }else if(name==='N-ZAP85'){
+      addBox(weaponGroup,.08,.05,.55,white,0,.16,.03);
+      addBox(weaponGroup,.05,.12,.12,detailLight,0,-.01,.29);
+      addCyl(weaponGroup,.045,.045,.20,10,glow,0,.03,-.34,Math.PI/2,0,0);
+    }else if(name==='プライムシューター'){
+      addBox(weaponGroup,.09,.07,.62,detailLight,0,.14,.04);
+      addCyl(weaponGroup,.075,.075,.07,12,white,0,.02,.58,Math.PI/2,0,0);
+      addBox(weaponGroup,.10,.05,.20,black,0,.24,-.05);
+    }else if(name==='.96ガロンデコ'){
+      addSubdividedCyl(weaponGroup,.20,.32,detailLight,0,.13,-.03);
+      addCyl(weaponGroup,.13,.13,.10,12,white,0,.13,.44,Math.PI/2,0,0);
+      addBox(weaponGroup,.14,.08,.34,black,0,.18,-.24);
+    }else if(name==='ノヴァブラスター'){
+      addCyl(weaponGroup,.24,.20,.12,14,white,0,0,.62,Math.PI/2,0,0);
+      addCyl(weaponGroup,.18,.18,.07,12,glow,0,0,.70,Math.PI/2,0,0);
+      addBox(weaponGroup,.12,.09,.30,detailLight,0,.13,-.28);
+    }else if(name==='クラッシュブラスター'){
+      addCyl(weaponGroup,.18,.18,.16,12,white,-.09,0,.64,Math.PI/2,0,0);
+      addCyl(weaponGroup,.18,.18,.16,12,white,.09,0,.64,Math.PI/2,0,0);
+      addBox(weaponGroup,.26,.06,.36,detailDark,0,.18,.00);
+      addCyl(weaponGroup,.07,.07,.26,10,glow,0,.06,-.34,Math.PI/2,0,0);
+    }else if(name==='ラピッドブラスター'){
+      addBox(weaponGroup,.08,.07,.68,detailLight,0,.18,.02);
+      addBox(weaponGroup,.26,.06,.08,white,0,.22,.36);
+      addCyl(weaponGroup,.12,.12,.12,12,glow,0,0,.78,Math.PI/2,0,0);
+    }else if(name==='Rブラスターエリート'){
+      addBox(weaponGroup,.27,.18,.32,detailLight,0,.12,-.02);
+      addBox(weaponGroup,.08,.10,.28,white,0,.22,.36);
+      addCyl(weaponGroup,.13,.13,.09,12,glow,0,0,.70,Math.PI/2,0,0);
+    }else if(name==='スプラチャージャー'){
+      addBox(weaponGroup,.06,.07,1.12,detailLight,0,.13,.03);
+      addBox(weaponGroup,.16,.11,.25,black,0,.22,.10);
+      addCyl(weaponGroup,.13,.13,.10,12,white,0,.22,.28,Math.PI/2,0,0);
+      addBox(weaponGroup,.08,.06,.30,glow,0,-.02,-.38);
+    }else if(name==='リッター4K'){
+      addBox(weaponGroup,.08,.08,1.25,detailLight,0,.15,.04);
+      addCyl(weaponGroup,.16,.13,.30,14,black,0,.23,.16,Math.PI/2,0,0);
+      addCyl(weaponGroup,.19,.16,.07,14,white,0,.23,.34,Math.PI/2,0,0);
+      addBox(weaponGroup,.07,.08,.38,glow,0,.05,-.50);
+    }else if(name==='14式竹筒銃'){
+      addBox(weaponGroup,.05,.06,1.00,detailLight,0,.12,.03);
+      for(let k=0;k<3;k++) addCyl(weaponGroup,.055,.055,.035,10,white,0,.09,.14+k*.20,Math.PI/2,0,0);
+      addBox(weaponGroup,.12,.05,.18,black,0,.20,-.35);
+    }else if(name==='スプラローラー'){
+      const rr=selectedWeapon.thickness*1.6;
+      addCyl(weaponGroup,rr*.62,rr*.62,.10,12,white,0,0,-selectedWeapon.length*.74,0,0,Math.PI/2);
+      addCyl(weaponGroup,rr*.42,rr*.42,.06,12,glow,0,0,selectedWeapon.length*.74,0,0,Math.PI/2);
+      addBox(weaponGroup,.30,.07,.12,detailLight,0,-rr*1.72,0);
+      addBox(weaponGroup,.10,.20,.06,white,0,-rr*2.12,-.04);
+    }else if(name==='ダイナモローラー'){
+      const rr=selectedWeapon.thickness*1.65;
+      addCyl(weaponGroup,rr*.72,rr*.72,.14,14,white,0,0,-selectedWeapon.length*.72,0,0,Math.PI/2);
+      addCyl(weaponGroup,rr*.52,rr*.52,.08,12,glow,0,0,selectedWeapon.length*.72,0,0,Math.PI/2);
+      addBox(weaponGroup,.36,.10,.18,detailLight,0,-rr*1.70,0);
+    }else if(name==='パブロ(筆)'){
+      addBox(weaponGroup,.12,.22,.14,detailLight,0,-.25,0);
+      addBox(weaponGroup,.20,.08,.38,white,0,.02,.52,0,0,0);
+      addBox(weaponGroup,.12,.06,.30,glow,0,.06,.65);
+    }else if(name==='スパッタリー'||name==='デュアルスイーパー'||name==='ケルビン525'){
+      addBox(weaponGroup,.05,.04,.44,detailLight,0,.17,.10);
+      addBox(weaponGroup,.08,.08,.13,white,0,.06,-.22);
+      addCyl(weaponGroup,.065,.065,.08,10,glow,0,.04,.56,Math.PI/2,0,0);
+    }else if(name==='バケツスロッシャー'||name==='ヒッセン'){
+      addCyl(weaponGroup,.33,.27,.06,14,white,0,0,.25,Math.PI/2,0,0);
+      addBox(weaponGroup,.08,.28,.08,detailLight,-.19,.01,0,0,0,-.15);
+      addBox(weaponGroup,.08,.28,.08,detailLight,.19,.01,0,0,0,.15);
+      addBox(weaponGroup,.08,.05,.35,black,0,-.15,-.20);
+    }else if(name==='オーバーフロッシャー'||name==='エクスプロッシャー'){
+      addCyl(weaponGroup,.36,.28,.08,14,white,0,0,.28,Math.PI/2,0,0);
+      addCyl(weaponGroup,.14,.14,.12,12,glow,0,.02,.38,Math.PI/2,0,0);
+      addBox(weaponGroup,.08,.20,.32,detailLight,0,-.12,-.22);
+    }else if(name==='ドライブワイパー'||name==='ジムワイパー'){
+      const blade=selectedWeapon.length*2.1;
+      for(let k=-2;k<=2;k++){
+        addBox(weaponGroup,.045,.035,blade*.16,detailLight,0,.11,k*.24);
+      }
+      addBox(weaponGroup,.12,.08,.34,white,0,-.16,-.48);
+      addCyl(weaponGroup,.07,.07,.16,10,glow,0,-.31,-.48,0,0,0);
+    }else if(name==='スプラスピナー'||name==='スプラスピナー'){
+      addCyl(weaponGroup,.20,.20,.20,16,white,0,.16,.06,0,0,0);
+      for(let k=0;k<4;k++) addBox(weaponGroup,.05,.05,.14,glow,(-.10+k*.067),.16,.19);
+    }
     return weaponGroup;
   }
 
@@ -1196,6 +1380,9 @@ function buildPlayerModelGroup(cfg){
     const shoe=new THREE.Group(); shoe.position.set(0,-.45,0); leg.add(shoe);
     addSubdividedBox(shoe,.2,.05,.25,matWhite,0,-.025,.02);
     addSubdividedBox(shoe,.18,.08,.22,matShoes,0,.04,.01);
+    addBox(shoe,.045,.10,.225,matStitch,0,.07,.03);
+    addBox(shoe,.055,.025,.24,matBlack,0,-.005,.08);
+    addBox(shoe,.18,.025,.06,matPantsLight,0,.10,-.08);
     return leg;
   }
   const lL=createLeg(); lL.position.set(-.15,.75,0); human.add(lL);
