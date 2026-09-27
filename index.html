@@ -3436,13 +3436,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     };
   }
 
-  /* ---------- Battle hooks ---------- */
-  const oldStartRange=startRangePhase;
-  // Keep an unwrapped reference so lobby entry can bypass optional enhancement wrappers if needed.
-  window.__baseStartRangePhase=oldStartRange;
-  startRangePhase=function(){ oldStartRange(); setBattleCursor(false); };
-  const oldStartBattle=startBattleFromRange;
-  startBattleFromRange=function(){ oldStartBattle(); setBattleCursor(true); };
+  /* Battle cursor/map handling is owned by the later v10 layer; no extra wrapper here. */
 
   /* ---------- Spinner movement integration ---------- */
   const oldMovement=updatePlayerMovement;
