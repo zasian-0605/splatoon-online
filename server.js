@@ -115,6 +115,9 @@ function updateAccountResult(player, winnerTeam) {
 
 const server = http.createServer(async (req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (req.method === 'GET' && p === '/health') {
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, time: new Date().toISOString() });
+  }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
       const b = await readBody(req); const name = String(b.name || ''); const pw = String(b.password || '');
