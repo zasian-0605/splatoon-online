@@ -1741,7 +1741,10 @@ function updateSubs(delta){
    ========================================================= */
 function fireSpecial(fighter){
   if(!fighter || !fighter.alive) return;
-  if(fighter.specialGauge < specialCostReady) return;
+  if(fighter.specialGauge < specialCostReady){
+    if(fighter.isPlayer) showToast('スペシャルゲージをためてください');
+    return;
+  }
   fighter.specialGauge = 0;
   const type = fighter.weapon.special;
   const col = fighter.team==='A'?teamAHex:teamBHex;
@@ -2216,6 +2219,7 @@ function startBattleFromRange(){
     fighters.push(createFighter({id:'teamB_'+i, isPlayer:false, team:'B', x:sx, z:spawnPointB.z, cfg}));
   }
   battleTimer = 180;
+  playerFighter.specialGauge=0;
   window.__battleDeadline = Date.now() + 181000;
   battleActive = true;
   currentPhase = 2;
@@ -2478,7 +2482,7 @@ function updateAI(f, delta, now){
     const dir = new THREE.Vector3(moveTarget.x-f.pos.x, 0, moveTarget.z-f.pos.z);
     if(dir.length()>0.3){
       dir.normalize();
-      const speed = 7.5;
+      const speed = 5.8;
       const rawNx = f.pos.x + dir.x*speed*delta;
       const rawNz = f.pos.z + dir.z*speed*delta;
       const bounded = clampStageXY(rawNx,rawNz);
@@ -2505,6 +2509,13 @@ function updateAI(f, delta, now){
     const dir = new THREE.Vector3().subVectors(aimAt, f.pos);
     dir.y = 0.05;
     dir.normalize();
+    if(wp.category!=='roller'){
+      const jitterBase=wp.category==='charger' ? (0.10+Math.min(.20,nearestD/100)) : 0.045;
+      dir.x += (Math.random()-.5)*jitterBase;
+      dir.z += (Math.random()-.5)*jitterBase;
+      dir.y += (Math.random()-.5)*jitterBase*.25;
+      dir.normalize();
+    }
     if(wp.category==='roller'){
       performRollerSwing(f, now);
     } else if(wp.category==='charger'){
@@ -3057,6 +3068,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }else{
       spawnBullet(fighter,dir,{speed:wp.speed,damage:wp.damage,gravity:18,radius:.14,life:wp.life,paintRadius:wp.paintRadius*1.18});
     }
+    // Immediate paint mark guarantees the tank/paint loop is visible even before the projectile lands.
+    const paintDist=wp.category==='blaster'?4.2:wp.category==='slosher'?3.5:6.0;
+    paintGround(fighter.pos.x+dir.x*paintDist,fighter.pos.z+dir.z*paintDist,Math.max(.7,(wp.paintRadius||1)*.75),fighter.team==='A'?teamAHex:teamBHex,{noNetwork:true});
     fighter.specialGauge=Math.min(100,fighter.specialGauge+.9*(fighter.gearProfile?.specialGain||1));
     sfx("shoot");
   };
@@ -3305,7 +3319,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const me=playerFighter;me.team=m.team;me.id=onlinePlayerId;me.cfg.color=playerConfig.color;
     me.root.position.copy(m.spawn|| (m.team==='A'?spawnPointA:spawnPointB));me.pos=me.root.position;me.hp=me.maxHp;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
     teamAHex=inkColorPalette[playerConfig.color]; teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
-    battleTimer=180; window.__battleDeadline=Date.now()+181000; battleActive=true; currentPhase=2;
+    battleTimer=180; playerFighter.specialGauge=0; window.__battleDeadline=Date.now()+181000; battleActive=true; currentPhase=2;
     document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block';document.getElementById('range-hint').style.display='none';document.getElementById('kill-feed').innerHTML='';
     (m.players||[]).forEach(p=>{if(p.id!==onlinePlayerId)ensureRemoteFighter(p);});
   }
@@ -4088,6 +4102,34 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     baseEndBattleForV36();
   };
   window.__v36OnlineReport=reportOnlineResult;
+
+  let __onlineStateTimer=setInterval(()=>{
+    if(onlineStarted && onlineActive){
+      try{sendOnlineState();}catch(e){}
+    }
+  },50);
+
+  // A separate safety timer guarantees the result screen even if the main render loop stalls.
+  let __battleWatchdog=setInterval(()=>{
+    if(!battleActive || currentPhase!==2) return;
+    if(window.__battleDeadline && Date.now()>=window.__battleDeadline){
+      battleTimer=0;
+      try{
+        endBattle();
+      }catch(err){
+        console.error('Battle result fallback',err);
+        battleActive=false;
+        window.__battleDeadline=0;
+        gameLoopToken++;
+        currentPhase=3;
+        try{computeTurf();}catch(e){}
+        const rs=document.getElementById('result-screen');
+        const bu=document.getElementById('battle-ui');
+        if(rs) rs.style.display='flex';
+        if(bu) bu.style.display='none';
+      }
+    }
+  },250);
 })();
 </script>
 
@@ -4644,6 +4686,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       document.getElementById('hud').style.display='block';
       document.getElementById('alive-count').style.display='none';
       document.getElementById('range-hint').style.display='block';
+      playerFighter.specialGauge=100;
       document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] ロビーに戻る　[O] CPU対戦(4vs4)　[P] オンライン';
       document.getElementById('instructions').innerHTML='【PC】WASD:移動 / マウス:視点＆撃つ / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ】左半分:移動 / 右半分:視点＆射撃';
 
