@@ -7574,17 +7574,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         }
       }else if(s.subType==='fizzyBomb'){
         if(!s.stuck){
-          s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          s.velocity.y-=20*delta;
+          s.mesh.position.addScaledVector(s.velocity,delta);
           const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
           if(s.mesh.position.y<=gh+.08){
-            s.mesh.position.y=gh+.12;s.stuck=true;s.velocity.y=7;s.charge=0;s.age=0;
+            s.mesh.position.y=gh+.12;
+            s.bounceCount=(s.bounceCount||0)+1;
+            const maxBounces=s.def.bounces||2;
+            if(s.bounceCount<=maxBounces){
+              s.velocity.y=6+(s.charge||0)*4;
+              s.velocity.x*=.88;s.velocity.z*=.88;
+            }else{
+              s.stuck=true;s.velocity.set(0,0,0);
+            }
           }
         }else{
-          s.age+=delta;s.charge++;
-          s.mesh.position.addScaledVector(s.direction,6*delta);
-          paintSegment(prev,s.mesh.position,.65,s.colorHex,true);
+          s.age+=delta;
           if(s.age>s.def.fuse)explodeSub(s);
         }
+        paintSegment(prev,s.mesh.position,.65,s.colorHex,true);
       }else if(s.subType==='autobomb'||s.subType==='torpedo'){
         let target=null,nd=Infinity;
         fighters.forEach(o=>{if(o.alive&&o.team!==s.team){const dd=o.pos.distanceTo(s.mesh.position);if(dd<nd){nd=dd;target=o;}}});
@@ -7897,6 +7905,19 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   /* ---------- Continuous bullet painting + collision ---------- */
   const updateBulletsPrev=updateBullets;
   updateBullets=function(delta){
+    const now=performance.now();
+    for(const vac of fighters){
+      if(!vac.alive||!vac.v60InkVacUntil||now>=vac.v60InkVacUntil)continue;
+      for(let i=bullets.length-1;i>=0;i--){
+        const b=bullets[i];
+        if(!b||b.team===vac.team)continue;
+        const dist=b.mesh.position.distanceTo(vac.pos);
+        if(dist<5.5){
+          vac.v60InkVacCharge=Math.min(120,(vac.v60InkVacCharge||0)+(b.damage||25)*.55);
+          scene.remove(b.mesh);bullets.splice(i,1);
+        }
+      }
+    }
     for(let i=bullets.length-1;i>=0;i--){
       const b=bullets[i];
       if(b.paintTrail){
@@ -8075,7 +8096,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           if(!o.alive||o.team===w.team) return;
           const d=o.pos.distanceTo(w.pos);
           if(d<20){
-            applyDamage(o,45,null);o.revealedUntil=now+8000;
+            const ground=getSupportHeight(o.pos.x,o.pos.z,o.pos.y);
+            if(o.pos.y<=ground+.65){
+              applyDamage(o,45,null);
+            }
+            o.revealedUntil=now+8000;
           }
         });
       }
@@ -8116,7 +8141,17 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       mesh.position.copy(start.clone().add(end).multiplyScalar(.5));
       mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.dir);
       scene.add(mesh);setTimeout(()=>scene.remove(mesh),80);
-      fighters.forEach(o=>{if(o.alive&&o.team!==b.team&&o.pos.distanceTo(end)<19)applyDamage(o,3.5,b.f);});
+      b.hitAt=b.hitAt||new Map();
+      fighters.forEach(o=>{
+        if(!o.alive||o.team===b.team)return;
+        const rel=o.pos.clone().sub(start);rel.y=0;
+        const t=Math.max(0,Math.min(20,rel.dot(b.dir)));
+        const closest=start.clone().addScaledVector(b.dir,t);closest.y=o.pos.y;
+        if(o.pos.distanceTo(closest)<1.15 && performance.now()-(b.hitAt.get(o.id)||0)>240){
+          b.hitAt.set(o.id,performance.now());
+          applyDamage(o,35,b.f);
+        }
+      });
     }
 
     for(let i=0;i<sp.missileJobs.length;i++){
@@ -8146,7 +8181,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         f.v60Booyah=null;f.invulnUntil=0;
       }
       if(f.v60InkVacUntil && now>=f.v60InkVacUntil){
-        explodeAt(f.pos.clone(),4.4,220,f.team,{paintRadius:4.8,colorHex:teamColor(f),sourceFighter:f});
+        const bonus=Math.min(180,(f.v60InkVacCharge||0)*1.15);
+        explodeAt(f.pos.clone(),4.4,Math.min(400,220+bonus),f.team,{paintRadius:4.8,colorHex:teamColor(f),sourceFighter:f});
         f.v60InkVacUntil=0;f.v60InkVacCharge=0;f.invulnUntil=0;
       }
       if(f.v60CrabUntil && now>=f.v60CrabUntil){f.v60CrabUntil=0;f.root.scale.set(1,1,1);}
@@ -8322,6 +8358,46 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
   setTimeout(window.updateWeaponInfoV61,0);
   document.getElementById('select-weapon')?.addEventListener('change',()=>setTimeout(window.updateWeaponInfoV61,0));
+})();
+</script>
+
+
+<script>
+/* V62 input pass: charged Fizzy Bomb */
+(function(){
+  let chargeStart=0;
+  let active=false;
+  function begin(e){
+    if(e.button!==2||!playerFighter)return;
+    if(currentPhase!==1.5&&currentPhase!==2)return;
+    if(playerFighter.weapon?.sub!=='fizzyBomb')return;
+    e.preventDefault();e.stopImmediatePropagation();
+    chargeStart=performance.now();active=true;
+  }
+  function finish(e){
+    if(e.button!==2||!active)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    const f=playerFighter;const held=Math.max(0,Math.min(1.4,(performance.now()-chargeStart)/1000));
+    chargeStart=0;active=false;
+    if(!f||f.weapon?.sub!=='fizzyBomb')return;
+    const def=subDefs.fizzyBomb;if(!def)return;
+    if(!consumeInk(f,inkCost(f,def.inkCost)))return;
+    const d=new THREE.Vector3();camera.getWorldDirection(d);d.normalize();
+    const color=getFighterInkHex(f),start=f.pos.clone();start.y+=1.1;
+    const mesh=makeSubMesh('fizzyBomb',color);mesh.position.copy(start);scene.add(mesh);
+    const vel=d.clone().multiplyScalar(def.speed*(1+held*.8));vel.y+=8+held*5;
+    const s={mesh,velocity:vel,team:f.team,colorHex:color,subType:'fizzyBomb',
+      def:Object.assign({},def,{bounces:held>.8?3:2}),age:0,stuck:false,exploded:false,
+      lastPos:start.clone(),fromFighter:f,charge:held,next:0,bounceCount:0,
+      direction:new THREE.Vector3(d.x,0,d.z).normalize()};
+    subInstances.push(s);
+    sfx('bomb');
+    if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'sub',x:start.x,y:start.y,z:start.z,vx:vel.x,vy:vel.y,vz:vel.z,subType:'fizzyBomb',weaponId:f.weapon.id}));}catch{}
+    }
+  }
+  document.addEventListener('mousedown',begin,true);
+  document.addEventListener('mouseup',finish,true);
 })();
 </script>
 
