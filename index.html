@@ -1289,6 +1289,15 @@ function buildPlayerModelGroup(cfg){
       addBox(weaponGroup,.23,.14,.22,dark,0,.04,-.20);
       grip(-.20);
       addBox(weaponGroup,.13,.13,.24,metal,0,.10,-.50);
+    } else if(selectedWeapon.category==='charger' && selectedWeapon.kind==='stringer'){
+      // ストリンガー：弓フレーム＋3本の矢
+      const bowLen=selectedWeapon.length*1.6;
+      addCyl(weaponGroup,.035,.035,bowLen,10,metal,0,.05,.05,Math.PI/2,0,0);
+      addCyl(weaponGroup,.045,.045,.16,10,c,0,.05,-bowLen*.44,Math.PI/2,0,0);
+      addCyl(weaponGroup,.045,.045,.16,10,c,0,.05,bowLen*.44,Math.PI/2,0,0);
+      addBox(weaponGroup,.035,.035,bowLen*.92,white,0,.05,.02);
+      addSubdividedBox(weaponGroup,.15,.15,.34,c,0,0,-.28);
+      grip(-.20);
     } else if(selectedWeapon.category==='charger'){
       // チャージャー：極細長銃身＋大型スコープ
       const len=selectedWeapon.length*1.85;
@@ -1325,6 +1334,16 @@ function buildPlayerModelGroup(cfg){
       addCyl(bucket,.13,.13,.06,12,glow,0,.01,.20,0,0,0);
       addBox(weaponGroup,.08,.08,.55,metal,0,-.18,-.12,Math.PI/9,0,0);
       grip(-.36);
+    } else if(selectedWeapon.category==='brella'){
+      // シェルター：傘面＋中心軸＋グリップ
+      const canopy=new THREE.Group();
+      canopy.rotation.x=Math.PI/2;
+      weaponGroup.add(canopy);
+      addCyl(canopy,.40,.25,.18,20,c,0,0,.22,0,0,0);
+      addCyl(canopy,.32,.20,.08,20,glow,0,0,.31,0,0,0);
+      addCyl(weaponGroup,.045,.045,.65,10,metal,0,-.08,-.18,Math.PI/2,0,0);
+      addBox(weaponGroup,.18,.12,.28,dark,0,-.28,-.48);
+      grip(-.43);
     } else if(selectedWeapon.category==='wiper'){
       // ワイパー：剣／ブレード形状をはっきり出す
       const bladeLen=selectedWeapon.length*2.1;
@@ -7082,9 +7101,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const b=spawnBulletV60(f,d,{speed:vel.length(),gravity:14,damage:(w.tapDamage||22)+(w.fullDamage-w.tapDamage)*frac,
         radius:.13,paintRadius:w.paintRadius||.7,life:1.6,kind:'stringer'});
       b.velocity.copy(vel);
-      if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{onlineSocket.send(JSON.stringify({type:'shot',x:spawn.x,y:spawn.y,z:spawn.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
-      }
+      // Three arrows are one trigger action; sync once after the fan is created.
       // Stringers paint the whole bow-like flight path on release.
       const path=traceBallistic(spawn,vel,14,1/30).point;
       trailPath(spawn,path,(w.paintRadius||.7)*(.75+.3*frac),color,1);
@@ -7092,6 +7109,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         const pp=spawn.clone().lerp(path,(k+1)/4);
         paintGround(pp.x,pp.z,(w.paintRadius||.7)*.55,color,{noNetwork:true});
       }
+    }
+    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:spawn.x,y:spawn.y,z:spawn.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+6+5*frac);
     sfx('shoot');
@@ -7171,8 +7191,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(!consumeInk(f,inkCost(f,w.inkCost||1.3)))return;
         const spread=(w.spread||.02)*(1.2+Math.random()*.8);
         const d=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*spread);
-        fireLineShot(f,d,w,{kind:'splatling',paintMult:.82});
+        fireLineShot(f,d,w,{kind:'splatling',paintMult:.82,noNetwork:true});
       },i*(w.rate||60));
+    }
+    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+count*.45);
     sfx('shoot');
@@ -7209,6 +7232,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }
       paintSegment(prev,landing,(w.paintRadius||1.4)*.48,color,false);
     }
+    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id}));}catch{}
+    }
     f.specialGauge=Math.min(100,f.specialGauge+2.1*count);
     sfx('shoot');
   }
@@ -7218,10 +7244,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const off=.15;
     [-1,1].forEach(side=>{
       const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),side*(w.spread||.05));
-      const b=fireLineShot(f,d,w,{paintMult:1.0,kind:'dualies'});
+      const b=fireLineShot(f,d,w,{paintMult:1.0,kind:'dualies',noNetwork:true});
       b.mesh.position.x+=-dir.z*off*side;
       b.mesh.position.z+=dir.x*off*side;
     });
+    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id}));}catch{}
+    }
     f.specialGauge=Math.min(100,f.specialGauge+1.0);
   }
 
@@ -8096,7 +8125,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     else if(wp.category==='maneuver')fireManeuverV60(rf,d);
     else if(wp.category==='brella')fireBrellaV60(rf,d);
     else if(wp.category==='spinner'){
-      fireSplatlingBurst(rf,1);
+      fireLineShot(rf,d,{speed:wp.speed||42,damage:wp.damage||28,range:wp.range||30,paintRadius:wp.paintRadius||.7,life:wp.life||1.0,rate:wp.rate||60,inkCost:0},{kind:'splatling',paintMult:.82,noNetwork:true});
     }else if(wp.category==='charger'){
       if(wp.kind==='stringer')fireStringerShot(rf,d,.85);
       else fireChargerShotV60(rf,d,1);
