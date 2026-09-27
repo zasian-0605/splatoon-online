@@ -3320,7 +3320,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       return;
     }
     localStorage.setItem('splatoonOnlineServer',value);
-    setOnlineStatus('サーバーURLを保存しました。もう一度オンライン接続を開始します。');
+    setOnlineStatus('保存しました。接続を開始します…');
+    setTimeout(()=>openOnlinePanel(),80);
   });
   /* room counts update without changing the stable v25 combat core */
   const _oldTryShoot=tryShoot;
