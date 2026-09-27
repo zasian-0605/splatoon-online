@@ -3357,6 +3357,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   /* ---------- Online room system v36 ---------- */
   let onlineSocket=null, onlineActive=false, onlineRoomId=null, onlinePlayerId=null, onlineTeam=null;
   let onlineReady=false, onlineStarted=false, onlineResultSent=false;
+
+  /* ---------- Expose online state across the later script layers ----------
+     These are forwarding accessors, so the later layers see the live values
+     instead of getting ReferenceError from the inner IIFE scope. */
+  [
+    ['onlineSocket',()=>onlineSocket,v=>{onlineSocket=v;}],
+    ['onlineActive',()=>onlineActive,v=>{onlineActive=v;}],
+    ['onlineRoomId',()=>onlineRoomId,v=>{onlineRoomId=v;}],
+    ['onlinePlayerId',()=>onlinePlayerId,v=>{onlinePlayerId=v;}],
+    ['onlineTeam',()=>onlineTeam,v=>{onlineTeam=v;}],
+    ['onlineReady',()=>onlineReady,v=>{onlineReady=v;}],
+    ['onlineStarted',()=>onlineStarted,v=>{onlineStarted=v;}],
+    ['onlineResultSent',()=>onlineResultSent,v=>{onlineResultSent=v;}]
+  ].forEach(([name,get,set])=>{
+    try{
+      Object.defineProperty(window,name,{configurable:true,get,set});
+    }catch(e){}
+  });
+
   const remoteMap=new Map();
   function setOnlineStatus(t){const e=document.getElementById('online-status');if(e)e.textContent=t;}
   function normalizeServerOrigin(v){
