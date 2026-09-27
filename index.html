@@ -7111,7 +7111,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }
     }
     if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:spawn.x,y:spawn.y,z:spawn.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:spawn.x,y:spawn.y,z:spawn.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,charge:frac,mode:'stringer'}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+6+5*frac);
     sfx('shoot');
@@ -7153,7 +7153,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       else paintGround(end.x,end.z,(w.paintRadius||.9)*(.75+.3*frac),color,{noNetwork:true});
     }
     if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:origin.x,y:origin.y,z:origin.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:origin.x,y:origin.y,z:origin.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,charge:frac,mode:'charger'}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+7+7*frac);
     sfx('shoot');
@@ -7195,7 +7195,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       },i*(w.rate||60));
     }
     if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id,charge:frac,mode:'splatling'}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+count*.45);
     sfx('shoot');
@@ -7244,7 +7244,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       paintSegment(prev,landing,(w.paintRadius||1.4)*.48,color,false);
     }
     if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id,mode:'slosher'}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+2.1*count);
     sfx('shoot');
@@ -7260,7 +7260,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       b.mesh.position.z+=dir.x*off*side;
     });
     if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'dualies'}));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+1.0);
   }
@@ -7274,7 +7274,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       fireLineShot(f,d,w,{paintMult:.72,kind:'brella',noNetwork:true});
     }
     if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'brella'}));}catch{}
     }
     if(f._moving===false){
       f.brellaOpenUntil=performance.now()+850;
@@ -8150,6 +8150,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const d=new THREE.Vector3(Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||1);
     if(d.lengthSq()<.001)d.set(0,0,1);d.normalize();
     const now=performance.now();
+    const charge=Math.max(0,Math.min(1,Number.isFinite(Number(m.charge))?Number(m.charge):1));
+    const mode=String(m.mode||'');
 
     // Special weapon modes are already activated by the separate special event.
     if(rf.v60Trizooka && rf.v60Trizooka.shots>0){
@@ -8179,7 +8181,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       return;
     }
 
-    if(wp.category==='blaster')fireBlasterV60(rf,d);
+    if(mode==='slosher' && wp.category==='slosher') fireSlosherV60(rf,d);
+    else if(mode==='dualies' && wp.category==='maneuver') fireManeuverV60(rf,d);
+    else if(mode==='brella' && wp.category==='brella') fireBrellaV60(rf,d);
+    else if(mode==='rollerFlick' && wp.category==='roller') doRollerV60(rf,performance.now(),false);
+    else if(mode==='brushFlick' && wp.brush) doBrushV60(rf,performance.now(),false);
+    else if(wp.category==='blaster')fireBlasterV60(rf,d);
     else if(wp.category==='slosher')fireSlosherV60(rf,d);
     else if(wp.category==='maneuver')fireManeuverV60(rf,d);
     else if(wp.category==='brella')fireBrellaV60(rf,d);
