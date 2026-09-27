@@ -3218,14 +3218,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!/^https?:\/\//i.test(v)) v='https://'+v;
     return v.replace(/\/$/,'');
   }
+  const DEFAULT_ONLINE_SERVER='https://splatoon-online-8r1r.onrender.com';
   function getOnlineServerOrigin(){
     const saved=normalizeServerOrigin(localStorage.getItem('splatoonOnlineServer')||'');
     if(saved) return saved;
-    // The bundled server works on the same host when the app itself is served by Node/Render.
+    // GitHub Pages itself cannot host the WebSocket server, so use the bundled Render service.
     if(location.hostname && !/github\.io$/i.test(location.hostname)){
       return location.origin;
     }
-    return '';
+    return DEFAULT_ONLINE_SERVER;
   }
   function onlineUrl(){
     const origin=getOnlineServerOrigin();
@@ -3251,7 +3252,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const savedServer=localStorage.getItem('splatoonOnlineServer')||'';
     if(serverInput) serverInput.value=savedServer || (/github\\.io$/i.test(location.hostname)?'':'');
     if(!savedServer && /github\\.io$/i.test(location.hostname)){
-      setOnlineStatus('GitHub PagesからはWebSocketへ直接つなげません。上のオンラインサーバーURLを設定してください。');
+      setOnlineStatus('オンラインサーバーを自動設定しました。接続します…');
     }else{
       setOnlineStatus('サーバーに接続します…');
     }
