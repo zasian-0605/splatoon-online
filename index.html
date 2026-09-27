@@ -4931,8 +4931,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       if(location.hostname && !/github\\.io$/i.test(location.hostname)) v=location.origin;
       else v=DEFAULT;
     }
-    if(!/^https?:\\/\\//i.test(v)) v='https://'+v;
-    return v.replace(/\\/$/,'');
+    if(!/^https?:\/\//i.test(v)) v='https://'+v;
+    return v.replace(/\/$/,'');
   }
   function wsUrl(){
     return origin().replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
