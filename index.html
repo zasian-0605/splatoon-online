@@ -4322,6 +4322,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
         if(m.type==='shot'){
+          if(window.__receiveOnlineShotV60){ window.__receiveOnlineShotV60(m); return; }
           const wp=weaponList[Number(m.weaponId)||0]||weaponList[0];
           const d=new THREE.Vector3(Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||1);
           if(d.lengthSq()<0.0001)d.set(0,0,1);else d.normalize();
@@ -4379,7 +4380,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
         if(m.type==='state'){applyRemoteState(m);return;}
-        if(m.type==='paint'){paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true});return;}
+        if(m.type==='paint'){
+          const x2=Number(m.x2), z2=Number(m.z2);
+          if(Number.isFinite(x2)&&Number.isFinite(z2)){
+            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,to:{x:x2,z:z2}});
+          }else{
+            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true});
+          }
+          return;
+        }
         if(m.type==='serverToast'){showToast(m.text);return;}
         if(m.type==='matchTimeout'){
           if(onlineActive && !onlineResultSent) reportOnlineResult('DRAW');
@@ -6794,5 +6803,1271 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   setInterval(applyCalloutVisibility,500);
 })();
 </script>
+
+<script>
+/* V60: weapon/gameplay overhaul
+   - continuous ink trails between muzzle and impact
+   - distinctive weapon classes
+   - real-style bomb behaviors
+   - varied Splatoon 3-inspired specials
+   - charger / splatling / wiper / splatana charging
+*/
+(function(){
+  'use strict';
+
+  const V60_BUILD='V60-WEAPON-GAMEPLAY-2026-09-27';
+
+  /* ---------- Realistic loadout expansion ---------- */
+  const addedWeapons=[
+    {id:24,category:'shooter',name:'シャープマーカー',displayName:'シャープマーカー',color:0x6fd3ff,length:.34,thickness:.09,
+      damage:28,rate:70,speed:43,spread:.025,life:1.15,range:32,paintRadius:.95,inkCost:.9,sub:'burstBomb',special:'カニタンク'},
+    {id:25,category:'shooter',name:'プロモデラーMG',displayName:'プロモデラーMG',color:0xdddddd,length:.31,thickness:.08,
+      damage:14,rate:42,speed:38,spread:.10,life:.95,range:28,paintRadius:1.05,inkCost:.65,sub:'sprinkler',special:'サメライド'},
+    {id:26,category:'shooter',name:'L3リールガン',displayName:'L3リールガン',color:0x7755cc,length:.42,thickness:.12,
+      damage:29,rate:240,speed:41,spread:.045,life:1.2,range:35,paintRadius:1.0,inkCost:1.4,burst:3,sub:'burstBomb',special:'ウルトラハンコ'},
+    {id:27,category:'shooter',name:'H3リールガン',displayName:'H3リールガン',color:0xaa7755,length:.50,thickness:.15,
+      damage:41,rate:300,speed:43,spread:.018,life:1.3,range:38,paintRadius:1.0,inkCost:1.9,burst:3,sub:'pointSensor',special:'エナジースタンド'},
+    {id:28,category:'blaster',name:'ホットブラスター',displayName:'ホットブラスター',color:0xff6633,length:.46,thickness:.24,
+      damage:85,rate:600,speed:27,spread:.02,life:1.4,range:23,paintRadius:1.45,explosionRadius:2.35,splashDamage:50,inkCost:3.1,sub:'suctionBomb',special:'グレートバリア'},
+    {id:29,category:'roller',name:'カーボンローラー',displayName:'カーボンローラー',color:0x55ddff,length:.44,thickness:.17,
+      swingDamage:70,swingRate:300,swingRange:2.65,paintFan:2.0,inkCost:4.2,flickRange:14,flickDamage:90,sub:'burstBomb',special:'ウルトラショット'},
+    {id:30,category:'roller',name:'ホクサイ',displayName:'ホクサイ',color:0xcc7733,length:.43,thickness:.16,brush:true,
+      swingDamage:42,swingRate:120,swingRange:2.35,paintFan:1.75,inkCost:2.0,sub:'robotBomb',special:'ショクワンダー'},
+    {id:31,category:'spinner',name:'スプラスピナー',displayName:'スプラスピナー',color:0x99ddff,length:.55,thickness:.16,
+      damage:28,rate:52,speed:46,spread:.035,life:.95,range:30,paintRadius:.72,inkCost:1.3,chargeTime:500,minShots:4,maxShots:10,sub:'burstBomb',special:'ウルトラハンコ'},
+    {id:32,category:'spinner',name:'バレルスピナー',displayName:'バレルスピナー',color:0x66aacc,length:.68,thickness:.19,
+      damage:30,rate:65,speed:48,spread:.018,life:1.1,range:38,paintRadius:.62,inkCost:1.5,chargeTime:950,minShots:8,maxShots:24,sub:'sprinkler',special:'ホップソナー'},
+    {id:33,category:'spinner',name:'ハイドラント',displayName:'ハイドラント',color:0x887766,length:.74,thickness:.23,
+      damage:40,rate:72,speed:50,spread:.012,life:1.2,range:45,paintRadius:.58,inkCost:1.9,chargeTime:1500,minShots:8,maxShots:32,sub:'autobomb',special:'ナイスダマ'},
+    {id:34,category:'maneuver',name:'スプラマニューバー',displayName:'スプラマニューバー',color:0x66ccff,length:.30,thickness:.10,
+      damage:28,rate:55,speed:38,spread:.055,life:1.0,range:30,paintRadius:.72,inkCost:.75,dual:true,sub:'splatBomb',special:'カニタンク'},
+    {id:35,category:'brella',name:'パラシェルター',displayName:'パラシェルター',color:0x99bbcc,length:.48,thickness:.18,
+      damage:34,rate:550,speed:32,spread:.25,life:1.0,range:20,paintRadius:1.0,inkCost:2.6,pellets:8,
+      canopyHp:650,sub:'splatBomb',special:'グレートバリア'},
+    {id:36,category:'brella',name:'スパイガジェット',displayName:'スパイガジェット',color:0x77aa66,length:.42,thickness:.14,
+      damage:26,rate:330,speed:34,spread:.30,life:.95,range:18,paintRadius:1.05,inkCost:2.2,pellets:7,
+      canopyHp:420,sub:'pointSensor',special:'ホップソナー'},
+    {id:37,category:'charger',kind:'stringer',name:'トライストリンガー',displayName:'トライストリンガー',color:0x55aa99,length:.72,thickness:.12,
+      chargeTime:900,tapDamage:22,fullDamage:76,speedShot:48,paintRadius:.72,inkCost:6.0,range:48,arrows:3,sub:'toxicMist',special:'メガホンレーザー5.1ch'},
+    {id:38,category:'charger',kind:'stringer',name:'LACT-450',displayName:'LACT-450',color:0xdddddd,length:.60,thickness:.10,
+      chargeTime:620,tapDamage:18,fullDamage:52,speedShot:52,paintRadius:.62,inkCost:4.8,range:42,arrows:3,sub:'pointSensor',special:'マルチミサイル'},
+    {id:39,category:'charger',name:'スクイックリンα',displayName:'スクイックリンα',color:0x55cc99,length:.58,thickness:.11,
+      chargeTime:520,tapDamage:30,fullDamage:105,speedShot:66,paintRadius:1.0,inkCost:6.5,range:42,sub:'pointSensor',special:'グレートバリア'},
+    {id:40,category:'charger',name:'ソイチューバー',displayName:'ソイチューバー',color:0x99aa55,length:.65,thickness:.12,
+      chargeTime:1000,tapDamage:24,fullDamage:125,speedShot:70,paintRadius:.9,inkCost:7.2,range:50,sub:'fizzyBomb',special:'ウルトラハンコ'},
+    {id:41,category:'roller',name:'パブロ',displayName:'パブロ',color:0xff88cc,length:.36,thickness:.13,brush:true,
+      swingDamage:38,swingRate:100,swingRange:2.15,paintFan:1.45,inkCost:1.8,sub:'burstBomb',special:'メガホンレーザー5.1ch'},
+    {id:42,category:'roller',name:'フィンセント',displayName:'フィンセント',color:0xaa55cc,length:.55,thickness:.19,brush:true,
+      swingDamage:70,swingRate:170,swingRange:2.65,paintFan:2.3,inkCost:3.2,sub:'fizzyBomb',special:'ホップソナー'},
+    {id:43,category:'blaster',name:'S-BLAST91',displayName:'S-BLAST91',color:0xee8844,length:.52,thickness:.27,
+      damage:92,rate:750,speed:22,spread:.03,life:1.2,range:27,paintRadius:1.35,explosionRadius:2.7,splashDamage:55,
+      inkCost:3.6,sub:'suctionBomb',special:'ナイスダマ'},
+    {id:44,category:'slosher',name:'スクリュースロッシャー',displayName:'スクリュースロッシャー',color:0xaa55ee,length:.42,thickness:.28,
+      damage:70,rate:540,speed:18,life:1.35,range:25,paintRadius:1.8,inkCost:4.8,arc:1.0,sub:'fizzyBomb',special:'ナイスダマ'}
+  ];
+  addedWeapons.forEach(w=>{ if(!weaponList.some(x=>x.id===w.id)) weaponList.push(w); });
+
+  categoryLabel.spinner='スピナー';
+  categoryLabel.brella='シェルター';
+
+  /* Replace fictional aliases with the real weapon names shown in the HUD.
+     Gameplay remains custom/approximate rather than pretending to reproduce exact game internals. */
+  const displayNameV60=function(w){ return w?.name || '武器'; };
+  window.displayWeaponName=displayNameV60;
+  try{ displayWeaponName=displayNameV60; }catch{}
+
+  function weaponKindLabel(w){
+    if(!w) return '不明';
+    if(w.brush) return 'ブラシ';
+    if(w.kind==='stringer') return 'ストリンガー';
+    if(w.category==='dualies'||w.category==='maneuver') return 'マニューバー';
+    if(w.category==='spinner') return 'スピナー';
+    if(w.category==='brella') return 'シェルター';
+    return categoryLabel[w.category]||w.category;
+  }
+
+  function weaponDescriptionV60(w){
+    if(!w) return '';
+    if(w.brush) return '高速連続振り。移動しながら細く長く塗れて、立ち止まると短い扇状攻撃。';
+    if(w.kind==='stringer') return '3本の矢を放つチャージ式。チャージほど威力・射程・塗りが伸びる。';
+    if(w.category==='charger') return '長押しでチャージ。放した瞬間に射線上を一直線に塗り、最大チャージは高威力。';
+    if(w.category==='spinner') return '長押しで回転をため、放すと一定時間だけ高速連射。チャージ量で弾数が変化。';
+    if(w.category==='roller') return 'ZRで振り、移動しながらならローリング。立ち止まって振ると遠くへインクを飛ばす。';
+    if(w.category==='maneuver') return '左右2丁の連射。撃ちながら移動でき、ジャンプ＋射撃入力でスライド。';
+    if(w.category==='brella') return '広い散弾を放ち、シェルター展開中は前方を守れる。';
+    if(w.category==='slosher') return '山なりにインクを投げ、着地点だけでなく弧の軌道から落下する範囲まで塗る。';
+    if(w.category==='blaster') return '弾が着弾すると爆発。直撃だけでなく爆風で塗りとダメージを作る。';
+    return '弾が飛んだ軌道に沿ってインクを残す、連射型のメインウェポン。';
+  }
+
+  function updateWeaponInfoV60(){
+    const w=weaponList[playerConfig.weapon]||weaponList[0];
+    const e=document.getElementById('weapon-info');
+    if(!e)return;
+    const extra=w.category==='charger'
+      ? 'チャージ '+w.chargeTime+'ms / 最大ダメージ '+w.fullDamage
+      : w.category==='spinner'
+      ? 'チャージ '+w.chargeTime+'ms / '+(w.minShots||4)+'〜'+(w.maxShots||16)+'発'
+      : w.category==='roller'||w.brush
+      ? '近接 '+w.swingDamage+' / 射程 '+(w.swingRange||2)
+      : 'ダメージ '+(w.damage||0)+' / 射程 '+(w.range||30);
+    e.textContent='【'+weaponKindLabel(w)+'】\n'+w.name+'\n'+weaponDescriptionV60(w)+'\nサブ: '+(subDefs[w.sub]?.name||w.sub||'なし')+' / SP: '+(w.special||'なし')+'\n'+extra;
+  }
+
+  function rebuildWeaponSelectV60(){
+    const select=document.getElementById('select-weapon');
+    if(!select)return;
+    const old=Number(select.value);
+    select.innerHTML='';
+    weaponList.forEach(w=>{
+      const opt=document.createElement('option');
+      opt.value=w.id;
+      opt.textContent='['+weaponKindLabel(w)+'] '+w.name;
+      select.appendChild(opt);
+    });
+    if(weaponList.some(w=>w.id===old)) select.value=old;
+    select.onchange=function(){
+      playerConfig.weapon=Number(select.value);
+      try{ savePlayerConfig(); }catch{}
+      try{ updateCustomPlayerModel(); }catch{}
+      updateWeaponInfoV60();
+    };
+    updateWeaponInfoV60();
+  }
+
+  /* ---------- Real-style sub weapons ---------- */
+  for(const k of Object.keys(subDefs)) delete subDefs[k];
+  Object.assign(subDefs,{
+    splatBomb:{name:'スプラッシュボム',type:'splatBomb',fuse:1.0,radius:3.2,damage:180,farDamage:30,speed:16,inkCost:45,cd:950},
+    suctionBomb:{name:'キューバンボム',type:'suctionBomb',fuse:2.0,radius:4.0,damage:180,farDamage:30,speed:15,inkCost:50,cd:1050},
+    burstBomb:{name:'クイックボム',type:'burstBomb',fuse:0,radius:2.0,damage:60,farDamage:25,speed:18,inkCost:35,cd:520},
+    curlingBomb:{name:'カーリングボム',type:'curlingBomb',fuse:2.7,radius:2.7,damage:180,farDamage:30,speed:15,inkCost:55,cd:900},
+    fizzyBomb:{name:'タンサンボム',type:'fizzyBomb',fuse:1.6,radius:2.8,damage:50,farDamage:25,speed:14,inkCost:50,cd:900,bounces:2},
+    autobomb:{name:'ロボットボム',type:'autobomb',fuse:2.5,radius:2.6,damage:150,farDamage:30,speed:12,inkCost:45,cd:1000},
+    inkMine:{name:'トラップ',type:'inkMine',fuse:0,radius:2.8,damage:45,farDamage:30,speed:10,inkCost:40,cd:900,duration:20},
+    pointSensor:{name:'ポイントセンサー',type:'pointSensor',fuse:0,radius:3.0,damage:0,farDamage:0,speed:14,inkCost:40,cd:850,duration:8},
+    splashWall:{name:'スプラッシュシールド',type:'splashWall',fuse:0,radius:2.0,damage:30,farDamage:20,speed:10,inkCost:60,cd:1300,duration:7},
+    sprinkler:{name:'スプリンクラー',type:'sprinkler',fuse:0,radius:2.0,damage:20,farDamage:0,speed:12,inkCost:60,cd:1100,duration:15},
+    torpedo:{name:'トーピード',type:'torpedo',fuse:1.8,radius:2.8,damage:120,farDamage:25,speed:13,inkCost:45,cd:1000},
+    angleShooter:{name:'ラインマーカー',type:'angleShooter',fuse:0,radius:1.2,damage:40,farDamage:20,speed:32,inkCost:40,cd:700},
+    toxicMist:{name:'ポイズンミスト',type:'toxicMist',fuse:0,radius:3.2,damage:8,farDamage:0,speed:10,inkCost:45,cd:1000,duration:5}
+  });
+
+  /* Give existing weapons actual-style loadouts. */
+  const loadoutMap={
+    'スプラシューター':['splatBomb','ウルトラショット'],
+    '.52ガロン':['splatBomb','メガホンレーザー5.1ch'],
+    'N-ZAP85':['pointSensor','エナジースタンド'],
+    'プライムシューター':['angleShooter','カニタンク'],
+    '.96ガロンデコ':['sprinkler','テイオウイカ'],
+    'ノヴァブラスター':['burstBomb','ショクワンダー'],
+    'クラッシュブラスター':['splatBomb','ウルトラハンコ'],
+    'ラピッドブラスター':['pointSensor','トリプルトルネード'],
+    'Rブラスターエリート':['suctionBomb','キューインキ'],
+    'スプラチャージャー':['splatBomb','トリプルトルネード'],
+    'リッター4K':['trap','アメフラシ'],
+    '14式竹筒銃':['pointSensor','メガホンレーザー5.1ch'],
+    'スプラローラー':['splatBomb','ウルトラハンコ'],
+    'ダイナモローラー':['sprinkler','エナジースタンド'],
+    'パブロ(筆)':['splatBomb','メガホンレーザー5.1ch'],
+    'スパッタリー':['burstBomb','エナジースタンド'],
+    'デュアルスイーパー':['splatBomb','ホップソナー'],
+    'ケルビン525':['suctionBomb','デコイチラシ'],
+    'バケツスロッシャー':['splatBomb','トリプルトルネード'],
+    'ヒッセン':['burstBomb','エナジースタンド'],
+    'オーバーフロッシャー':['sprinkler','アメフラシ'],
+    'エクスプロッシャー':['pointSensor','キューインキ'],
+    'ドライブワイパー':['burstBomb','ショクワンダー'],
+    'ジムワイパー':['burstBomb','ショクワンダー']
+  };
+  weaponList.forEach(w=>{
+    const m=loadoutMap[w.name];
+    if(m && subDefs[m[0]]){ w.sub=m[0]; w.special=m[1]; }
+    if(m && m[0]==='tactic') w.sub='pointSensor';
+    if(m && m[0]==='trap') w.sub='inkMine';
+  });
+
+  /* ---------- Shared paint / tracing helpers ---------- */
+  function paintSegment(a,b,r,color,network){
+    if(!a||!b)return;
+    paintGround(a.x,a.z,r,color,{to:{x:b.x,z:b.z},noNetwork:true});
+    if(network) sendPaintSegment(a,b,r,color);
+  }
+
+  function sendPaintSegment(a,b,r,color){
+    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1)return;
+    try{
+      onlineSocket.send(JSON.stringify({
+        type:'paint',roomId:onlineRoomId,
+        x:a.x,z:a.z,x2:b.x,z2:b.z,radius:r,colorHex:color,mult:1
+      }));
+    }catch{}
+  }
+
+  function traceForward(start,dir,maxDist,step){
+    const d=dir.clone();
+    d.y=0;
+    if(d.lengthSq()<0.0001)d.set(0,0,1);
+    d.normalize();
+    let hit=start.clone().addScaledVector(d,maxDist);
+    for(let t=.5;t<=maxDist;t+=step||.5){
+      const p=start.clone().addScaledVector(d,t);
+      if(Math.abs(p.x)>STAGE_HALF_X-.4||Math.abs(p.z)>STAGE_HALF_Z-.4){ hit=p;break; }
+      const wall=getBlockingWall(p.x,p.z,start.y);
+      if(wall){ hit=p;break; }
+    }
+    return hit;
+  }
+
+  function traceBallistic(start,velocity,gravity,maxTime,step){
+    let p=start.clone();
+    let v=velocity.clone();
+    let prev=p.clone();
+    for(let t=0;t<maxTime;t+=step){
+      p.addScaledVector(v,step);
+      v.y-=gravity*step;
+      const gh=getSupportHeight(p.x,p.z,p.y);
+      if(p.y<=gh)return {point:new THREE.Vector3(p.x,gh+.05,p.z),prev};
+      const wall=getBlockingWall(p.x,p.z,p.y);
+      if(wall)return {point:p.clone(),prev};
+      prev=p.clone();
+    }
+    return {point:p.clone(),prev};
+  }
+
+  function trailPath(start,end,r,color,radiusMult){
+    paintSegment(start,end,Math.max(.45,r*(radiusMult||1)),color,false);
+  }
+
+  /* ---------- Projectile engine ---------- */
+  function spawnBulletV60(fighter,dir,opts){
+    const color=getFighterInkHex(fighter);
+    const geo=new THREE.SphereGeometry(opts.visRadius||opts.radiusVisual||.11,8,8);
+    const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color}));
+    const start=fighter.pos.clone();
+    start.y+=opts.yOffset===undefined?1.2:opts.yOffset;
+    mesh.position.copy(start);
+    scene.add(mesh);
+    const b={
+      mesh:mesh,velocity:dir.clone().multiplyScalar(opts.speed||30),
+      age:0,gravity:opts.gravity||0,radius:opts.radius||.15,team:fighter.team,
+      colorHex:color,damage:opts.damage||0,fromId:fighter.id,
+      explosive:!!opts.explosive,explosionRadius:opts.explosionRadius||0,splashDamage:opts.splashDamage||0,
+      paintRadius:opts.paintRadius||.8,life:opts.life||1.2,
+      paintTrail:opts.paintTrail!==false,lastPaintPos:start.clone(),paintEvery:opts.paintEvery||.20,
+      trailAccum:0, kind:opts.kind||'normal',sourceFighter:fighter,pierce:!!opts.pierce
+    };
+    bullets.push(b);
+    return b;
+  }
+  window.__spawnBulletV60=spawnBulletV60;
+
+  /* ---------- Charger ---------- */
+  function fireStringerShot(f,aimDir,frac){
+    const w=f.weapon;
+    const arrows=w.arrows||3;
+    const baseCost=(w.inkCost||6)*(0.55+0.8*frac);
+    if(!consumeInk(f,inkCost(f,baseCost)))return false;
+    const color=getFighterInkHex(f);
+    const facing=aimDir.clone(); facing.y=0;
+    if(facing.lengthSq()<.001)facing.set(0,0,1);
+    facing.normalize();
+    const spawn=f.pos.clone();spawn.y+=1.2;
+    const spread=.07+(1-frac)*.10;
+    for(let i=0;i<arrows;i++){
+      const offset=(i-(arrows-1)/2)*spread;
+      const d=facing.clone().applyAxisAngle(new THREE.Vector3(0,1,0),offset);
+      const vel=d.clone().multiplyScalar((w.speedShot||50)*(0.75+0.25*frac)); vel.y=8+frac*4;
+      const b=spawnBulletV60(f,d,{speed:vel.length(),gravity:14,damage:(w.tapDamage||22)+(w.fullDamage-w.tapDamage)*frac,
+        radius:.13,paintRadius:w.paintRadius||.7,life:1.6,kind:'stringer'});
+      b.velocity.copy(vel);
+      // Stringers paint the whole bow-like flight path on release.
+      const path=traceBallistic(spawn,vel,14,1/30).point;
+      trailPath(spawn,path,(w.paintRadius||.7)*(.75+.3*frac),color,1);
+      for(let k=0;k<3;k++){
+        const pp=spawn.clone().lerp(path,(k+1)/4);
+        paintGround(pp.x,pp.z,(w.paintRadius||.7)*.55,color,{noNetwork:true});
+      }
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+6+5*frac);
+    sfx('shoot');
+    return true;
+  }
+
+  function fireChargerShotV60(f,aimDir,chargeFrac){
+    if(f.weapon?.kind==='stringer')return fireStringerShot(f,aimDir,chargeFrac);
+    const w=f.weapon;
+    const frac=Math.max(0,Math.min(1,Number(chargeFrac)||0));
+    const cost=(w.inkCost||7)*(0.55+0.9*frac);
+    if(!consumeInk(f,inkCost(f,cost)))return false;
+    const color=getFighterInkHex(f);
+    const origin=f.pos.clone();origin.y+=1.2;
+    const d=aimDir.clone();
+    if(d.lengthSq()<.001)d.set(0,0,1);
+    d.normalize();
+    const end=traceForward(origin,d,w.range||55,.45);
+    // Charger paints the entire line immediately, not just the impact point.
+    trailPath(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color,1.0);
+    sendPaintSegment(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color);
+    const hitStep=.45;
+    let hit=null;
+    for(let t=.5;t<=origin.distanceTo(end);t+=hitStep){
+      const p=origin.clone().addScaledVector(d,t);
+      for(const o of fighters){
+        if(!o.alive||o.team===f.team)continue;
+        const dx=p.x-o.pos.x,dz=p.z-o.pos.z,dy=p.y-(o.pos.y+.9);
+        if(dx*dx+dz*dz<.72*.72&&Math.abs(dy)<1.3){hit=o;break;}
+      }
+      if(hit)break;
+    }
+    if(hit){
+      applyDamage(hit,Math.round((w.tapDamage||30)+((w.fullDamage||120)-(w.tapDamage||30))*frac),f);
+      for(let i=0;i<8;i++)spawnParticle(hit.pos.x,hit.pos.y+1,hit.pos.z,color);
+    }else{
+      const wall=getBlockingWall(end.x,end.z,end.y);
+      if(wall)paintWallSurface(wall,end,color,f.team,(w.paintRadius||.9)*(.7+.3*frac));
+      else paintGround(end.x,end.z,(w.paintRadius||.9)*(.75+.3*frac),color,{noNetwork:true});
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+7+7*frac);
+    sfx('shoot');
+    return true;
+  }
+  window.fireChargerShot=fireChargerShotV60;
+
+  /* ---------- Shooter / blaster / slosher / maneuver / brella ---------- */
+  function fireLineShot(f,dir,w,opts){
+    const color=getFighterInkHex(f);
+    const origin=f.pos.clone();origin.y+=1.2;
+    const end=traceForward(origin,dir,w.range||30,.45);
+    const radius=(w.paintRadius||.8)*(opts.paintMult||1);
+    trailPath(origin,end,radius,color,1);
+    sendPaintSegment(origin,end,radius,color);
+    const b=spawnBulletV60(f,dir,{
+      speed:w.speed||35,damage:opts.damage===undefined?w.damage:opts.damage,
+      gravity:opts.gravity||0,radius:opts.radius||.14,paintRadius:radius,life:w.life||1.1,
+      explosive:!!opts.explosive,explosionRadius:opts.explosionRadius||0,splashDamage:opts.splashDamage||0,
+      kind:opts.kind||'line'
+    });
+    b.mesh.position.y=origin.y;
+    return b;
+  }
+
+  function fireSplatlingBurst(f,chargeFrac){
+    const w=f.weapon;
+    const frac=Math.max(.05,Math.min(1,chargeFrac));
+    const count=Math.max(w.minShots||4,Math.round((w.maxShots||16)*frac));
+    const color=getFighterInkHex(f);
+    const aim=new THREE.Vector3();camera.getWorldDirection(aim);aim.y=0;aim.normalize();
+    for(let i=0;i<count;i++){
+      setTimeout(()=>{
+        if(!f.alive)return;
+        const spread=(w.spread||.02)*(1.2+Math.random()*.8);
+        const d=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*spread);
+        fireLineShot(f,d,w,{kind:'splatling',paintMult:.82});
+      },i*(w.rate||60));
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+count*.45);
+    sfx('shoot');
+  }
+
+  function fireBlasterV60(f,dir){
+    const w=f.weapon;
+    const b=fireLineShot(f,dir,w,{explosive:true,explosionRadius:w.explosionRadius||2.4,splashDamage:w.splashDamage||35,
+      paintMult:1.15,kind:'blaster'});
+    b.gravity=1.5;
+  }
+
+  function fireSlosherV60(f,dir){
+    const w=f.weapon;
+    const count=w.name==='ヒッセン'?3:w.name==='オーバーフロッシャー'?4:w.name==='エクスプロッシャー'||w.name==='スクリュースロッシャー'?1:1;
+    const aim=dir.clone();aim.y=.02;aim.normalize();
+    const color=getFighterInkHex(f);
+    for(let i=0;i<count;i++){
+      const d=aim.clone();
+      if(count>1)d.applyAxisAngle(new THREE.Vector3(0,1,0),(i-(count-1)/2)*.12);
+      const start=f.pos.clone();start.y+=1.2;
+      const vel=d.clone().multiplyScalar(w.speed||18);vel.y=7.5+(w.arc||0)*4;
+      const b=spawnBulletV60(f,d,{speed:vel.length(),damage:w.damage,gravity:22,radius:.28,paintRadius:w.paintRadius||1.4,life:w.life||1.3,kind:'slosher'});
+      b.velocity.copy(vel);
+      const landing=traceBallistic(start,vel,22,1/30).point;
+      // Bucket ink follows the arc, not only the landing spot.
+      let prev=start.clone();
+      for(let t=0;t<=.95;t+=.08){
+        const p=start.clone().addScaledVector(vel,t);
+        p.y-=11*t*t;
+        if(p.y<0)break;
+        paintSegment(prev,p,(w.paintRadius||1.4)*.22,color,false);
+        prev=p;
+      }
+      paintSegment(prev,landing,(w.paintRadius||1.4)*.48,color,false);
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+2.1*count);
+    sfx('shoot');
+  }
+
+  function fireManeuverV60(f,dir){
+    const w=f.weapon;
+    const off=.15;
+    [-1,1].forEach(side=>{
+      const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),side*(w.spread||.05));
+      const b=fireLineShot(f,d,w,{paintMult:1.0,kind:'dualies'});
+      b.mesh.position.x+=-dir.z*off*side;
+      b.mesh.position.z+=dir.x*off*side;
+    });
+    f.specialGauge=Math.min(100,f.specialGauge+1.0);
+  }
+
+  function fireBrellaV60(f,dir){
+    const w=f.weapon;
+    const pellets=w.pellets||7;
+    for(let i=0;i<pellets;i++){
+      const ang=(i-(pellets-1)/2)*.075;
+      const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),ang);
+      fireLineShot(f,d,w,{paintMult:.72,kind:'brella'});
+    }
+    if(f._moving===false){
+      f.brellaOpenUntil=performance.now()+850;
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+1.4);
+    sfx('shoot');
+  }
+
+  function tryShootV60(f,aimDir,now){
+    if(!f||!f.alive)return;
+    const w=f.weapon;
+    if(w.category==='charger')return;
+    if(w.category==='roller'||w.brush)return;
+    if(w.category==='wiper')return;
+    if(w.category==='spinner')return;
+    if(now-f.lastShot<(w.rate||100))return;
+    if(f.ink < inkCost(f,w.inkCost||1))return;
+    f.lastShot=now;
+
+    if(f.v60Trizooka && f.v60Trizooka.shots>0){
+      const color=getFighterInkHex(f);
+      const b=spawnBulletV60(f,aimDir,{speed:48,damage:220,gravity:5,radius:.3,paintRadius:2.2,life:1.5,explosive:true,explosionRadius:3.0,splashDamage:53,kind:'trizooka'});
+      b.paintTrail=false;
+      f.v60Trizooka.shots--;
+      if(f.v60Trizooka.shots<=0)f.v60Trizooka=null;
+      return;
+    }
+    if(f.v60CrabUntil && now<f.v60CrabUntil){
+      const w2={speed:44,damage:32,range:44,paintRadius:.9,life:1.1,rate:60,inkCost:0};
+      const d=aimDir.clone();d.y=0;d.normalize();
+      const b=fireLineShot(f,d,w2,{kind:'crab'});
+      b.explosive=false;
+      return;
+    }
+    if(f.v60InkjetUntil && now<f.v60InkjetUntil){
+      const d=aimDir.clone();d.normalize();
+      const b=spawnBulletV60(f,d,{speed:38,damage:50,gravity:4,radius:.25,paintRadius:1.3,life:1.3,explosive:true,explosionRadius:1.8,splashDamage:30,kind:'inkjet'});
+      trailPath(f.pos,traceForward(f.pos,d,20,.5),1.2,getFighterInkHex(f),false);
+      return;
+    }
+    if(f.v60UltraStampUntil && now<f.v60UltraStampUntil){
+      if(now-f.v60StampLast<330)return;
+      f.v60StampLast=now;
+      const d=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      const hitPos=f.pos.clone().addScaledVector(d,2.4);
+      explodeAt(hitPos,2.4,100,f.team,{paintRadius:3.1,colorHex:getFighterInkHex(f),sourceFighter:f});
+      trailPath(f.pos,hitPos,1.6,getFighterInkHex(f),false);
+      return;
+    }
+    if(f.v60KrakenUntil && now<f.v60KrakenUntil){
+      if(now-f.v60KrakenLast<400)return;
+      f.v60KrakenLast=now;
+      const d=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      f.pos.addScaledVector(d,2.0);
+      explodeAt(f.pos,2.2,60,f.team,{paintRadius:2.8,colorHex:getFighterInkHex(f),sourceFighter:f});
+      return;
+    }
+
+    if(w.category==='blaster')fireBlasterV60(f,aimDir);
+    else if(w.category==='slosher')fireSlosherV60(f,aimDir);
+    else if(w.category==='maneuver')fireManeuverV60(f,aimDir);
+    else if(w.category==='brella')fireBrellaV60(f,aimDir);
+    else fireLineShot(f,aimDir,w,{kind:'shooter',paintMult:1.05});
+
+    const cost=w.inkCost||1;
+    if(!consumeInk(f,inkCost(f,cost)))return;
+    f.specialGauge=Math.min(100,f.specialGauge+1.0*(f.gearProfile?.specialGain||1));
+    sfx('shoot');
+  }
+  window.tryShoot=tryShootV60;
+
+  /* ---------- Roller / brush / wiper ---------- */
+  function flickInkProjectile(f,dir,w,charge){
+    const color=getFighterInkHex(f);
+    const start=f.pos.clone();start.y+=1.0;
+    const d=dir.clone().normalize();
+    const vel=d.clone().multiplyScalar((w.flickSpeed||18)*(0.65+.35*charge));vel.y=4+4*charge;
+    const b=spawnBulletV60(f,d,{speed:vel.length(),damage:w.flickDamage||w.swingDamage,gravity:15,radius:.12,paintRadius:w.paintFan*.38,life:1.15,kind:'flick'});
+    b.velocity.copy(vel);b.paintTrail=true;
+    const end=traceBallistic(start,vel,15,1/30).point;
+    trailPath(start,end,w.paintFan*.40,color,false);
+  }
+
+  function doRollerV60(f,now,moving){
+    const w=f.weapon;
+    if(now-f.lastSwing<(moving?70:(w.swingRate||350)))return;
+    const cost=moving?2.5:6.0;
+    if(!consumeInk(f,inkCost(f,cost)))return;
+    const color=getFighterInkHex(f);
+    f.lastSwing=now;
+    const facing=new THREE.Vector3(Math.sin(f.human.rotation.y),0,Math.cos(f.human.rotation.y));
+    if(moving){
+      const current=f.pos.clone();
+      const prev=f._v60RollLast||current.clone().addScaledVector(facing,-1.0);
+      paintSegment(prev,current,w.paintFan*.75,color,true);
+      paintGround(current.x,current.z,w.paintFan*.75,color,{noNetwork:true});
+      f._v60RollLast=current.clone();
+      fighters.forEach(o=>{
+        if(o.alive&&o.team!==f.team&&o.pos.distanceTo(f.pos)<1.9)applyDamage(o,Math.min(65,w.swingDamage||60),f);
+      });
+    }else{
+      for(let i=-4;i<=4;i++){
+        const d=facing.clone().applyAxisAngle(new THREE.Vector3(0,1,0),i*.075);
+        flickInkProjectile(f,d,w,1);
+      }
+      fighters.forEach(o=>{
+        if(o.alive&&o.team!==f.team){
+          const rel=o.pos.clone().sub(f.pos);rel.y=0;
+          const dist=rel.length();
+          if(dist<(w.swingRange||3)&&dist>.05&&rel.normalize().dot(facing)>.1)applyDamage(o,w.swingDamage||75,f);
+        }
+      });
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+2.2*(f.gearProfile?.specialGain||1));
+    sfx('shoot');
+  }
+
+  function doBrushV60(f,now,moving){
+    const w=f.weapon;
+    if(now-f.lastSwing<(moving?55:(w.swingRate||110)))return;
+    if(!consumeInk(f,inkCost(f,moving?1.2:2.0)))return;
+    const color=getFighterInkHex(f);f.lastSwing=now;
+    const facing=new THREE.Vector3(Math.sin(f.human.rotation.y),0,Math.cos(f.human.rotation.y));
+    if(moving){
+      const cur=f.pos.clone(),prev=f._v60BrushLast||cur.clone().addScaledVector(facing,-.7);
+      paintSegment(prev,cur,w.paintFan*.42,color,true);f._v60BrushLast=cur.clone();
+      fighters.forEach(o=>{if(o.alive&&o.team!==f.team&&o.pos.distanceTo(f.pos)<1.7)applyDamage(o,Math.min(45,w.swingDamage||40),f);});
+    }else{
+      for(let i=-3;i<=3;i++){
+        const d=facing.clone().applyAxisAngle(new THREE.Vector3(0,1,0),i*.10);
+        paintSegment(f.pos,f.pos.clone().addScaledVector(d,2.0),w.paintFan*.38,color,true);
+      }
+      fighters.forEach(o=>{if(o.alive&&o.team!==f.team&&o.pos.distanceTo(f.pos)<(w.swingRange||2.2))applyDamage(o,w.swingDamage||40,f);});
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+2.0);
+    sfx('shoot');
+  }
+
+  function fireBladeSlashV60(f,frac){
+    const w=f.weapon;
+    const color=getFighterInkHex(f);
+    const cost=(w.inkCost||7)*(.65+.55*frac);
+    if(!consumeInk(f,inkCost(f,cost)))return;
+    const facing=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+    const len=(w.slashRange||4.5)*(.60+.40*frac);
+    const start=f.pos.clone();start.y+=.8;
+    const end=f.pos.clone().addScaledVector(facing,len);
+    // The blade itself flies forward, while the entire segment becomes painted.
+    trailPath(start,end,(w.paintRadius||1.5)*(.55+.35*frac),color,false);
+    sendPaintSegment(start,end,(w.paintRadius||1.5)*(.55+.35*frac),color);
+    const slash=new THREE.Mesh(new THREE.BoxGeometry(.16,.10,Math.max(.8,len)),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.82}));
+    slash.position.copy(start.clone().add(end).multiplyScalar(.5));slash.position.y+=.25;slash.rotation.y=Math.atan2(facing.x,facing.z);scene.add(slash);
+    setTimeout(()=>scene.remove(slash),120);
+    fighters.forEach(o=>{
+      if(!o.alive||o.team===f.team)return;
+      const rel=o.pos.clone().sub(f.pos);rel.y=0;
+      const dist=rel.length();
+      if(dist>len+.6||dist<.2)return;
+      if(rel.normalize().dot(facing)>.15)applyDamage(o,Math.round((w.slashDamage||75)+((w.chargedDamage||110)-(w.slashDamage||75))*frac),f);
+    });
+    if(frac>.72){
+      // Charged slash lunges slightly forward.
+      const lunge=Math.min(1.8,len*.23);
+      f.pos.addScaledVector(facing,lunge);
+    }
+    f.specialGauge=Math.min(100,f.specialGauge+3);
+    sfx('shoot');
+  }
+
+  /* ---------- Sub engine ---------- */
+  const subInstances=[];
+  function makeSubMesh(type,color){
+    if(type==='splashWall')return new THREE.Mesh(new THREE.BoxGeometry(.18,2.5,5.5),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.42,depthWrite:false}));
+    if(type==='sprinkler')return new THREE.Mesh(new THREE.CylinderGeometry(.2,.28,.7,10),new THREE.MeshBasicMaterial({color}));
+    if(type==='pointSensor'||type==='inkMine')return new THREE.Mesh(new THREE.RingGeometry(.28,.45,16),new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));
+    return new THREE.Mesh(new THREE.SphereGeometry(.30,8,8),new THREE.MeshBasicMaterial({color}));
+  }
+
+  function throwSubV60(f,aimDir,now){
+    const w=f.weapon,def=subDefs[w.sub];
+    if(!def)return;
+    if(now-f.lastSub<(def.cd||1000))return;
+    if(!consumeInk(f,inkCost(f,def.inkCost)))return;
+    f.lastSub=now;
+    const color=getFighterInkHex(f);
+    const d=aimDir.clone();d.normalize();
+    const start=f.pos.clone();start.y+=1.1;
+    const mesh=makeSubMesh(def.type,color);mesh.position.copy(start);scene.add(mesh);
+    const vel=d.clone().multiplyScalar(def.speed||14);vel.y+=7;
+    const s={mesh,velocity:vel,team:f.team,colorHex:color,subType:def.type,def,age:0,stuck:false,
+      exploded:false,lastPos:start.clone(),fromFighter:f,charge:0,next:0,direction:new THREE.Vector3(d.x,0,d.z).normalize()};
+    if(def.type==='burstBomb'||def.type==='angleShooter'){s.instant=true;}
+    subInstances.push(s);
+    sfx('bomb');
+    if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&f.isPlayer){
+      try{
+        onlineSocket.send(JSON.stringify({type:'sub',x:start.x,y:start.y,z:start.z,vx:vel.x,vy:vel.y,vz:vel.z,subType:def.type,weaponId:w.id}));
+      }catch{}
+    }
+  }
+  window.tryThrowSub=throwSubV60;
+
+  function explodeSub(s){
+    if(s.exploded)return;
+    s.exploded=true;
+    explodeAt(s.mesh.position.clone(),s.def.radius,s.def.damage,s.team,{colorHex:s.colorHex,sourceFighter:s.fromFighter,paintRadius:s.def.radius*1.05});
+    scene.remove(s.mesh);
+  }
+
+  function updateSubsV60(delta){
+    const now=performance.now();
+    for(let i=subInstances.length-1;i>=0;i--){
+      const s=subInstances[i];s.age+=delta;
+      if(s.exploded){subInstances.splice(i,1);continue;}
+      const prev=s.mesh.position.clone();
+      if(s.subType==='splatBomb'||s.subType==='suctionBomb'||s.subType==='burstBomb'){
+        s.velocity.y-=22*delta;
+        s.mesh.position.addScaledVector(s.velocity,delta);
+        const wall=getBlockingWall(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+        const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+        if(s.subType==='burstBomb' && (wall||s.mesh.position.y<=gh+.08)){explodeSub(s);continue;}
+        if(wall && s.subType==='suctionBomb'){
+          s.stuck=true;s.velocity.set(0,0,0);s.age=Math.min(s.age,s.def.fuse-.001);
+        }
+        if(s.mesh.position.y<=gh+.08){
+          s.mesh.position.y=gh+.10;s.stuck=true;s.velocity.set(0,0,0);
+        }
+        if(s.stuck && s.age>=s.def.fuse)explodeSub(s);
+      }else if(s.subType==='curlingBomb'){
+        if(!s.stuck){
+          s.velocity.y-=24*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.10;s.stuck=true;s.velocity.set(0,0,0);s.age=0;}
+        }else{
+          s.mesh.position.addScaledVector(s.direction,22*delta);
+          paintSegment(prev,s.mesh.position,.75,s.colorHex,true);
+          if(s.age>s.def.fuse||Math.abs(s.mesh.position.x)>STAGE_HALF_X||Math.abs(s.mesh.position.z)>STAGE_HALF_Z)explodeSub(s);
+        }
+      }else if(s.subType==='fizzyBomb'){
+        if(!s.stuck){
+          s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+.08){
+            s.mesh.position.y=gh+.12;s.stuck=true;s.velocity.y=7;s.charge=0;s.age=0;
+          }
+        }else{
+          s.age+=delta;s.charge++;
+          s.mesh.position.addScaledVector(s.direction,6*delta);
+          paintSegment(prev,s.mesh.position,.65,s.colorHex,true);
+          if(s.age>s.def.fuse)explodeSub(s);
+        }
+      }else if(s.subType==='autobomb'||s.subType==='torpedo'){
+        let target=null,nd=Infinity;
+        fighters.forEach(o=>{if(o.alive&&o.team!==s.team){const dd=o.pos.distanceTo(s.mesh.position);if(dd<nd){nd=dd;target=o;}}});
+        if(target&&nd<24){
+          const seek=new THREE.Vector3().subVectors(target.pos,s.mesh.position).normalize();
+          s.velocity.x+=seek.x*18*delta;s.velocity.z+=seek.z*18*delta;
+        }
+        s.velocity.y-=18*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+        paintSegment(prev,s.mesh.position,.36,s.colorHex,false);
+        if(nd<1.1||s.age>s.def.fuse)explodeSub(s);
+      }else if(s.subType==='angleShooter'){
+        s.velocity.y=0;s.mesh.position.addScaledVector(s.velocity,delta);
+        paintSegment(prev,s.mesh.position,.38,s.colorHex,true);
+        for(const o of fighters){
+          if(o.alive&&o.team!==s.team&&o.pos.distanceTo(s.mesh.position)<.9){
+            applyDamage(o,s.def.damage,s.fromFighter);o.revealedUntil=now+6000;explodeSub(s);break;
+          }
+        }
+        if(s.age>1.0||Math.abs(s.mesh.position.x)>STAGE_HALF_X||Math.abs(s.mesh.position.z)>STAGE_HALF_Z)explodeSub(s);
+      }else if(s.subType==='inkMine'){
+        if(!s.stuck){
+          s.velocity.y-=24*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.1;s.stuck=true;s.velocity.set(0,0,0);}
+        }else{
+          const enemy=fighters.find(o=>o.alive&&o.team!==s.team&&o.pos.distanceTo(s.mesh.position)<s.def.radius);
+          if(enemy){explodeSub(s);enemy.revealedUntil=now+5000;}
+          else if(s.age>s.def.duration){scene.remove(s.mesh);subInstances.splice(i,1);}
+        }
+      }else if(s.subType==='pointSensor'){
+        if(!s.stuck){
+          s.velocity.y-=22*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.15;s.stuck=true;s.velocity.set(0,0,0);}
+        }else{
+          fighters.forEach(o=>{if(o.alive&&o.team!==s.team&&o.pos.distanceTo(s.mesh.position)<s.def.radius)o.revealedUntil=now+250;});
+          if(s.age>s.def.duration){scene.remove(s.mesh);subInstances.splice(i,1);}
+        }
+      }else if(s.subType==='splashWall'){
+        if(!s.stuck){
+          s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+1.2){
+            s.mesh.position.y=gh+1.2;s.stuck=true;s.velocity.set(0,0,0);
+            s.mesh.rotation.y=Math.atan2(s.direction.x,s.direction.z);
+          }
+        }else{
+          const end=s.mesh.position.clone().addScaledVector(new THREE.Vector3(Math.cos(s.mesh.rotation.y),0,-Math.sin(s.mesh.rotation.y)),2.75);
+          const start=s.mesh.position.clone().addScaledVector(new THREE.Vector3(-Math.cos(s.mesh.rotation.y),0,Math.sin(s.mesh.rotation.y)),2.75);
+          fighters.forEach(o=>{
+            if(o.alive&&o.team!==s.team&&now-s.next>0){
+              const rel=o.pos.clone().sub(s.mesh.position);rel.y=0;
+              if(Math.abs(rel.x*Math.sin(s.mesh.rotation.y)+rel.z*Math.cos(s.mesh.rotation.y))<.75 &&
+                 Math.abs(rel.x*Math.cos(s.mesh.rotation.y)-rel.z*Math.sin(s.mesh.rotation.y))<2.9){
+                applyDamage(o,8,s.fromFighter);
+              }
+            }
+          });
+          if(s.next<=now){s.next=now+500;paintGround(s.mesh.position.x,s.mesh.position.z,1.0,s.colorHex,{noNetwork:true});}
+          if(s.age>s.def.duration){scene.remove(s.mesh);subInstances.splice(i,1);}
+        }
+      }else if(s.subType==='sprinkler'){
+        if(!s.stuck){
+          s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.22;s.stuck=true;s.velocity.set(0,0,0);}
+        }else{
+          s.next-=delta;
+          if(s.next<=0){
+            s.next=.25;
+            for(let k=0;k<5;k++){
+              const a=now*.003+k*Math.PI*2/5;
+              const p=s.mesh.position.clone().add(new THREE.Vector3(Math.cos(a)*1.5,0,Math.sin(a)*1.5));
+              paintGround(p.x,p.z,.55,s.colorHex,{noNetwork:true});
+            }
+          }
+          if(s.age>s.def.duration){scene.remove(s.mesh);subInstances.splice(i,1);}
+        }
+      }else if(s.subType==='toxicMist'){
+        if(!s.stuck){
+          s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.1;s.stuck=true;s.velocity.set(0,0,0);}
+        }else{
+          fighters.forEach(o=>{
+            if(o.alive&&o.team!==s.team&&o.pos.distanceTo(s.mesh.position)<s.def.radius){
+              o.v60SlowUntil=now+600;
+              if(Math.random()<.12)applyDamage(o,s.def.damage,s.fromFighter);
+            }
+          });
+          if(s.age>s.def.duration){scene.remove(s.mesh);subInstances.splice(i,1);}
+        }
+      }
+    }
+  }
+
+  /* ---------- Special effects ---------- */
+  const sp={
+    storms:[],waves:[],beacons:[],screens:[],beams:[],decoys:[],stations:[],bubbles:[],
+    missileJobs:[], inkVacShots:[]
+  };
+
+  function teamColor(f){return getFighterInkHex(f);}
+  function addRing(pos,color,radius,duration){
+    const mesh=new THREE.Mesh(new THREE.RingGeometry(Math.max(.2,radius*.78),Math.max(.25,radius),32),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.45,side:THREE.DoubleSide,depthWrite:false}));
+    mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);scene.add(mesh);
+    setTimeout(()=>scene.remove(mesh),duration||700);
+    return mesh;
+  }
+
+  function sendSpecialV60(f,name,target){
+    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1)return;
+    try{onlineSocket.send(JSON.stringify({type:'special',specialName:name,x:target.x,y:target.y,z:target.z,extra:{version:V60_BUILD}}));}catch{}
+  }
+
+  function activateSpecialV60(f,name,target,remote){
+    if(!f||!f.alive)return false;
+    const now=performance.now(),color=teamColor(f);
+    const q=target||f.pos.clone().add(new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y)).multiplyScalar(18));
+    if(name==='ウルトラショット'){
+      f.v60Trizooka={shots:3,until:now+6000};
+      addRing(q,color,2.8,900);
+    }else if(name==='ナイスダマ'){
+      f.v60Booyah={start:now,until:now+2600,target:q.clone()};
+      f.invulnUntil=Math.max(f.invulnUntil||0,now+2200);
+      addRing(q,color,4.5,2400);
+    }else if(name==='カニタンク'){
+      f.v60CrabUntil=now+8000;f.invulnUntil=Math.max(f.invulnUntil||0,now+500);f.speedBoostUntil=now+8000;
+      f.root.scale.set(1.35,1.05,1.35);addRing(f.pos,color,2.6,1600);
+    }else if(name==='ジェットパック'){
+      f.v60InkjetUntil=now+7500;f.v60InkjetHome=f.pos.clone();f.invulnUntil=Math.max(f.invulnUntil||0,now+500);
+      addRing(f.pos,color,2.0,900);
+    }else if(name==='キューインキ'){
+      f.v60InkVacUntil=now+6000;f.v60InkVacCharge=0;f.invulnUntil=Math.max(f.invulnUntil||0,now+5800);
+      addRing(f.pos,color,2.2,1200);
+    }else if(name==='アメフラシ'){
+      const cloud={pos:q.clone(),team:f.team,color,end:now+8000,last:0};sp.storms.push(cloud);
+      addRing(q,color,9,1200);
+    }else if(name==='ホップソナー'){
+      sp.waves.push({pos:q.clone(),team:f.team,color,start:now,next:now+1100,wave:0,end:now+7000});
+      addRing(q,color,2,900);
+    }else if(name==='グレートバリア'){
+      sp.bubbles.push({pos:f.pos.clone(),team:f.team,color,end:now+10000,radius:6,hp:2000});
+      addRing(f.pos,color,6,900);
+    }else if(name==='サメライド'){
+      const dir=new THREE.Vector3().subVectors(q,f.pos);dir.y=0;
+      if(dir.lengthSq()<.01)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      dir.normalize();
+      f.v60Reef={dir,end:now+950,home:f.pos.clone()};
+      f.invulnUntil=Math.max(f.invulnUntil||0,now+900);
+      addRing(f.pos,color,2,600);
+    }else if(name==='ウルトラハンコ'){
+      f.v60UltraStampUntil=now+7500;f.v60StampLast=0;f.invulnUntil=Math.max(f.invulnUntil||0,now+7500);f.speedBoostUntil=now+7500;
+    }else if(name==='テイオウイカ'){
+      f.v60KrakenUntil=now+8000;f.v60KrakenLast=0;f.invulnUntil=Math.max(f.invulnUntil||0,now+8000);f.speedBoostUntil=now+8000;f.root.scale.set(1.45,1.25,1.45);
+    }else if(name==='エナジースタンド'){
+      sp.stations.push({pos:f.pos.clone(),team:f.team,color,end:now+15000});
+      addRing(f.pos,color,4,900);
+    }else if(name==='メガホンレーザー5.1ch'){
+      for(let i=0;i<6;i++){
+        const ang=Math.atan2(q.x-f.pos.x,q.z-f.pos.z)+(i-2.5)*.13;
+        sp.beams.push({f,team:f.team,color,dir:new THREE.Vector3(Math.sin(ang),0,Math.cos(ang)),end:now+3000,last:0});
+      }
+    }else if(name==='マルチミサイル'){
+      for(let i=0;i<4;i++){
+        let targetEnemy=null,nd=Infinity;
+        fighters.forEach(o=>{if(o.alive&&o.team!==f.team){const d=o.pos.distanceTo(q);if(d<nd){nd=d;targetEnemy=o;}}});
+        if(targetEnemy)sp.missileJobs.push({pos:targetEnemy.pos.clone(),team:f.team,color,at:now+700+i*150,src:f});
+      }
+      addRing(q,color,4,800);
+    }else if(name==='トリプルトルネード'){
+      for(let i=-1;i<=1;i++){
+        const p=q.clone();p.x+=i*3;
+        sp.storms.push({pos:p,team:f.team,color,end:now+6500,last:0});
+        addRing(p,color,4,800);
+      }
+    }else if(name==='デコイチラシ'){
+      for(let i=0;i<6;i++){
+        const p=f.pos.clone().add(new THREE.Vector3((i-2.5)*1.8,0,4+Math.random()*8));
+        sp.decoys.push({pos:p,team:f.team,color,end:now+6000,at:now+1200});
+        addRing(p,color,1.5,1200);
+      }
+    }else if(name==='スミナガシート'){
+      const d=new THREE.Vector3().subVectors(q,f.pos);d.y=0;if(d.lengthSq()<.01)d.set(0,0,1);d.normalize();
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(12,.14,4.7),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.43,depthWrite:false}));
+      mesh.position.copy(f.pos).addScaledVector(d,7);mesh.position.y=2.1;mesh.rotation.y=Math.atan2(d.x,d.z);scene.add(mesh);
+      sp.screens.push({mesh,team:f.team,end:now+10000});
+    }else if(name==='ウルトラチャクチ'){
+      const p=f.pos.clone();addRing(p,color,5,900);
+      setTimeout(()=>{if(f.alive)explodeAt(f.pos.clone(),5,180,f.team,{paintRadius:5.5,colorHex:color,sourceFighter:f});},500);
+    }else if(name==='ショクワンダー'){
+      f.v60Zip={home:f.pos.clone(),until:now+9000};
+      f.invulnUntil=Math.max(f.invulnUntil||0,now+400);
+      const d=new THREE.Vector3().subVectors(q,f.pos);d.y=0;
+      if(d.lengthSq()<.01)d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));d.normalize();
+      f.pos.addScaledVector(d,Math.min(16,d.length()));
+      trailPath(f.v60Zip.home,f.pos,1.2,color,false);
+    }else{
+      return false;
+    }
+    if(!remote)sendSpecialV60(f,name,q);
+    return true;
+  }
+  window.__receiveOriginalSpecial=function(f,name,p,extra){
+    if(['ウルトラショット','ナイスダマ','カニタンク','ジェットパック','キューインキ','アメフラシ','ホップソナー','グレートバリア','サメライド','ウルトラハンコ','テイオウイカ','エナジースタンド','メガホンレーザー5.1ch','マルチミサイル','トリプルトルネード','デコイチラシ','スミナガシート','ウルトラチャクチ','ショクワンダー'].includes(name)){
+      activateSpecialV60(f,name,p,true);return;
+    }
+    /* Keep the older 19 custom specials working. */
+    try{ window.__receiveOriginalSpecialLegacy?.(f,name,p,extra); }catch{}
+  };
+
+  /* Preserve the current legacy special receiver before replacing it. */
+  /* V51 already installed a receiver, so we can reconstruct only the remaining legacy names locally. */
+  const legacySpecialNames=new Set(['トリガーキャノン','ドームシールド','グラップラー','センチネルミサイル','ペイントクラウド','ギガスタンプ','オムニレーザー','チャージオーブ','パルスノード','ヴァキュームコア','ブーストステーション','ラッシュカート','トライアークトルネード旧','スカイパック','アサルトシェル','スワームビーコン','コロッサス','トリプルクラッシュ','スモークスクリーン']);
+  window.__receiveOriginalSpecialLegacy=function(f,name,p,extra){
+    if(!legacySpecialNames.has(name))return;
+    if(name==='トリガーキャノン'){
+      const d=new THREE.Vector3().subVectors(p,f.pos).normalize();
+      for(let i=0;i<3;i++)setTimeout(()=>spawnBulletV60(f,d,{speed:40,damage:220,radius:.34,life:1.2,explosive:true,explosionRadius:2.8,splashDamage:40,paintRadius:2.7}),i*180);
+    }else if(name==='ドームシールド'){
+      sp.bubbles.push({pos:f.pos.clone(),team:f.team,color:teamColor(f),end:performance.now()+8000,radius:5.5,hp:2000});
+    }else if(name==='グラップラー'){
+      const d=new THREE.Vector3().subVectors(p,f.pos);d.y=0;if(d.lengthSq()>.01){d.normalize();f.pos.addScaledVector(d,Math.min(20,p.distanceTo(f.pos)));trailPath(f.pos.clone().addScaledVector(d,-5),f.pos,1,teamColor(f),false);}
+    }else if(name==='センチネルミサイル'){
+      for(let i=0;i<3;i++)sp.missileJobs.push({pos:p.clone(),team:f.team,color:teamColor(f),at:performance.now()+700+i*180,src:f});
+    }else if(name==='ペイントクラウド'){
+      sp.storms.push({pos:p.clone(),team:f.team,color:teamColor(f),end:performance.now()+8000,last:0});
+    }else if(name==='ギガスタンプ'){
+      f.v60UltraStampUntil=performance.now()+9000;f.v60StampLast=0;f.invulnUntil=performance.now()+9000;
+    }else if(name==='オムニレーザー'){
+      activateSpecialV60(f,'メガホンレーザー5.1ch',p,true);
+    }else if(name==='チャージオーブ'){
+      activateSpecialV60(f,'ナイスダマ',p,true);
+    }else if(name==='パルスノード'){
+      activateSpecialV60(f,'ホップソナー',p,true);
+    }else if(name==='ヴァキュームコア'){
+      activateSpecialV60(f,'キューインキ',p,true);
+    }else if(name==='ブーストステーション'){
+      activateSpecialV60(f,'エナジースタンド',p,true);
+    }else if(name==='ラッシュカート'){
+      activateSpecialV60(f,'サメライド',p,true);
+    }else if(name==='スカイパック'){
+      activateSpecialV60(f,'ジェットパック',p,true);
+    }else if(name==='アサルトシェル'){
+      for(let i=0;i<3;i++)sp.missileJobs.push({pos:p.clone().addScaledVector(new THREE.Vector3(1,0,0),i-1),team:f.team,color:teamColor(f),at:performance.now()+500+i*150,src:f});
+    }else if(name==='スワームビーコン'){
+      sp.decoys.push({pos:p.clone(),team:f.team,color:teamColor(f),end:performance.now()+8000,at:performance.now()+800});
+    }else if(name==='コロッサス'){
+      f.v60KrakenUntil=performance.now()+6000;f.invulnUntil=performance.now()+6000;f.root.scale.set(1.5,1.5,1.5);
+    }else if(name==='トリプルクラッシュ'){
+      [-2.5,0,2.5].forEach(dx=>explodeAt(p.clone().add(new THREE.Vector3(dx,0,0)),3.2,180,f.team,{paintRadius:4,colorHex:teamColor(f),sourceFighter:f}));
+    }else if(name==='スモークスクリーン'){
+      activateSpecialV60(f,'スミナガシート',p,true);
+    }
+  };
+
+  /* ---------- Special activation ---------- */
+  const fireSpecialPrev=fireSpecial;
+  fireSpecial=function(f){
+    if(!f||!f.alive)return;
+    const w=f.weapon||weaponList[0],name=w.special;
+    if(['ウルトラショット','ナイスダマ','カニタンク','ジェットパック','キューインキ','アメフラシ','ホップソナー','グレートバリア','サメライド','ウルトラハンコ','テイオウイカ','エナジースタンド','メガホンレーザー5.1ch','マルチミサイル','トリプルトルネード','デコイチラシ','スミナガシート','ウルトラチャクチ','ショクワンダー'].includes(name)){
+      if(f.specialGauge<100){if(f.isPlayer)showToast('スペシャルゲージをためてください');return;}
+      f.specialGauge=0;
+      const aim=new THREE.Vector3();
+      camera?.getWorldDirection(aim);
+      aim.y=0;
+      if(aim.lengthSq()<.01)aim.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      aim.normalize();
+      const target=f.pos.clone().addScaledVector(aim,18);
+      activateSpecialV60(f,name,target,false);
+      sfx('special');
+      return;
+    }
+    return fireSpecialPrev(f);
+  };
+
+  /* ---------- Continuous bullet painting + collision ---------- */
+  const updateBulletsPrev=updateBullets;
+  updateBullets=function(delta){
+    for(let i=bullets.length-1;i>=0;i--){
+      const b=bullets[i];
+      if(b.paintTrail){
+        const nowPos=b.mesh.position.clone();
+        const dist=b.lastPaintPos.distanceTo(nowPos);
+        b.trailAccum+=dist;
+        if(dist>.18){
+          paintSegment(b.lastPaintPos,nowPos,Math.max(.45,b.paintRadius*.52),b.colorHex,false);
+          b.lastPaintPos.copy(nowPos);b.trailAccum=0;
+        }
+      }
+    }
+    updateBulletsPrev(delta);
+  };
+
+  /* ---------- Movement / charge states ---------- */
+  const movementPrev=updatePlayerMovement;
+  updatePlayerMovement=function(delta){
+    const f=playerFighter;
+    if(!f||!f.alive){movementPrev(delta);return;}
+    const now=performance.now();
+
+    if(f.v60Reef && now<f.v60Reef.end){
+      const d=f.v60Reef.dir;
+      const speed=28;
+      const prev=f.pos.clone();
+      f.pos.addScaledVector(d,speed*delta);
+      f.pos.x=Math.max(-STAGE_HALF_X+1,Math.min(STAGE_HALF_X-1,f.pos.x));
+      f.pos.z=Math.max(-STAGE_HALF_Z+1,Math.min(STAGE_HALF_Z-1,f.pos.z));
+      paintSegment(prev,f.pos,1.35,getFighterInkHex(f),true);
+      return;
+    }
+    if(f.v60InkjetUntil && now<f.v60InkjetUntil){
+      const base=f.v60InkjetHome||f.pos.clone();
+      f.pos.y=Math.max(3.0,base.y+2.8+Math.sin(now*.004)*.3);
+      // Let base movement run with muted shooting, then restore.
+      const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
+      return;
+    }
+    if(f.v60Zip && now<f.v60Zip.until){
+      const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
+      return;
+    }
+
+    if(f.weapon.category==='spinner'){
+      const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
+      if(f._v60ChargeStart){
+        const frac=Math.min(1,(now-f._v60ChargeStart)/(f.weapon.chargeTime||800));
+        const gauge=document.getElementById('charge-gauge');
+        if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
+      }
+      return;
+    }
+
+    if(f.weapon.category==='wiper'){
+      const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
+      if(f._v60BladeChargeStart){
+        const frac=Math.min(1,(now-f._v60BladeChargeStart)/(f.weapon.chargeTime||550));
+        const gauge=document.getElementById('charge-gauge');
+        if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
+      }
+      return;
+    }
+
+    if(f.weapon.category==='charger' && f.weapon.kind==='stringer'){
+      /* The existing charger input starts/stops charging; only HUD is upgraded here. */
+      if(f.isCharging){
+        const frac=Math.min(1,(now-f.chargeStart)/(f.weapon.chargeTime||800));
+        const gauge=document.getElementById('charge-gauge');
+        if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
+      }
+    }
+
+    movementPrev(delta);
+    if(f.v60CrabUntil&&now>=f.v60CrabUntil)f.root.scale.set(1,1,1);
+    if(f.v60KrakenUntil&&now>=f.v60KrakenUntil){f.root.scale.set(1,1,1);f.v60KrakenUntil=0;}
+    if(f.v60Zip&&now>=f.v60Zip.until){
+      const zipHome=f.v60Zip.home.clone();f.pos.copy(zipHome);f.v60Zip=null;trailPath(zipHome,f.pos,1,getFighterInkHex(f),false);
+    }
+  };
+
+  /* Spinner mouse/touch charge: firing happens on release. */
+  function bindHeavyChargeControls(){
+    const down=function(e){
+      if((currentPhase!==1.5&&currentPhase!==2)||!playerFighter)return;
+      if(e.button!==0&&e.type==='mousedown')return;
+      const w=playerFighter.weapon;
+      if(w.category==='spinner'){
+        e.preventDefault();e.stopImmediatePropagation();
+        if(playerFighter._v60ChargeStart)return;
+        playerFighter._v60ChargeStart=performance.now();
+        isShooting=true;
+      }else if(w.category==='wiper'){
+        e.preventDefault();e.stopImmediatePropagation();
+        if(playerFighter._v60BladeChargeStart)return;
+        playerFighter._v60BladeChargeStart=performance.now();
+        isShooting=true;
+      }
+    };
+    const up=function(e){
+      if((currentPhase!==1.5&&currentPhase!==2)||!playerFighter)return;
+      if(e.button!==0&&e.type==='mouseup')return;
+      const w=playerFighter.weapon;
+      if(w.category==='spinner'&&playerFighter._v60ChargeStart){
+        e.preventDefault();e.stopImmediatePropagation();
+        const frac=Math.min(1,(performance.now()-playerFighter._v60ChargeStart)/(w.chargeTime||800));
+        playerFighter._v60ChargeStart=0;
+        isShooting=false;
+        const g=document.getElementById('charge-gauge');if(g)g.style.display='none';
+        if(frac>.05){fireSplatlingBurst(playerFighter,frac);}
+      }else if(w.category==='wiper'&&playerFighter._v60BladeChargeStart){
+        e.preventDefault();e.stopImmediatePropagation();
+        const frac=Math.min(1,(performance.now()-playerFighter._v60BladeChargeStart)/(w.chargeTime||550));
+        playerFighter._v60BladeChargeStart=0;
+        isShooting=false;
+        const g=document.getElementById('charge-gauge');if(g)g.style.display='none';
+        if(frac>.04)fireBladeSlashV60(playerFighter,frac);
+      }
+    };
+    document.addEventListener('mousedown',down,true);
+    document.addEventListener('mouseup',up,true);
+    document.addEventListener('touchstart',function(e){
+      if((currentPhase!==1.5&&currentPhase!==2)||!playerFighter)return;
+      const w=playerFighter.weapon;
+      if(w.category==='spinner'||w.category==='wiper'){
+        e.preventDefault();e.stopImmediatePropagation();
+        if(!playerFighter._v60ChargeStart&&!playerFighter._v60BladeChargeStart){
+          if(w.category==='spinner')playerFighter._v60ChargeStart=performance.now();
+          else playerFighter._v60BladeChargeStart=performance.now();
+          isShooting=true;
+        }
+      }
+    },true);
+    document.addEventListener('touchend',function(e){
+      if((currentPhase!==1.5&&currentPhase!==2)||!playerFighter)return;
+      const w=playerFighter.weapon;
+      if(w.category==='spinner'&&playerFighter._v60ChargeStart){
+        e.preventDefault();e.stopImmediatePropagation();
+        const frac=Math.min(1,(performance.now()-playerFighter._v60ChargeStart)/(w.chargeTime||800));
+        playerFighter._v60ChargeStart=0;isShooting=false;
+        const g=document.getElementById('charge-gauge');if(g)g.style.display='none';
+        if(frac>.05)fireSplatlingBurst(playerFighter,frac);
+      }else if(w.category==='wiper'&&playerFighter._v60BladeChargeStart){
+        e.preventDefault();e.stopImmediatePropagation();
+        const frac=Math.min(1,(performance.now()-playerFighter._v60BladeChargeStart)/(w.chargeTime||550));
+        playerFighter._v60BladeChargeStart=0;isShooting=false;
+        const g=document.getElementById('charge-gauge');if(g)g.style.display='none';
+        if(frac>.04)fireBladeSlashV60(playerFighter,frac);
+      }
+    },true);
+  }
+
+  /* ---------- Special FX update ---------- */
+  function updateSpecialV60(delta){
+    const now=performance.now();
+
+    for(let i=sp.storms.length-1;i>=0;i--){
+      const s=sp.storms[i];
+      if(now>s.end){sp.storms.splice(i,1);continue;}
+      if(s.last<=now){
+        s.last=now+220;
+        paintGround(s.pos.x,s.pos.z,5.0,s.color,{noNetwork:false});
+        fighters.forEach(o=>{if(o.alive&&o.team!==s.team&&o.pos.distanceTo(s.pos)<5.5)applyDamage(o,12,s.src||null);});
+        s.pos.x+=Math.sin(now*.0008)*.015;
+      }
+    }
+
+    for(let i=sp.waves.length-1;i>=0;i--){
+      const w=sp.waves[i];
+      if(now>w.end){sp.waves.splice(i,1);continue;}
+      if(now>=w.next&&w.wave<3){
+        w.next=now+(w.wave===0?1500:2500);w.wave++;
+        addRing(w.pos,w.color,20,900);
+        fighters.forEach(o=>{
+          if(!o.alive||o.team===w.team) return;
+          const d=o.pos.distanceTo(w.pos);
+          if(d<20){
+            applyDamage(o,45,null);o.revealedUntil=now+8000;
+          }
+        });
+      }
+    }
+
+    for(let i=sp.bubbles.length-1;i>=0;i--){
+      const b=sp.bubbles[i];
+      if(now>b.end){sp.bubbles.splice(i,1);continue;}
+      addRing(b.pos,b.color,b.radius,400);
+    }
+
+    for(let i=sp.stations.length-1;i>=0;i--){
+      const st=sp.stations[i];
+      if(now>st.end){sp.stations.splice(i,1);continue;}
+      fighters.forEach(f=>{
+        if(f.alive&&f.team===st.team&&f.pos.distanceTo(st.pos)<7){
+          f.speedBoostUntil=Math.max(f.speedBoostUntil,now+350);
+          f.ink=Math.min(100,f.ink+.8);
+        }
+      });
+    }
+
+    for(let i=sp.beams.length-1;i>=0;i--){
+      const b=sp.beams[i];
+      if(now>b.end){sp.beams.splice(i,1);continue;}
+      const end=b.f.pos.clone().addScaledVector(b.dir,20);end.y=1.5;
+      const start=b.f.pos.clone();start.y=1.5;
+      paintSegment(start,end,.42,b.color,false);
+      const geom=new THREE.CylinderGeometry(.05,.09,20,8);
+      const mesh=new THREE.Mesh(geom,new THREE.MeshBasicMaterial({color:b.color,transparent:true,opacity:.55}));
+      mesh.position.copy(start.clone().add(end).multiplyScalar(.5));
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.dir);
+      scene.add(mesh);setTimeout(()=>scene.remove(mesh),80);
+      fighters.forEach(o=>{if(o.alive&&o.team!==b.team&&o.pos.distanceTo(end)<19)applyDamage(o,3.5,b.f);});
+    }
+
+    for(let i=0;i<sp.missileJobs.length;i++){
+      const m=sp.missileJobs[i];
+      if(now>=m.at){
+        explodeAt(m.pos,3.0,150,m.team,{paintRadius:3.4,colorHex:m.color,sourceFighter:m.src||null});
+        sp.missileJobs.splice(i,1);i--;
+      }
+    }
+
+    for(let i=sp.decoys.length-1;i>=0;i--){
+      const d=sp.decoys[i];
+      if(now>d.end){sp.decoys.splice(i,1);continue;}
+      if(now>d.at){
+        explodeAt(d.pos,2.2,60,d.team,{paintRadius:2.4,colorHex:d.color,sourceFighter:null});
+        d.at=Infinity;
+      }
+    }
+
+    for(let i=sp.screens.length-1;i>=0;i--){
+      if(now>sp.screens[i].end){scene.remove(sp.screens[i].mesh);sp.screens.splice(i,1);}
+    }
+
+    fighters.forEach(f=>{
+      if(f.v60Booyah && now>=f.v60Booyah.until){
+        explodeAt(f.v60Booyah.target,5.2,220,f.team,{paintRadius:5.6,colorHex:teamColor(f),sourceFighter:f});
+        f.v60Booyah=null;f.invulnUntil=0;
+      }
+      if(f.v60InkVacUntil && now>=f.v60InkVacUntil){
+        explodeAt(f.pos.clone(),4.4,220,f.team,{paintRadius:4.8,colorHex:teamColor(f),sourceFighter:f});
+        f.v60InkVacUntil=0;f.v60InkVacCharge=0;f.invulnUntil=0;
+      }
+      if(f.v60CrabUntil && now>=f.v60CrabUntil){f.v60CrabUntil=0;f.root.scale.set(1,1,1);}
+      if(f.v60InkjetUntil && now>=f.v60InkjetUntil){
+        const home=f.v60InkjetHome?.clone();f.v60InkjetUntil=0;f.root.scale.set(1,1,1);
+        if(home)f.pos.copy(home);
+      }
+    });
+  }
+
+  /* Keep the existing special loop and append V60 effects. */
+  const updateOngoingPrev=window.updateOngoingEffects;
+  if(updateOngoingPrev){
+    window.updateOngoingEffects=function(delta){updateOngoingPrev(delta);updateSpecialV60(delta);updateSubsV60(delta);};
+  }else{
+    window.updateOngoingEffects=function(delta){updateSpecialV60(delta);updateSubsV60(delta);};
+  }
+
+  /* Damage protection / status effects. */
+  const applyDamagePrev=applyDamage;
+  applyDamage=function(target,dmg,from){
+    const now=performance.now();
+    if(target?.v60InvulnerableUntil&&now<target.v60InvulnerableUntil)return;
+    if(target?.v60KrakenUntil&&now<target.v60KrakenUntil)return;
+    if(target?.v60InkjetUntil&&now<target.v60InkjetUntil)return;
+    if(target?.v60SlowUntil&&now<target.v60SlowUntil)dmg*=1.0;
+    return applyDamagePrev(target,dmg,from);
+  };
+
+  /* Remote online shots now use the same physical weapon identity. */
+  window.__receiveOnlineShotV60=function(m){
+    const wp=weaponList[Number(m.weaponId)||0]||weaponList[0];
+    let rf=fighters.find(x=>x.id===m.id);
+    if(!rf){
+      rf=ensureRemoteFighter({id:m.id,team:m.team,weaponId:wp.id,spawn:{x:Number(m.x)||0,z:Number(m.z)||0},config:{weapon:wp.id}});
+    }
+    rf.weapon=wp;
+    const d=new THREE.Vector3(Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||1);
+    if(d.lengthSq()<.001)d.set(0,0,1);d.normalize();
+    if(wp.category==='blaster')fireBlasterV60(rf,d);
+    else if(wp.category==='slosher')fireSlosherV60(rf,d);
+    else if(wp.category==='maneuver')fireManeuverV60(rf,d);
+    else if(wp.category==='brella')fireBrellaV60(rf,d);
+    else if(wp.category==='spinner'){
+      fireSplatlingBurst(rf,1);
+    }else if(wp.category==='charger'){
+      if(wp.kind==='stringer')fireStringerShot(rf,d,.85);
+      else fireChargerShotV60(rf,d,1);
+    }else if(wp.category==='wiper'){
+      fireBladeSlashV60(rf,.85);
+    }else{
+      fireLineShot(rf,d,wp,{kind:'shooter',paintMult:1.05});
+    }
+  };
+
+  /* Fix the zip return bug and keep charge states clean on death. */
+  const killPrev=killFighter;
+  killFighter=function(f){
+    f._v60ChargeStart=0;f._v60BladeChargeStart=0;f.v60Booyah=null;f.v60Reef=null;f.v60InkjetUntil=0;f.v60CrabUntil=0;f.v60UltraStampUntil=0;f.v60KrakenUntil=0;
+    try{f.root.scale.set(1,1,1);}catch{}
+    return killPrev(f);
+  };
+
+  rebuildWeaponSelectV60();
+  setTimeout(rebuildWeaponSelectV60,0);
+  bindHeavyChargeControls();
+
+  /* Nice/communication remains separate. */
+  window.__V60_BUILD=V60_BUILD;
+})();
+</script>
+
 </body>
 </html>
