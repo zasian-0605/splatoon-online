@@ -144,6 +144,7 @@ function assignTeamsAndStart(room) {
   if (!ps.every(p => p.ready)) return;
   ps.forEach((p, i) => {
     p.team = i % 2 === 0 ? 'A' : 'B';
+    p.startedWeaponId = p.weaponId;
     const slot = Math.floor(i / 2);
     const x = ((slot % 4) - 1.5) * 3.2;
     p.spawn = p.team === 'A' ? { x, y: 0, z: -64 } : { x, y: 0, z: 64 };
@@ -239,6 +240,31 @@ const server = http.createServer(async (req, res) => {
     const b = await readBody(req).catch(() => ({})); const winner = String(b.winnerTeam || 'DRAW');
     return json(res, 200, { ok: true, profile: updateAccountResult({ accountName: s.name, team: b.team || 'A' }, winner) });
   }
+  if (req.method === 'POST' && p === '/api/feedback') {
+    try {
+      const b = await readBody(req);
+      const allowed = new Set(['バグ','ラグ','操作','マッチング','見た目','その他']);
+      const category = allowed.has(String(b.category||'')) ? String(b.category) : 'その他';
+      const text = String(b.text||'').slice(0,1000);
+      const s = getSession(req);
+      const account = s && accounts[s.name] ? s.name : null;
+      const item = {
+        at:new Date().toISOString(),
+        account,
+        category,
+        text,
+        build:String(b.build||'').slice(0,80),
+        roomId:String(b.roomId||'').slice(0,32)
+      };
+      if(!global.feedbackStore) global.feedbackStore=[];
+      global.feedbackStore.push(item);
+      if(global.feedbackStore.length>500) global.feedbackStore.splice(0,global.feedbackStore.length-500);
+      console.log('[FEEDBACK]',JSON.stringify(item));
+      return json(res, 200, { ok:true });
+    } catch {
+      return json(res,400,{ok:false,error:'フィードバックを処理できませんでした。'});
+    }
+  }
   if (p === '/') p = '/index.html';
   const file = path.join(ROOT, p.replace(/^\/+/, ''));
   if (!file.startsWith(ROOT)) return res.writeHead(403).end();
@@ -250,16 +276,59 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
+function securityStrike(player, reason) {
+  const now = Date.now();
+  if (!player.securityWindowStart || now-player.securityWindowStart>10000) {
+    player.securityWindowStart=now;
+    player.securityStrikes=0;
+  }
+  player.securityStrikes++;
+  console.warn(`[ANTI-CHEAT] ${player.id} strike=${player.securityStrikes} reason=${reason}`);
+  send(player.ws,{type:'antiCheatWarning',reason:'不正または異常な通信を検知しました。'});
+  if(player.securityStrikes>=4){
+    try{ player.ws.close(1008,'invalid client state'); }catch{}
+    return false;
+  }
+  return true;
+}
+function finiteNumber(v){ return Number.isFinite(Number(v)); }
+function saneWorldPosition(x,y,z){
+  return finiteNumber(x)&&finiteNumber(y)&&finiteNumber(z)
+    && Number(x)>=-50 && Number(x)<=50
+    && Number(z)>=-80 && Number(z)<=80
+    && Number(y)>=-0.5 && Number(y)<=8;
+}
+function messageBudget(player){
+  const now=Date.now();
+  if(!player.msgWindowStart || now-player.msgWindowStart>=1000){
+    player.msgWindowStart=now; player.msgCount=0;
+  }
+  player.msgCount++;
+  return player.msgCount<=120;
+}
+
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
   const id = `Player_${String(nextPlayerNo++).padStart(4, '0')}`;
-  const player = { id, ws, roomId: null, team: null, ready: false, weaponId: 0, config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 }, lastStateAt: 0, accountName: null, accountToken: null };
+  const player = {
+    id, ws, roomId: null, team: null, ready: false, weaponId: 0,
+    config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 },
+    lastStateAt: 0, lastStatePos: null, lastStateAlive: true,
+    accountName: null, accountToken: null,
+    msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
+    lastCalloutAt: 0
+  };
   sockets.set(ws, player);
   console.log(`[WS CONNECT] ${player.id} activeSockets=${sockets.size}`);
   send(ws, { type: 'hello', id });
   broadcastGlobalOnlineCount();
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
+    if(!m || typeof m!=='object' || typeof m.type!=='string') return;
+    if(!messageBudget(player)){
+      securityStrike(player,'message-rate');
+      return;
+    }
     if (m.type === 'bindAccount') {
       const token = String(m.token || '');
       const s = sessions.get(token);
@@ -344,10 +413,61 @@ wss.on('connection', ws => {
       }, player.id);
       return;
     }
+    if (m.type === 'callout') {
+      const now=Date.now();
+      if(!room.started) return;
+      if(now-player.lastCalloutAt<800) return;
+      const calloutType=String(m.calloutType||'');
+      if(calloutType!=='nice' && calloutType!=='cmon') return;
+      player.lastCalloutAt=now;
+      broadcast(room,{type:'callout',id:player.id,name:player.accountName||player.id,calloutType},player.id);
+      return;
+    }
     if (m.type === 'state') {
-      const now = Date.now(); if (now - player.lastStateAt < 28) return; player.lastStateAt = now;
-      player.weaponId = Number.isFinite(m.weaponId) ? m.weaponId : player.weaponId;
-      broadcast(room, { type: 'state', id: player.id, name: player.accountName || player.id, team: player.team, x: Number(m.x) || 0, y: Number(m.y) || 0, z: Number(m.z) || 0, yaw: Number(m.yaw) || 0, hp: Math.max(0, Math.min(120, Number(m.hp) || 0)), ink: Math.max(0, Math.min(100, Number(m.ink) || 0)), alive: m.alive !== false, squid: !!m.squid, moving: !!m.moving, weaponId: player.weaponId }, player.id);
+      const now = Date.now();
+      if (now - player.lastStateAt < 28) return;
+      const x=Number(m.x), y=Number(m.y), z=Number(m.z), yaw=Number(m.yaw);
+      if(!saneWorldPosition(x,y,z) || !Number.isFinite(yaw)){
+        securityStrike(player,'invalid-position');
+        return;
+      }
+      const alive=m.alive!==false;
+      const hp=Number(m.hp), ink=Number(m.ink);
+      if(!Number.isFinite(hp)||hp<0||hp>100||!Number.isFinite(ink)||ink<0||ink>100){
+        securityStrike(player,'invalid-vitals');
+        return;
+      }
+      if(player.roomId && player.team && player.startedWeaponId!==undefined){
+        const requestedWeapon=Number.isFinite(Number(m.weaponId)) ? Math.floor(Number(m.weaponId)) : player.weaponId;
+        if(requestedWeapon!==player.startedWeaponId){
+          securityStrike(player,'loadout-change-during-match');
+          return;
+        }
+      }
+      if(player.lastStatePos && player.lastStateAlive && alive){
+        const dt=Math.max(0.028,(now-player.lastStateAt)/1000);
+        const d=Math.hypot(x-player.lastStatePos.x,z-player.lastStatePos.z);
+        if(d>3.2){
+          securityStrike(player,`teleport-distance=${d.toFixed(2)} dt=${dt.toFixed(3)}`);
+          return;
+        }
+      }
+      if(player.lastStatePos && !player.lastStateAlive && alive){
+        // 復活した瞬間だけサーバー側の移動基準をリセット。
+        player.lastStatePos={x,z,y};
+      }else{
+        player.lastStatePos={x,z,y};
+      }
+      player.lastStateAlive=alive;
+      player.lastStateAt=now;
+      player.weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0,Math.min(200,Math.floor(Number(m.weaponId)))) : player.weaponId;
+      broadcast(room, {
+        type: 'state', id: player.id, name: player.accountName || player.id, team: player.team,
+        x,y,z,yaw,
+        hp: Math.max(0, Math.min(100,hp)),
+        ink: Math.max(0, Math.min(100,ink)),
+        alive, squid: !!m.squid, moving: !!m.moving, weaponId: player.weaponId
+      }, player.id);
       return;
     }
     if (m.type === 'paint') {
