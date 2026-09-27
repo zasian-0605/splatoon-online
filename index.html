@@ -1493,7 +1493,7 @@ function fireChargerShot(fighter, aimDir, frac){
   const wp = fighter.weapon;
   const frac = Math.max(0,Math.min(1,Number(frac)||0));
   const shotCost = (wp.inkCost||8) * (0.75 + 0.75*frac);
-  if(typeof consumeInk==='function' && !consumeInk(fighter,shotCost)) return false;
+  if(window.__consumeInkForGame && !window.__consumeInkForGame(fighter,shotCost)) return false;
   const damage = wp.tapDamage + (wp.fullDamage-wp.tapDamage)*frac;
   const origin = fighter.pos.clone(); origin.y += 1.2;
   const dir = aimDir.clone().normalize();
@@ -2185,6 +2185,8 @@ function startRangePhase(){
   }
   document.getElementById('respawn-overlay').style.display='none';
   document.getElementById('result-screen').style.display='none';
+  playerFighter.ink=100;
+  playerFighter.specialGauge=100;
 
   currentPhase = 1.5;
   battleActive = false;
@@ -2926,11 +2928,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function consumeInk(f, amount){
     setupFighterEconomy(f);
-    if(f.ink < amount) return false;
-    f.ink=Math.max(0,f.ink-amount);
+    const cost=Math.max(0,Number(amount)||0);
+    if(f.ink < cost) return false;
+    f.ink=Math.max(0,f.ink-cost);
     f.inkRegenBlockedUntil=performance.now()+Math.max(350, f.weapon?.inkRecoverDelay||450);
     return true;
   }
+  window.__consumeInkForGame=consumeInk;
   function regenPlayer(f,delta,isSquid){
     const gp=f.gearProfile||gearProfile(f);
     const now=performance.now();
@@ -3454,7 +3458,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   /* ---------- Stop browser context menu + pointer visual ---------- */
   document.addEventListener('contextmenu',e=>{if(currentPhase===1.5||currentPhase===2)e.preventDefault();});
-  document.addEventListener('mouseenter',()=>{if(currentPhase===2)setBattleCursor(true);});
 
   /* ---------- Weapon HUD info for spinner ---------- */
   const oldUpdateWeaponInfo=updateWeaponInfo;
@@ -4680,6 +4683,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       document.getElementById('hud').style.display='block';
       document.getElementById('alive-count').style.display='none';
       document.getElementById('range-hint').style.display='block';
+      playerFighter.ink=100;
       playerFighter.specialGauge=100;
       document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] ロビーに戻る　[O] CPU対戦(4vs4)　[P] オンライン';
       document.getElementById('instructions').innerHTML='【PC】WASD:移動 / マウス:視点＆撃つ / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ】左半分:移動 / 右半分:視点＆射撃';
