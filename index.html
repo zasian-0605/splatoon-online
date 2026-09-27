@@ -1385,8 +1385,9 @@ function buildPlayerModelGroup(cfg){
     addBox(shoe,.18,.025,.06,matPantsLight,0,.10,-.08);
     return leg;
   }
-  const lL=createLeg(); lL.position.set(-.15,.75,0); human.add(lL);
-  const lR=createLeg(); lR.position.set(.15,.75,0); human.add(lR);
+  // 体の裾と脚の上端をぴったり接続。旧値(.75)だと約0.10の隙間が生じて浮いて見える。
+  const lL=createLeg(); lL.position.set(-.15,.85,0); human.add(lL);
+  const lR=createLeg(); lR.position.set(.15,.85,0); human.add(lR);
 
   const squid = new THREE.Group();
   const segH = [ [.30,.12], [.34,.14], [.30,.16], [.22,.16], [.14,.14] ];
@@ -1985,6 +1986,7 @@ function tryThrowSub(fighter, aimDir, now){
   subsList.push({
     mesh, velocity:vel, team:fighter.team, subType:def.type, def,
     age:0, fuse:def.fuse, exploded:false, stuckAt:null, bounceCount:0,
+    colorHex:getFighterInkHex(fighter),
     facing: new THREE.Vector3(aimDir.x,0,aimDir.z).normalize()
   });
 }
@@ -2003,13 +2005,21 @@ function updateSubs(delta){
     if(s.exploded){ subsList.splice(i,1); continue; }
     s.age += delta;
 
+    // 前フレーム位置を保存。1フレームで地面を飛び越える「トンネル」を防ぐ。
+    const prevPos = s.mesh.position.clone();
+
     if(s.subType==='sensor'){
-      if(s.age===delta){ /* first tick */ }
       if(!s.stuckAt){
         s.velocity.y -= 24*delta;
         s.mesh.position.addScaledVector(s.velocity, delta);
-        const gh = getSupportHeight(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y);
-        if(s.mesh.position.y <= gh){ s.mesh.position.y = gh+0.2; s.stuckAt = now; }
+        const gh = Math.max(0, getSupportHeight(s.mesh.position.x, s.mesh.position.z, 50));
+        // 前後位置で地面を横切った場合も確実に接地。
+        const crossed = prevPos.y >= gh && s.mesh.position.y <= gh;
+        if(crossed || s.mesh.position.y <= gh + 0.04){
+          s.mesh.position.y = gh+0.20;
+          s.stuckAt = now;
+          s.velocity.set(0,0,0);
+        }
       }
       if(s.stuckAt && now - s.stuckAt > s.def.duration*1000){ scene.remove(s.mesh); subsList.splice(i,1); continue; }
       if(s.stuckAt){
@@ -2020,12 +2030,19 @@ function updateSubs(delta){
       }
       continue;
     }
+
     if(s.subType==='turret'){
       if(!s.stuckAt){
         s.velocity.y -= 24*delta;
         s.mesh.position.addScaledVector(s.velocity, delta);
-        const gh = getSupportHeight(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y);
-        if(s.mesh.position.y <= gh){ s.mesh.position.y = gh+0.25; s.stuckAt = now; s.nextPaint=0; }
+        const gh = Math.max(0, getSupportHeight(s.mesh.position.x, s.mesh.position.z, 50));
+        const crossed = prevPos.y >= gh && s.mesh.position.y <= gh;
+        if(crossed || s.mesh.position.y <= gh + 0.04){
+          s.mesh.position.y = gh+0.25;
+          s.stuckAt = now;
+          s.nextPaint=0;
+          s.velocity.set(0,0,0);
+        }
       } else {
         s.nextPaint -= delta;
         if(s.nextPaint<=0){
@@ -2042,8 +2059,9 @@ function updateSubs(delta){
     let willExplode = false;
 
     if(s.subType==='slide' && s.stuckAt){
-      // 地面を滑る
-      s.mesh.position.addScaledVector(new THREE.Vector3(s.facing.x, 0, s.facing.z), delta*8);
+      const slideDir = new THREE.Vector3(s.facing.x, 0, s.facing.z);
+      const next = s.mesh.position.clone().addScaledVector(slideDir, delta*8);
+      s.mesh.position.copy(next);
       paintGround(s.mesh.position.x, s.mesh.position.z, 0.8, s.team==='A'?teamAHex:teamBHex);
     } else if(s.subType==='seek' && s.stuckAt){
       let nearest=null,nd=Infinity;
@@ -2075,41 +2093,72 @@ function updateSubs(delta){
       }
     }
 
-    const gh = getSupportHeight(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y);
-    const wall = getBlockingWall(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y);
+    // ここが地下落下対策の本体。
+    // getSupportHeight は現在Yに依存していたため、地下へ抜けると支え面を見失うことがあった。
+    // 50m上空から下を探して「そのXY/Z地点の最高の足場」を取り、前フレームとの交差も見る。
+    const gh = Math.max(0, getSupportHeight(s.mesh.position.x, s.mesh.position.z, 50));
+    const crossedGround = prevPos.y >= gh && s.mesh.position.y <= gh;
+    const belowGround = s.mesh.position.y <= gh + 0.04;
+    const wall = getBlockingWall(s.mesh.position.x, s.mesh.position.z, Math.max(0.5, s.mesh.position.y));
 
-    // 接地時は必ず地面の少し上へ戻す。タイマー/キューバン系も地下へ落ちない。
-    if(!s.stuckAt && s.mesh.position.y<=gh){
+    if(!s.stuckAt && (crossedGround || belowGround)){
+      s.mesh.position.y = gh + 0.18;
       if(s.subType==='instant'){
-        s.mesh.position.y=gh+0.18;
-        willExplode=true;
+        willExplode = true;
       }else if(s.subType==='stick'||s.subType==='timed'||s.subType==='slide'||s.subType==='seek'){
-        s.mesh.position.y=gh+0.18;
-        s.stuckAt=now;
+        s.stuckAt = now;
         s.velocity.set(0,0,0);
+      }else if(s.subType==='bounce'){
+        if(s.velocity.y < 0){
+          s.velocity.y *= -0.55;
+          s.velocity.x*=0.7;
+          s.velocity.z*=0.7;
+          s.bounceCount++;
+          s.mesh.position.y = gh+0.08;
+          if(s.bounceCount>=s.def.bounces) willExplode=true;
+        }
+      }else if(s.subType==='homing'){
+        // ホーミング系も地面を突き抜けず、その場で少し浮かせる。
+        s.velocity.y = Math.abs(s.velocity.y)*0.35;
+        s.mesh.position.y = gh+0.18;
       }
     }
 
-    if(s.subType==='instant' && (wall || s.mesh.position.y<=gh)){ willExplode = true; }
+    if(s.subType==='instant' && wall) willExplode = true;
 
-    if(s.subType==='stick' && !s.stuckAt && (wall || s.mesh.position.y<=gh)){
-      s.mesh.position.y=gh+0.18;
-      s.stuckAt = now; s.velocity.set(0,0,0);
+    if(s.subType==='stick' && !s.stuckAt && wall){
+      s.mesh.position.y = Math.max(s.mesh.position.y, gh+0.18);
+      s.stuckAt = now;
+      s.velocity.set(0,0,0);
     }
-    if(s.subType==='slide' && !s.stuckAt && s.mesh.position.y<=gh){
-      s.mesh.position.y = gh+0.15; s.stuckAt = now; s.velocity.set(0,0,0);
+
+    if(s.subType==='slide' && !s.stuckAt && belowGround){
+      s.mesh.position.y = gh + 0.15;
+      s.stuckAt = now;
+      s.velocity.set(0,0,0);
     }
-    if(s.subType==='seek' && !s.stuckAt && s.mesh.position.y<=gh){
-      s.mesh.position.y = gh+0.2; s.stuckAt = now; s.velocity.set(0,0,0);
+
+    if(s.subType==='seek' && !s.stuckAt && belowGround){
+      s.mesh.position.y = gh + 0.20;
+      s.stuckAt = now;
+      s.velocity.set(0,0,0);
     }
-    if(s.subType==='bounce' && (wall || s.mesh.position.y<=gh) && s.velocity.y<0){
-      s.velocity.y *= -0.55; s.velocity.x*=0.7; s.velocity.z*=0.7;
+
+    if(s.subType==='bounce' && wall && s.velocity.y < 0){
+      s.velocity.y *= -0.55;
+      s.velocity.x*=0.7;
+      s.velocity.z*=0.7;
       s.bounceCount++;
-      if(s.mesh.position.y<=gh) s.mesh.position.y = gh+0.05;
       if(s.bounceCount>=s.def.bounces) willExplode = true;
     }
+
     if(wall && (s.subType==='timed'||s.subType==='homing')){
       willExplode = true;
+    }
+
+    // 最終安全弁：何らかの理由で負のYまで落ちたら必ず地面上へ戻す。
+    if(s.mesh.position.y < -0.5){
+      s.mesh.position.y = gh + 0.18;
     }
 
     const elapsedFuse = s.stuckAt ? (now-s.stuckAt)/1000 : s.age;
@@ -2117,7 +2166,6 @@ function updateSubs(delta){
 
     if(willExplode){
       if(s.subType==='bounce'){
-        // 分裂して小爆発を複数
         explodeAt(s.mesh.position.clone(), s.def.radius, s.def.damage, s.team, {colorHex:s.colorHex});
         for(let e=0;e<2;e++){
           const off = new THREE.Vector3((Math.random()-0.5)*3,0,(Math.random()-0.5)*3);
