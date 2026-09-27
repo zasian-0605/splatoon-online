@@ -2919,7 +2919,11 @@ function doPlayerSubThrow(){
   if(!playerFighter || !playerFighter.alive) return;
   const aimDir = new THREE.Vector3();
   camera.getWorldDirection(aimDir);
-  tryThrowSub(playerFighter, aimDir, performance.now());
+  if(playerFighter.weapon?.sub==='fizzyBomb') return;
+  try{
+    if(typeof window.tryThrowSub==='function') window.tryThrowSub(playerFighter, aimDir, performance.now());
+    else tryThrowSub(playerFighter, aimDir, performance.now());
+  }catch(err){ console.warn('[SUB THROW]',err); }
 }
 
 let toastTimeout=null;
@@ -6794,6 +6798,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   function sendCallout(type){
     if(currentPhase!==1.5 && currentPhase!==2) return;
+    if(type==='nice' && window.__chargeBooyahFromNice?.()) return;
     if(type==='nice' && window.tryChargeOrbFromNice?.()) return;
     const label=type==='nice'?'ナイス!':'カモン!';
     showOnlineCallout(label,type==='nice'?'nice':'cmon','あなた');
@@ -7786,7 +7791,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       f.v60Trizooka={shots:3,until:now+6000};
       addRing(q,color,2.8,900);
     }else if(name==='ナイスダマ'){
-      f.v60Booyah={start:now,until:now+2600,target:q.clone()};
+      f.v60Booyah={start:now,until:now+2600,target:q.clone(),charge:0};
       f.invulnUntil=Math.max(f.invulnUntil||0,now+2200);
       addRing(q,color,4.5,2400);
     }else if(name==='カニタンク'){
@@ -7799,7 +7804,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       f.v60InkVacUntil=now+6000;f.v60InkVacCharge=0;f.invulnUntil=Math.max(f.invulnUntil||0,now+5800);
       addRing(f.pos,color,2.2,1200);
     }else if(name==='アメフラシ'){
-      const cloud={pos:q.clone(),team:f.team,color,end:now+8000,last:0};sp.storms.push(cloud);
+      const dir=new THREE.Vector3().subVectors(q,f.pos);dir.y=0;
+      if(dir.lengthSq()<.01)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      dir.normalize();
+      const cloud={pos:q.clone(),team:f.team,color,end:now+8000,last:0,dir};sp.storms.push(cloud);
       addRing(q,color,9,1200);
     }else if(name==='ホップソナー'){
       sp.waves.push({pos:q.clone(),team:f.team,color,start:now,next:now+1100,wave:0,end:now+7000});
@@ -7829,11 +7837,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         sp.beams.push({f,team:f.team,color,dir:new THREE.Vector3(Math.sin(ang),0,Math.cos(ang)),end:now+3000,last:0});
       }
     }else if(name==='マルチミサイル'){
-      for(let i=0;i<4;i++){
-        let targetEnemy=null,nd=Infinity;
-        fighters.forEach(o=>{if(o.alive&&o.team!==f.team){const d=o.pos.distanceTo(q);if(d<nd){nd=d;targetEnemy=o;}}});
-        if(targetEnemy)sp.missileJobs.push({pos:targetEnemy.pos.clone(),team:f.team,color,at:now+700+i*150,src:f});
-      }
+      const targets=fighters.filter(o=>o.alive&&o.team!==f.team)
+        .sort((a,b)=>a.pos.distanceTo(q)-b.pos.distanceTo(q))
+        .slice(0,4);
+      targets.forEach((targetEnemy,i)=>{
+        sp.missileJobs.push({pos:targetEnemy.pos.clone(),team:f.team,color,at:now+700+i*180,src:f,targetId:targetEnemy.id});
+      });
       addRing(q,color,4,800);
     }else if(name==='トリプルトルネード'){
       for(let i=-1;i<=1;i++){
@@ -8145,6 +8154,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     for(let i=sp.storms.length-1;i>=0;i--){
       const s=sp.storms[i];
       if(now>s.end){sp.storms.splice(i,1);continue;}
+      if(s.dir) s.pos.addScaledVector(s.dir,1.25*delta);
       if(s.last<=now){
         s.last=now+220;
         paintGround(s.pos.x,s.pos.z,5.0,s.color,{noNetwork:false});
@@ -8244,7 +8254,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     fighters.forEach(f=>{
       if(f.v60Booyah && now>=f.v60Booyah.until){
-        explodeAt(f.v60Booyah.target,5.2,220,f.team,{paintRadius:5.6,colorHex:teamColor(f),sourceFighter:f});
+        const charge=Math.max(0,Math.min(1,f.v60Booyah.charge||0));
+        const radius=5.2+charge*1.8;
+        const damage=220+Math.round(charge*100);
+        explodeAt(f.v60Booyah.target,radius,damage,f.team,{paintRadius:radius+.4,colorHex:teamColor(f),sourceFighter:f});
         f.v60Booyah=null;f.invulnUntil=0;
       }
       if(f.v60InkVacUntil && now>=f.v60InkVacUntil){
@@ -8361,6 +8374,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   /* Nice/communication remains separate. */
   window.__V60_BUILD=V60_BUILD;
+  window.__chargeBooyahFromNice=function(){
+    const f=window.playerFighter||null;
+    if(!f||!f.v60Booyah)return false;
+    const now=performance.now();
+    if(now>=f.v60Booyah.until)return false;
+    f.v60Booyah.charge=Math.min(1,(f.v60Booyah.charge||0)+.20);
+    f.v60Booyah.until=Math.max(now+350,f.v60Booyah.until-180);
+    if(typeof window.showToast==='function')window.showToast('ナイス！ ナイスダマが強化された');
+    return true;
+  };
 })();
 </script>
 
@@ -8469,140 +8492,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 </script>
 
 
-<script>
-/* V64: closer-to-Splatoon battle feel
-   - real sub input path
-   - moving Ink Storm
-   - unique Tenta Missile targets
-   - Booyah Bomb can be accelerated by Nice
-*/
-(function(){
-  'use strict';
 
-  /* The old control function is replaced so right-click/Q always use V60 subs. */
-  doPlayerSubThrow=function(){
-    const f=playerFighter;
-    if(!f||!f.alive)return;
-    const aim=new THREE.Vector3();
-    camera.getWorldDirection(aim);
-    aim.normalize();
-
-    // Fizzy Bomb is handled by the dedicated charge handler.
-    if(f.weapon?.sub==='fizzyBomb') return;
-    tryThrowSubV60(f,aim,performance.now());
-  };
-
-  /* Give Booyah Bomb an actual charge interaction with Nice.
-     Holding the special itself still auto-releases after the safety timer. */
-  window.__chargeBooyahFromNice=function(){
-    const f=playerFighter;
-    if(!f?.v60Booyah)return false;
-    const now=performance.now();
-    if(now>=f.v60Booyah.until)return false;
-    f.v60Booyah.charge=Math.min(1,(f.v60Booyah.charge||0)+.20);
-    f.v60Booyah.until=Math.max(now+350,f.v60Booyah.until-180);
-    showToast('ナイス！ ダマが強化された');
-    return true;
-  };
-
-  /* Make the already-existing Booyah state carry charge. */
-  const oldActivateBooyah=activateSpecialV60;
-  /* Do not replace the full dispatcher; patch its state after activation by observing it. */
-  const originalSpecialState=activateSpecialV60;
-
-  /* Moving Ink Storm: project the cloud forward from the throw point. */
-  const oldStormUpdate=updateSpecialV60;
-  updateSpecialV60=function(delta){
-    const before=performance.now();
-    oldStormUpdate(delta);
-    const now=performance.now();
-    for(const s of sp.storms){
-      if(s.dir && now<s.end) s.pos.addScaledVector(s.dir,1.25*delta);
-    }
-  };
-
-  /* Unique Tenta Missile targets instead of all four missiles stacking on one player. */
-  const oldSpecialActivate=activateSpecialV60;
-  activateSpecialV60=function(f,name,target,remote){
-    const now=performance.now();
-    if(name==='ナイスダマ'){
-      const ok=oldSpecialActivate(f,name,target,remote);
-      if(ok&&f.v60Booyah){
-        f.v60Booyah.charge=0;
-      }
-      return ok;
-    }
-
-    if(name==='アメフラシ'){
-      const q=target||f.pos.clone().add(new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y)).multiplyScalar(18));
-      const dir=new THREE.Vector3().subVectors(q,f.pos);dir.y=0;
-      if(dir.lengthSq()<.01)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
-      dir.normalize();
-      const ok=oldSpecialActivate(f,name,target,remote);
-      if(ok){
-        const latest=sp.storms[sp.storms.length-1];
-        if(latest){latest.dir=dir;latest.speed=1.25;}
-      }
-      return ok;
-    }
-
-    if(name==='マルチミサイル'){
-      const q=target||f.pos;
-      const enemies=fighters.filter(o=>o.alive&&o.team!==f.team)
-        .sort((a,b)=>a.pos.distanceTo(q)-b.pos.distanceTo(q));
-      const ok=oldSpecialActivate(f,name,target,remote);
-      if(!ok)return false;
-      // Remove the just-created missile jobs for this source and recreate unique target locks.
-      for(let i=sp.missileJobs.length-1;i>=0;i--){
-        if(sp.missileJobs[i].src===f && sp.missileJobs[i].at>=now) sp.missileJobs.splice(i,1);
-      }
-      const targets=enemies.slice(0,Math.min(4,enemies.length));
-      targets.forEach((enemy,i)=>{
-        sp.missileJobs.push({
-          pos:enemy.pos.clone(),team:f.team,color:teamColor(f),
-          at:now+700+i*150,src:f,targetId:enemy.id
-        });
-      });
-      return true;
-    }
-    return oldSpecialActivate(f,name,target,remote);
-  };
-
-  /* Let F/Nice accelerate Booyah on desktop and mobile. */
-  const chargeNice=function(e){
-    if((currentPhase!==1.5&&currentPhase!==2)||e.repeat)return;
-    if(e.code==='KeyF'){
-      window.__chargeBooyahFromNice?.();
-    }
-  };
-  window.addEventListener('keydown',chargeNice,true);
-  document.getElementById('btn-nice')?.addEventListener('click',()=>window.__chargeBooyahFromNice?.());
-
-  /* Charged Booyah gets a larger radius/damage, while the normal case stays moderate. */
-  const oldUpdateSpecial=updateSpecialV60;
-  /* oldUpdateSpecial above is already wrapped once; wrap the final function for the blast itself. */
-  updateSpecialV60=function(delta){
-    const now=performance.now();
-    oldStormUpdate(delta);
-    for(const f of fighters){
-      if(f.v60Booyah && now>=f.v60Booyah.until){
-        const charge=Math.max(0,Math.min(1,f.v60Booyah.charge||0));
-        // The previous wrapper may already have removed the state, so only execute when active.
-        const radius=5.2+charge*1.8;
-        const damage=220+Math.round(charge*100);
-        explodeAt(f.v60Booyah.target,radius,damage,f.team,{
-          paintRadius:radius+.4,colorHex:teamColor(f),sourceFighter:f
-        });
-        f.v60Booyah=null;
-        f.invulnUntil=0;
-      }
-    }
-  };
-
-  /* Re-run the common animation loop after replacing updateSpecialV60. */
-  window.__V64_BUILD='V64-SPLATOON-LIKE-GAMEPLAY';
-})();
-</script>
 
 </body>
 </html>
