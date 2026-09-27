@@ -385,13 +385,15 @@ wss.on('connection', ws => {
       const dirLen = Math.hypot(nums[3], nums[4], nums[5]);
       if (dirLen < 0.001 || dirLen > 2.0) return;
       const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1, Number(m.charge))) : null;
+      const mode = typeof m.mode === 'string' ? String(m.mode).slice(0, 32) : null;
       broadcast(room, {
         type: 'shot',
         id: player.id,
         team: player.team,
         x: nums[0], y: nums[1], z: nums[2],
         dx: nums[3] / dirLen, dy: nums[4] / dirLen, dz: nums[5] / dirLen,
-        weaponId
+        weaponId, charge, mode
       }, player.id);
       return;
     }
