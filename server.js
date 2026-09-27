@@ -433,6 +433,32 @@ wss.on('connection', ws => {
       broadcast(room,{type:'special',specialType:'chargeOrb',phase:'throw',id:player.id,team:player.team,x:nums[0],y:nums[1],z:nums[2],charge:Math.max(0,Math.min(100,nums[3]))},player.id);
       return;
     }
+    if (m.type === 'special') {
+      if (!room.started || !player.team) return;
+      const specialName=String(m.specialName || '');
+      const legacyOrb=String(m.specialType || '')==='chargeOrb';
+      const allowed=[
+        'トリガーキャノン','ドームシールド','グラップラー','センチネルミサイル','ペイントクラウド',
+        'ギガスタンプ','オムニレーザー','チャージオーブ','パルスノード','ヴァキュームコア',
+        'ブーストステーション','ラッシュカート','トライアークトルネード','スカイパック',
+        'アサルトシェル','スワームビーコン','コロッサス','トリプルクラッシュ','スモークスクリーン'
+      ];
+      const name=legacyOrb?'チャージオーブ':specialName;
+      if(!allowed.includes(name)) return;
+      const now=Date.now();
+      if(now-player.lastSpecialAt<500) return;
+      const x=Number(m.x),y=Number(m.y),z=Number(m.z);
+      if(!saneWorldPosition(x,y,z)) return;
+      let extra=(m.extra && typeof m.extra==='object')?m.extra:{};
+      const compact={};
+      for(const k of ['angle','targetId']) if(extra[k]!==undefined) compact[k]=String(extra[k]).slice(0,40);
+      player.lastSpecialAt=now;
+      broadcast(room,{
+        type:'special', id:player.id, team:player.team,
+        specialName:name, x,y,z, extra:compact
+      },player.id);
+      return;
+    }
     if (m.type === 'callout') {
       const now=Date.now();
       if(!room.started) return;
