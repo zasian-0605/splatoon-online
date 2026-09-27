@@ -82,10 +82,21 @@ function broadcast(room, obj, exceptId = null) {
   for (const p of room.players.values()) if (p.id !== exceptId) send(p.ws, obj);
 }
 function waitingRoomFor() {
-  for (const room of rooms.values()) if (!room.started && room.players.size < 8) return room;
+  // まず「人がいる待機部屋」を探す。同じ部屋へ優先的に合流させる。
+  for (const room of rooms.values()) {
+    if (!room.started && room.players.size > 0 && room.players.size < 8) return room;
+  }
+
+  // 人がいる部屋がなければ、既存の空部屋を再利用する。
+  for (const room of rooms.values()) {
+    if (!room.started && room.players.size === 0) return room;
+  }
+
+  // 待機部屋自体がなければ新しく作る。
   const id = `ROOM-${String(nextRoomNo++).padStart(3, '0')}`;
   const room = { id, players: new Map(), started: false, resultReported: false, startsAt: 0, timer: 180 };
-  rooms.set(id, room); return room;
+  rooms.set(id, room);
+  return room;
 }
 function assignTeamsAndStart(room) {
   if (room.started || room.players.size < 2) return;
