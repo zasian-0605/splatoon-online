@@ -4399,7 +4399,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       fighters=[playerFighter];
     }
     lobby.player=playerFighter;
-    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;lobby.player.squid=false;
+    lobby.player.pos.set(0,0,-18);lobby.player.root.visible=true;lobby.player.alive=true;lobby.player.hp=lobby.player.maxHp;lobby.player.squid_mode=false;
     lobby.player.human.visible=true;lobby.player.squid.visible=false;
     return lobby.player;
   }
@@ -4554,7 +4554,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     lobby.player.human.visible=true;
     lobby.player.squid.visible=false;
     lobby.player.squid_mode=false;
-    lobby.player.squid=false;
     lobby.player.alive=true;
     lobby.player.hp=lobby.player.maxHp;
     document.getElementById('customize-screen').style.display='none';
@@ -4707,7 +4706,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         playerFighter.alive=true;
         playerFighter.root.visible=true;
         playerFighter.squid_mode=false;
-        playerFighter.squid=false;
         if(playerFighter.human) playerFighter.human.visible=true;
         if(playerFighter.squid) playerFighter.squid.visible=false;
         fighters=[playerFighter];
