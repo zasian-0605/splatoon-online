@@ -400,7 +400,11 @@ wss.on('connection', ws => {
       const nums = ['x','y','z','vx','vy','vz'].map(k => Number(m[k]));
       if (nums.some(v => !Number.isFinite(v))) return;
       const subType = String(m.subType || '');
-      const allowed = ['timed','stick','instant','slide','bounce','seek','homing','sensor','turret'];
+      const allowed = [
+        'timed','stick','instant','slide','bounce','seek','homing','sensor','turret',
+        'splatBomb','suctionBomb','burstBomb','curlingBomb','fizzyBomb','autobomb',
+        'inkMine','pointSensor','splashWall','sprinkler','torpedo','angleShooter','toxicMist'
+      ];
       if (!allowed.includes(subType)) return;
       const speed = Math.hypot(nums[3], nums[4], nums[5]);
       if (speed < 0.01 || speed > 40) return;
@@ -445,7 +449,10 @@ wss.on('connection', ws => {
         'トリガーキャノン','ドームシールド','グラップラー','センチネルミサイル','ペイントクラウド',
         'ギガスタンプ','オムニレーザー','チャージオーブ','パルスノード','ヴァキュームコア',
         'ブーストステーション','ラッシュカート','トライアークトルネード','スカイパック',
-        'アサルトシェル','スワームビーコン','コロッサス','トリプルクラッシュ','スモークスクリーン'
+        'アサルトシェル','スワームビーコン','コロッサス','トリプルクラッシュ','スモークスクリーン',
+        'ウルトラショット','ナイスダマ','カニタンク','ジェットパック','キューインキ','アメフラシ',
+        'ホップソナー','グレートバリア','サメライド','ウルトラハンコ','テイオウイカ','エナジースタンド',
+        'メガホンレーザー5.1ch','マルチミサイル','デコイチラシ','スミナガシート','ウルトラチャクチ','ショクワンダー'
       ];
       const name=legacyOrb?'チャージオーブ':specialName;
       if(!allowed.includes(name)) return;
@@ -525,7 +532,9 @@ wss.on('connection', ws => {
       if (!room.started || !player.team) return;
       const x = Number(m.x), z = Number(m.z), radius = Number(m.radius); if (![x,z,radius].every(Number.isFinite) || radius < 0.2 || radius > 8) return;
       const colorHex = Number.isFinite(Number(player.config?.inkColorHex)) ? Number(player.config.inkColorHex) : (player.team === 'A' ? 0xe3ff00 : 0xff2255);
-      broadcast(room, { type:'paint', id:player.id, team:player.team, x,z,radius,colorHex,mult:1 }, player.id); return;
+      const x2=Number(m.x2), z2=Number(m.z2);
+      const segment=Number.isFinite(x2)&&Number.isFinite(z2) ? {x2,z2} : {};
+      broadcast(room, { type:'paint', id:player.id, team:player.team, x,z,radius,colorHex,mult:1,...segment }, player.id); return;
     }
     if (m.type === 'matchResult' && !room.resultReported) {
       room.resultReported = true; const winnerTeam = ['A','B','DRAW'].includes(m.winnerTeam) ? m.winnerTeam : 'DRAW';
