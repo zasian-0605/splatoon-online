@@ -4880,7 +4880,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         ? window.__forcePractice()
         : (typeof startRangePhase==='function' ? (startRangePhase(), currentPhase===1.5) : false);
       if(started){
-        setTimeout(()=>{ try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE FORCE PANEL]',err); } },120);
+        setTimeout(()=>{
+          try{ window.__V10?.releaseLock?.(); }catch(e){}
+          try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE FORCE PANEL]',err); }
+        },120);
         return true;
       }
     }catch(err){ console.error('[ONLINE FORCE RANGE]',err); }
