@@ -3261,7 +3261,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function openOnlinePanel(){
     document.getElementById('online-panel').style.display='flex';
-    setOnlineCount(0,'Renderへ接続しています');
+    setOnlineCount(1,'自分が参加しました。対戦相手を探しています');
     setOnlineConnecting('オンライン接続中');
     const serverInput=document.getElementById('online-server-url');
     const savedServer=localStorage.getItem('splatoonOnlineServer')||'';
@@ -3280,7 +3280,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       onlineSocket=new WebSocket(url);
       onlineSocket.onopen=()=>{
         setOnlineConnecting('Render接続OK / ルームを検索中');
-        setOnlineCount(0,'Renderの部屋を探しています');
+        setOnlineCount(1,'自分が参加中。対戦相手を探しています');
 
         if(token){
           onlineSocket.send(JSON.stringify({type:'bindAccount',token}));
@@ -5291,7 +5291,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     try{
       openOnlinePanel();
       setOnlineConnecting('オンライン接続中');
-      setOnlineCount(0,'対戦相手を探しています');
+      setOnlineCount(1,'自分が参加中。対戦相手を探しています');
       return true;
     }catch(err){
       console.error('[ONLINE MATCHMAKING]',err);
