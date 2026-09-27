@@ -3731,6 +3731,21 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
   document.getElementById('select-weapon')?.addEventListener('change',()=>setTimeout(updateWeaponInfo,0));
 
+  /* ---------- Expose online API to later patches + inline/browser handlers ---------- */
+  window.openOnlinePanel = openOnlinePanel;
+  window.setOnlineConnecting = setOnlineConnecting;
+  window.setOnlineCount = setOnlineCount;
+  window.setOnlineStatus = setOnlineStatus;
+  window.closeOnlinePanel = closeOnlinePanel;
+  window.hideOnlinePanel = hideOnlinePanel;
+  window.startOnlineBattle = startOnlineBattle;
+  window.ensureRemoteFighter = ensureRemoteFighter;
+  window.applyRemoteState = applyRemoteState;
+  window.sendOnlineState = sendOnlineState;
+  window.reportOnlineResult = reportOnlineResult;
+  window.renderOnlineRoom = renderOnlineRoom;
+  window.showOnlineProfile = showOnlineProfile;
+
   /* ---------- HUD gear names ---------- */
   const oldEnsureHud=window.ensureHud;
   if(typeof oldEnsureHud==='function'){
