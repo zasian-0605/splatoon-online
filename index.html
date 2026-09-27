@@ -1250,7 +1250,7 @@ function buildStage(){
   ];
   const wallColors=[0x596775,0x48596c,0x647386];
   walls.forEach((w,i)=>{
-    addBlock(w.x,0,w.z,w.w,w.h,w.d,wallColors[i%wallColors.length],{climbable:false});
+    addBlock(w.x,0,w.z,w.w,w.h,w.d,wallColors[i%wallColors.length],{climbable:true});
   });
 
   // Simple AI navigation points on the ground.
@@ -2159,7 +2159,7 @@ function startRangePhase(){
   document.getElementById('kill-feed').innerHTML='';
   document.getElementById('special-ready').style.display='none';
   document.getElementById('death-location-marker').style.display='none';
-  document.getElementById('hud').style.display='none';
+  document.getElementById('hud').style.display='block';
   document.getElementById('alive-count').style.display='none';
   document.getElementById('range-hint').style.display='block';
   document.getElementById('range-hint').innerHTML =
@@ -2213,6 +2213,7 @@ function startBattleFromRange(){
     fighters.push(createFighter({id:'teamB_'+i, isPlayer:false, team:'B', x:sx, z:spawnPointB.z, cfg}));
   }
   battleTimer = 180;
+  window.__battleDeadline = Date.now() + 181000;
   battleActive = true;
   currentPhase = 2;
   document.getElementById('hud').style.display='block';
@@ -2227,6 +2228,7 @@ function startBattleFromRange(){
 
 function endBattle(){
   battleActive = false;
+  window.__battleDeadline = 0;
   currentPhase = 3;
   computeTurf();
   const winA = turfPct.a >= turfPct.b;
@@ -2400,7 +2402,7 @@ function tryMoveWithCollision(f, vel, delta, isSquid){
   const nz = clamped.z;
   const wall = getBlockingWall(nx, nz, f.pos.y);
   if(wall){
-    const isMine = wall.paintTeam===f.team && wall.paintLevel>=CLIMB_THRESHOLD && wall.climbable;
+    const isMine = wall.paintTeam===f.team && wall.paintLevel>=20 && wall.climbable;
     if(isSquid && isMine && (vel.x!==0||vel.z!==0)){
       // Move vertically while hugging the wall; stop at the top.
       const climbSpeed=8.5;
@@ -2646,6 +2648,9 @@ function animate3D(token){
     }
     battleTimer -= delta;
     if(battleTimer<0) battleTimer=0;
+    if(window.__battleDeadline && Date.now()>=window.__battleDeadline){
+      battleTimer=0;
+    }
     const mm = Math.floor(battleTimer/60), ss = Math.floor(battleTimer%60);
     document.getElementById('timer').textContent = mm+':'+String(ss).padStart(2,'0');
     const aliveA = fighters.filter(f=>f.team==='A'&&f.alive).length;
@@ -2860,7 +2865,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   /* ---------- Fighter defaults + tank ---------- */
   function setupFighterEconomy(f){
-    if(f.ink==null) f.ink=100;
+    if(!Number.isFinite(f.ink)) f.ink=100;
+    f.ink=Math.max(0,Math.min(100,f.ink));
     f.maxInk=100;
     if(f.inkRegenBlockedUntil==null) f.inkRegenBlockedUntil=0;
     if(f.lastPaintAction==null) f.lastPaintAction=0;
@@ -3279,7 +3285,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const me=playerFighter;me.team=m.team;me.id=onlinePlayerId;me.cfg.color=playerConfig.color;
     me.root.position.copy(m.spawn|| (m.team==='A'?spawnPointA:spawnPointB));me.pos=me.root.position;me.hp=me.maxHp;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
     teamAHex=inkColorPalette[playerConfig.color]; teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
-    battleTimer=180; battleActive=true; currentPhase=2;
+    battleTimer=180; window.__battleDeadline=Date.now()+181000; battleActive=true; currentPhase=2;
     document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block';document.getElementById('range-hint').style.display='none';document.getElementById('kill-feed').innerHTML='';
     (m.players||[]).forEach(p=>{if(p.id!==onlinePlayerId)ensureRemoteFighter(p);});
   }
@@ -3443,174 +3449,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
 </script>
 
-<script>
-/* =====================================================================
-   FINAL LOCKDOWN v8
-   - Shift always becomes squid, anywhere.
-   - Squid movement NEVER consumes ink.
-   - Any accidental consumeInk() call while squid does not reduce the tank.
-   - Human form slowly regenerates ink; squid regenerates faster.
-   - Cursor is forcibly hidden during gameplay.
-   ===================================================================== */
-(function(){
-  const __v8ConsumeInk = consumeInk;
-  consumeInk = function(f, amount){
-    if(f && f.squid_mode) return true;
-    return __v8ConsumeInk(f, amount);
-  };
 
-  function v8Regen(f, delta, isSquid){
-    if(!f) return;
-    setupFighterEconomy(f);
-    const gp = f.gearProfile || gearProfile(f);
-    const now = performance.now();
-    if(now < (f.inkRegenBlockedUntil || 0)) return;
-
-    const ownInk = onFighterInk(f);
-    const rate = isSquid ? (ownInk ? 34 : 8) : 3.2;
-    f.ink = Math.min(100, f.ink + rate * delta * (gp.inkRegen || 1));
-
-    if(isSquid && ownInk && f.hp < f.maxHp){
-      f.hp = Math.min(f.maxHp, f.hp + 10 * delta * (gp.inkRegen || 1));
-    }
-  }
-  regenPlayer = v8Regen;
-
-  updatePlayerMovement = function(delta){
-    const f = playerFighter;
-    if(!f || !f.alive) return;
-    setupFighterEconomy(f);
-
-    const now = performance.now();
-    const isSquid = !!keys.shift;
-    f.squid_mode = isSquid;
-
-    const ownInk = onFighterInk(f);
-    v8Regen(f, delta, isSquid);
-
-    const gp = f.gearProfile || gearProfile(f);
-    const isJetpack = f.jetpackUntil && now < f.jetpackUntil;
-
-    let speedMult = isSquid ? (ownInk ? 1.85 : 0.70) : 1.0;
-    if(!isSquid && isShooting && f.weapon.category !== "maneuver") speedMult *= 0.62;
-    if(f.weapon.category === "maneuver" && isShooting) speedMult *= 1.12;
-    if(f.weapon.category === "roller" && isShooting) speedMult *= 1.03;
-    speedMult *= gp.move;
-    if(isSquid) speedMult *= gp.swim;
-    if(now < f.speedBoostUntil) speedMult *= 1.5;
-    if(isJetpack) speedMult = 1;
-
-    const moveDir = new THREE.Vector3();
-    if(keys.w) moveDir.z -= 1;
-    if(keys.s) moveDir.z += 1;
-    if(keys.a) moveDir.x -= 1;
-    if(keys.d) moveDir.x += 1;
-
-    let moving = false;
-    if(moveDir.lengthSq() > 0){
-      moveDir.normalize().applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
-      playerVelocity.x = moveDir.x * 15 * speedMult;
-      playerVelocity.z = moveDir.z * 15 * speedMult;
-      moving = true;
-      if(!isSquid && !isShooting){
-        f.human.rotation.y = Math.atan2(playerVelocity.x, playerVelocity.z);
-      }
-    }else{
-      playerVelocity.x *= .78;
-      playerVelocity.z *= .78;
-    }
-    f._moving = moving;
-
-    // A squid cannot shoot/charge, and this branch makes movement completely free.
-    if(!isSquid){
-      f.human.rotation.y = yaw + Math.PI;
-      if(f.weapon.category === "roller" && isShooting){
-        doRollerAction(f, now, moving);
-      }else if(f.weapon.category === "wiper" && isShooting){
-        if(!f.wiperChargeStart) f.wiperChargeStart = now;
-        const frac = Math.min(1, (now-f.wiperChargeStart)/f.weapon.chargeTime);
-        const gauge = document.getElementById('charge-gauge');
-        gauge.style.display = 'block';
-        gauge.style.setProperty('--pct', Math.round(frac*100));
-        if(frac >= 1){
-          doWiperSlash(f, 1);
-          f.wiperChargeStart = now;
-        }
-      }else if(f.weapon.category === "charger"){
-        const gauge = document.getElementById('charge-gauge');
-        if(f.isCharging){
-          const frac = Math.min(1, (now-f.chargeStart)/f.weapon.chargeTime);
-          gauge.style.display = 'block';
-          gauge.style.setProperty('--pct', Math.round(frac*100));
-        }
-      }else if(isShooting){
-        const d = new THREE.Vector3();
-        camera.getWorldDirection(d);
-        tryShoot(f, d, now);
-      }
-    }else{
-      f.wiperChargeStart = 0;
-      f.isCharging = false;
-      f.spinnerCharging = false;
-      f.spinnerFiring = false;
-      document.getElementById('charge-gauge').style.display = 'none';
-    }
-
-    const climbing = tryMoveWithCollision(f, playerVelocity, delta, isSquid);
-
-    if(isJetpack){
-      playerVelocity.y = 0;
-      f.pos.y = Math.max(f.pos.y, 3.2);
-    }else{
-      if(keys.space && canJump && !climbing){
-        playerVelocity.y = 10;
-        canJump = false;
-        sfx("jump");
-      }
-      if(!climbing) playerVelocity.y -= 30*delta;
-      else playerVelocity.y = 4.5;
-      f.pos.y += playerVelocity.y*delta;
-    }
-
-    const floorY = getSupportHeight(f.pos.x, f.pos.z, f.pos.y);
-    const restY = (isSquid && ownInk) ? floorY-0.35 : floorY;
-    if(!isJetpack && f.pos.y <= restY){
-      f.pos.y = restY;
-      playerVelocity.y = 0;
-      canJump = true;
-    }
-
-    updateFighterAnimation(f, moving, isSquid);
-    f.root.rotation.y = isSquid ? yaw : f.human.rotation.y;
-  };
-
-  function v8SetBattleCursor(hidden){
-    const root = document.documentElement;
-    root.classList.toggle('battle-cursor-hidden', !!hidden);
-    document.body.style.cursor = hidden ? 'none' : '';
-    if(renderer && renderer.domElement){
-      renderer.domElement.style.setProperty('cursor', hidden ? 'none' : '', 'important');
-    }
-  }
-  setBattleCursor = v8SetBattleCursor;
-
-  const _v8Range = startRangePhase;
-  startRangePhase = function(){
-    _v8Range();
-    v8SetBattleCursor(false);
-  };
-
-  const _v8Battle = startBattleFromRange;
-  startBattleFromRange = function(){
-    _v8Battle();
-    v8SetBattleCursor(true);
-  };
-
-  document.addEventListener('mousemove', ()=>{
-    if(currentPhase===1.5 || currentPhase===2) v8SetBattleCursor(true);
-  }, true);
-})();
-</script>
 
 <script>
 /* =====================================================================
@@ -4009,7 +3848,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     setTimeout(()=>{hideAccount(); if(typeof window.__startCustomizeBase==='function')window.__startCustomizeBase();},350);
   }
   async function api(path,body){
-    const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const origin=(typeof getOnlineServerOrigin==='function'?getOnlineServerOrigin():'') || location.origin;
+    const r=await fetch(origin+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({ok:false,error:'サーバーの応答を読めませんでした。'}));
     if(!r.ok||!d.ok)throw new Error(d.error||'通信エラー');
     return d;
@@ -4073,7 +3913,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(saved){try{window.playerAccount.profile=JSON.parse(saved);}catch{}}
     if(location.protocol!=='file:'){
       const token=localStorage.getItem(tokenKey);
-      if(token){try{const r=await fetch('/api/account/me',{headers:{Authorization:'Bearer '+token}});const d=await r.json();if(d.ok){window.__accountReady=true;window.playerAccount={token,profile:d.profile,online:true};updateAccountProfileUI(d.profile);}}catch{}}
+      if(token){try{
+        const origin=(typeof getOnlineServerOrigin==='function'?getOnlineServerOrigin():'') || location.origin;
+        const r=await fetch(origin+'/api/account/me',{headers:{Authorization:'Bearer '+token}});
+        const d=await r.json();
+        if(d.ok){window.__accountReady=true;window.playerAccount={token,profile:d.profile,online:true};updateAccountProfileUI(d.profile);}
+      }catch{}}
     } else if(window.playerAccount.profile){window.__accountReady=true;}
   })();
 
