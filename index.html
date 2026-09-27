@@ -249,7 +249,7 @@ body.pointer-lock-ready{cursor:none !important;}
   <div id="lobby-menu">
     <div id="lobby-menu-title">ロビー</div>
     <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
-    <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">🟨 南西：試し撃ち　🟥 南東：CPU　🟦 北西：カスタム　🟪 北東：オンライン</div>
+    <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">試し撃ち：ボタン または [1] で直接開始　／　他の施設は入口まで歩いてね</div>
     <button class="lobby-btn" data-lobby-action="range">🎯 試し撃ち場 <span class="k">1 / E</span></button>
     <button class="lobby-btn" data-lobby-action="cpu">⚔ CPU 4vs4 <span class="k">2</span></button>
     <button class="lobby-btn" data-lobby-action="online">🌐 オンライン8人 <span class="k">3</span></button>
@@ -3342,6 +3342,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   /* ---------- Battle hooks ---------- */
   const oldStartRange=startRangePhase;
+  // Keep an unwrapped reference so lobby entry can bypass optional enhancement wrappers if needed.
+  window.__baseStartRangePhase=oldStartRange;
   startRangePhase=function(){ oldStartRange(); setBattleCursor(false); };
   const oldStartBattle=startBattleFromRange;
   startBattleFromRange=function(){ oldStartBattle(); setBattleCursor(true); };
@@ -4448,23 +4450,50 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   }
   function enterRangeSafely(){
-    try{
-      if(typeof launchRange!=='function') throw new Error('range launcher missing');
-      launchRange();
-      if(currentPhase!==1.5){
-        // One deterministic retry if another phase handler changed the phase during the click.
-        currentPhase=1;
-        launchRange();
+    let started=false, lastErr=null;
+    // Prefer the original launcher, then fall back to the currently wrapped launcher.
+    // This makes practice entry independent of cursor/map enhancement hooks.
+    const launchers=[window.__baseStartRangePhase, launchRange, window.startRangePhase]
+      .filter(fn=>typeof fn==='function');
+    const unique=[];
+    for(const fn of launchers){ if(!unique.includes(fn)) unique.push(fn); }
+
+    for(const fn of unique){
+      try{
+        fn();
+        if(currentPhase===1.5){ started=true; break; }
+      }catch(err){
+        lastErr=err;
+        // A wrapper may throw after the real phase has already started.
+        if(currentPhase===1.5){ started=true; break; }
       }
-      if(currentPhase!==1.5) throw new Error('range phase not entered');
-    }catch(err){
-      console.error('Practice entry failed',err);
-      showToast('試し撃ちを開始できませんでした');
     }
+
+    if(started){
+      // Restore the optional gameplay polish after the direct base launch.
+      try{ window.__V10?.showMaps?.(true); }catch(e){}
+      try{ setTimeout(()=>window.__V10?.requestLock?.(),0); }catch(e){}
+      return true;
+    }
+
+    console.error('Practice entry failed',lastErr);
+    showToast('試し撃ちを開始できませんでした');
+    try{ startLobbyPhase(); }catch(e){}
+    return false;
   }
+
   function action(key){
     if(currentPhase!==1.25)return;
     const p=lobby.player; if(!p)return;
+
+    // 試し撃ちだけはメニュー/数字キーから直接入れるようにする。
+    if(key==='range'){
+      rangeReturnLobby={x:p.pos.x,z:p.pos.z,yaw:lobbyYaw,pitch:lobbyPitch,valid:true};
+      leaveLobby();
+      enterRangeSafely();
+      return;
+    }
+
     let target=lobby.pois.find(v=>v.key===key);
     if(!target) return;
     if(Math.hypot(p.pos.x-target.x,p.pos.z-target.z)>6.8){
@@ -4474,8 +4503,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       rangeReturnLobby={x:p.pos.x,z:p.pos.z,yaw:lobbyYaw,pitch:lobbyPitch,valid:true};
     }
     leaveLobby();
-    if(key==='range'){ enterRangeSafely(); }
-    else if(key==='cpu'){ enterRangeSafely(); if(currentPhase===1.5) startBattleFromRange(); }
+    if(key==='cpu'){ enterRangeSafely(); if(currentPhase===1.5) startBattleFromRange(); }
     else if(key==='online'){ enterRangeSafely(); if(currentPhase===1.5) openOnlinePanel(); }
     else if(key==='custom'){ goToCustomizeFromGame(); }
   }
@@ -4605,7 +4633,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const k={Digit1:'range',Digit2:'cpu',Digit3:'online',Digit4:'custom'}[e.code];
       const pp=lobby.pois.find(v=>v.key===k);
       if(pp){e.preventDefault();
-        if(Math.hypot(lobby.player.pos.x-pp.x,lobby.player.pos.z-pp.z)<=6.8) action(k);
+        // 1キーの試し撃ちは場所に関係なく直接開始。
+        if(k==='range') action(k);
+        else if(Math.hypot(lobby.player.pos.x-pp.x,lobby.player.pos.z-pp.z)<=6.8) action(k);
         else showToast('施設の入口まで歩いて近づいてね');
       }
     }
