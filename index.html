@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>スプラ3風 Webオンライン v37 - v25基準・ルーム制・平面ステージ・安全イカ・ロビー安定</title>
+<script>
+/* V49: browser-side online diagnostics */
+(function(){
+  const BUILD_ID='V49-ONLINE-CONSOLE-2026-09-27';
+  window.__ONLINE_BUILD_ID=BUILD_ID;
+  window.__onlineLog=function(tag,data){
+    try{
+      const stamp=new Date().toISOString();
+      console.log('[SPLATOON ONLINE]['+BUILD_ID+']['+stamp+']['+tag+']',data);
+    }catch(e){}
+  };
+  window.__onlineLog('INDEX LOAD',{
+    href:location.href,
+    protocol:location.protocol,
+    host:location.host,
+    readyState:document.readyState
+  });
+})();
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -399,6 +418,7 @@ html.cursor-force-visible canvas{
     if(e.code!=='KeyP' && e.code!=='Digit3') return;
     e.preventDefault();
     e.stopImmediatePropagation();
+    window.__onlineLog?.('P/3 KEY', {code:e.code, accountReady:window.__accountReady===true});
 
     // 未ログインならログイン画面、それ以外はオンライン画面を即表示。
     if(window.__accountReady!==true){
@@ -3415,19 +3435,37 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const url=location.protocol==='file:' ? '' : onlineUrl();
     if(!url){setOnlineStatus('公開URLではないためオンライン接続できません。');return;}
     try{
+      window.__onlineLog?.('WS CREATE', {
+        url,
+        source: location.href,
+        build: window.__ONLINE_BUILD_ID || 'unknown'
+      });
       onlineSocket=new WebSocket(url);
       onlineSocket.onopen=()=>{
+        window.__onlineLog?.('WS OPEN', {
+          readyState: onlineSocket.readyState,
+          url: onlineSocket.url
+        });
         setOnlineConnecting('Render接続OK / ルームを検索中');
         setOnlineCount(1,'自分が参加中。対戦相手を探しています');
 
         if(token){
-          onlineSocket.send(JSON.stringify({type:'bindAccount',token}));
+          const payload={type:'bindAccount',token};
+          window.__onlineLog?.('WS SEND', payload);
+          onlineSocket.send(JSON.stringify(payload));
         }else{
           onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
         }
       };
       onlineSocket.onmessage=(ev)=>{
-        let m;try{m=JSON.parse(ev.data);}catch{return;}
+        window.__onlineLog?.('WS RECEIVE RAW', ev.data);
+        let m;
+        try{m=JSON.parse(ev.data);}
+        catch(err){
+          window.__onlineLog?.('WS RECEIVE JSON ERROR', {error:String(err),data:ev.data});
+          return;
+        }
+        window.__onlineLog?.('WS RECEIVE', m);
         if(m.type==='globalOnlineCount'){
           setGlobalOnlineCount(m.count);
           showGlobalOnlineHud(true);
@@ -3443,7 +3481,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
             return;
           }
           showOnlineProfile(m.profile);
-          onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+          const payload={type:'joinQueue',weaponId:playerConfig.weapon};
+          window.__onlineLog?.('WS SEND', payload);
+          onlineSocket.send(JSON.stringify(payload));
           return;
         }
         if(m.type==='queue'){
@@ -3490,11 +3530,23 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
       };
-      onlineSocket.onerror=()=>{
+      onlineSocket.onerror=(ev)=>{
+        window.__onlineLog?.('WS ERROR', {
+          type: ev?.type || 'error',
+          readyState: onlineSocket?.readyState,
+          url: onlineSocket?.url
+        });
         setOnlineConnecting('オンライン接続エラー');
         setOnlineCount(0,'Renderサーバーに接続できません');
       };
-      onlineSocket.onclose=()=>{
+      onlineSocket.onclose=(ev)=>{
+        window.__onlineLog?.('WS CLOSE', {
+          code: ev?.code,
+          reason: ev?.reason || '',
+          wasClean: ev?.wasClean,
+          readyState: onlineSocket?.readyState,
+          url: onlineSocket?.url
+        });
         setGlobalOnlineCount(0);
         showGlobalOnlineHud(false);
         if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}
@@ -3506,7 +3558,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     // オンライン画面を閉じた瞬間は必ずマウスロックを解除する。
     try{ window.__V10?.releaseLock?.(); }catch(e){}
     hideOnlinePanel();showGlobalOnlineHud(false);onlineReady=false;
-    if(onlineSocket&&onlineSocket.readyState<=1){try{onlineSocket.send(JSON.stringify({type:'leaveQueue'}));}catch{} try{onlineSocket.close();}catch{}}
+    if(onlineSocket&&onlineSocket.readyState<=1){
+      try{
+        const payload={type:'leaveQueue'};
+        window.__onlineLog?.('WS SEND', payload);
+        onlineSocket.send(JSON.stringify(payload));
+      }catch(e){
+        window.__onlineLog?.('WS SEND ERROR',{type:'leaveQueue',error:String(e)});
+      }
+      try{onlineSocket.close();}catch{}
+    }
     onlineSocket=null;onlineActive=false;onlineStarted=false;
   }
   function startOnlineBattle(m){
