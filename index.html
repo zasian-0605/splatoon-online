@@ -1843,9 +1843,22 @@ function updateSubs(delta){
     const gh = getSupportHeight(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y);
     const wall = getBlockingWall(s.mesh.position.x, s.mesh.position.z, s.mesh.position.y);
 
+    // 接地時は必ず地面の少し上へ戻す。タイマー/キューバン系も地下へ落ちない。
+    if(!s.stuckAt && s.mesh.position.y<=gh){
+      if(s.subType==='instant'){
+        s.mesh.position.y=gh+0.18;
+        willExplode=true;
+      }else if(s.subType==='stick'||s.subType==='timed'||s.subType==='slide'||s.subType==='seek'){
+        s.mesh.position.y=gh+0.18;
+        s.stuckAt=now;
+        s.velocity.set(0,0,0);
+      }
+    }
+
     if(s.subType==='instant' && (wall || s.mesh.position.y<=gh)){ willExplode = true; }
 
     if(s.subType==='stick' && !s.stuckAt && (wall || s.mesh.position.y<=gh)){
+      s.mesh.position.y=gh+0.18;
       s.stuckAt = now; s.velocity.set(0,0,0);
     }
     if(s.subType==='slide' && !s.stuckAt && s.mesh.position.y<=gh){
@@ -3207,13 +3220,22 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const spread=wp.spread||.05;
     const dir=aimDir.clone();
     dir.x+=(Math.random()-.5)*spread;dir.y+=(Math.random()-.5)*spread;dir.z+=(Math.random()-.5)*spread;dir.normalize();
+    let networkDir=dir.clone();
     if(wp.category==="blaster"){
-      spawnBullet(fighter,dir,{speed:wp.speed,damage:wp.damage,gravity:16,radius:.22,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.splashDamage,paintRadius:wp.paintRadius*1.18});
+      spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:16,radius:.22,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.splashDamage,paintRadius:wp.paintRadius*1.18});
     }else if(wp.category==="slosher"){
-      const d=dir.clone();d.y+=.55;d.normalize();
-      spawnBullet(fighter,d,{speed:wp.speed,damage:wp.damage,gravity:26,radius:.3,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.damage*.5,paintRadius:wp.paintRadius*1.25});
+      networkDir.y+=.55;networkDir.normalize();
+      spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:26,radius:.3,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.damage*.5,paintRadius:wp.paintRadius*1.25});
     }else{
-      spawnBullet(fighter,dir,{speed:wp.speed,damage:wp.damage,gravity:18,radius:.14,life:wp.life,paintRadius:wp.paintRadius*1.18});
+      spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:18,radius:.14,life:wp.life,paintRadius:wp.paintRadius*1.18});
+    }
+    if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&fighter.isPlayer){
+      try{onlineSocket.send(JSON.stringify({
+        type:'shot',
+        x:fighter.pos.x,y:fighter.pos.y+1.2,z:fighter.pos.z,
+        dx:networkDir.x,dy:networkDir.y,dz:networkDir.z,
+        weaponId:weaponList.indexOf(wp)
+      }));}catch{}
     }
     // Immediate paint mark guarantees the tank/paint loop is visible even before the projectile lands.
     const paintDist=wp.category==='blaster'?4.2:wp.category==='slosher'?3.5:6.0;
@@ -3235,6 +3257,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const spawnPos=fighter.pos.clone();spawnPos.y+=1.2;mesh.position.copy(spawnPos);scene.add(mesh);
     const vel=aimDir.clone().multiplyScalar(def.speed);vel.y+=7;
     subsList.push({mesh,velocity:vel,team:fighter.team,subType:def.type,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(aimDir.x,0,aimDir.z).normalize()});
+    if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&fighter.isPlayer){
+      try{onlineSocket.send(JSON.stringify({
+        type:'sub',
+        x:spawnPos.x,y:spawnPos.y,z:spawnPos.z,
+        vx:vel.x,vy:vel.y,vz:vel.z,
+        subType:def.type,weaponId:weaponList.indexOf(wp)
+      }));}catch{}
+    }
     sfx("bomb");
   };
 
@@ -3533,6 +3563,31 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           const wait=Math.max(0,(m.startAt||Date.now()+1200)-Date.now());
           setTimeout(()=>startOnlineBattle(m),wait);
           
+          return;
+        }
+        if(m.type==='shot'){
+          const wp=weaponList[Number(m.weaponId)||0]||weaponList[0];
+          const d=new THREE.Vector3(Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||1);
+          if(d.lengthSq()<0.0001)d.set(0,0,1);else d.normalize();
+          const rf={id:m.id,team:m.team,weapon:wp,pos:new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0)};
+          if(wp.category==='blaster'){
+            spawnBullet(rf,d,{speed:wp.speed,damage:wp.damage,gravity:16,radius:.22,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.splashDamage,paintRadius:wp.paintRadius*1.18});
+          }else if(wp.category==='slosher'){
+            spawnBullet(rf,d,{speed:wp.speed,damage:wp.damage,gravity:26,radius:.3,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.damage*.5,paintRadius:wp.paintRadius*1.25});
+          }else{
+            spawnBullet(rf,d,{speed:wp.speed,damage:wp.damage,gravity:18,radius:.14,life:wp.life,paintRadius:wp.paintRadius*1.18});
+          }
+          return;
+        }
+        if(m.type==='sub'){
+          const def=Object.values(subDefs).find(v=>v.type===m.subType);
+          if(!def)return;
+          const col=m.team==='A'?teamAHex:teamBHex;
+          const mesh=new THREE.Mesh(new THREE.SphereGeometry(.3,8,8),new THREE.MeshBasicMaterial({color:col}));
+          mesh.position.set(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0);
+          scene.add(mesh);
+          const vx=Number(m.vx)||0,vy=Number(m.vy)||0,vz=Number(m.vz)||0;
+          subsList.push({mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,subType:m.subType,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(vx,0,vz).normalize()});
           return;
         }
         if(m.type==='state'){applyRemoteState(m);return;}
