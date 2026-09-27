@@ -7980,6 +7980,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const f=playerFighter;
     if(!f||!f.alive){movementPrev(delta);return;}
     const now=performance.now();
+    const w=f.weapon||weaponList[0];
+    const moveInput=!!(keys.w||keys.a||keys.s||keys.d);
+    const firing=isShooting;
+
+    // Rollers/brushes use the V60 action system instead of the older generic roller swing.
+    // We still let the base movement code handle gravity/collisions, but temporarily
+    // suppress its legacy firing branch so one input cannot fire twice.
+    if((w.category==='roller'||w.brush) && firing){
+      isShooting=false;
+      movementPrev(delta);
+      isShooting=true;
+      f.human.rotation.y=yaw+Math.PI;
+      f.root.rotation.y=f.human.rotation.y;
+      if(moveInput) playerVelocity.multiplyScalar(.72);
+      if(w.brush) doBrushV60(f,now,moveInput);
+      else doRollerV60(f,now,moveInput);
+      f._moving=moveInput;
+      return;
+    }
 
     if(f.v60Reef && now<f.v60Reef.end){
       const d=f.v60Reef.dir;
@@ -7989,55 +8008,61 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       f.pos.x=Math.max(-STAGE_HALF_X+1,Math.min(STAGE_HALF_X-1,f.pos.x));
       f.pos.z=Math.max(-STAGE_HALF_Z+1,Math.min(STAGE_HALF_Z-1,f.pos.z));
       paintSegment(prev,f.pos,1.35,getFighterInkHex(f),true);
+      f.root.position.copy(f.pos);
       return;
     }
+
     if(f.v60InkjetUntil && now<f.v60InkjetUntil){
       const base=f.v60InkjetHome||f.pos.clone();
       const hoverY=Math.max(3.0,base.y+2.8+Math.sin(now*.004)*.3);
-      // Let base movement run with muted shooting, then restore, then re-apply hover height.
       const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
-      f.pos.y=hoverY;f.root.position.copy(f.pos);
+      f.pos.y=hoverY;
+      f.root.position.copy(f.pos);
       return;
     }
+
     if(f.v60Zip && now<f.v60Zip.until){
       const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
       return;
     }
 
-    if(f.weapon.category==='spinner'){
+    if(w.category==='spinner'){
       const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
-      if(f._v60ChargeStart){
-        const frac=Math.min(1,(now-f._v60ChargeStart)/(f.weapon.chargeTime||800));
-        const gauge=document.getElementById('charge-gauge');
+      const cs=f._v60ChargeStart;
+      const gauge=document.getElementById('charge-gauge');
+      if(cs){
+        const frac=Math.min(1,(now-cs)/(w.chargeTime||800));
         if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
       }
       return;
     }
 
-    if(f.weapon.category==='wiper'){
+    if(w.category==='wiper'){
       const oldShoot=isShooting;isShooting=false;movementPrev(delta);isShooting=oldShoot;
-      if(f._v60BladeChargeStart){
-        const frac=Math.min(1,(now-f._v60BladeChargeStart)/(f.weapon.chargeTime||550));
-        const gauge=document.getElementById('charge-gauge');
+      const cs=f._v60BladeChargeStart;
+      const gauge=document.getElementById('charge-gauge');
+      if(cs){
+        const frac=Math.min(1,(now-cs)/(w.chargeTime||550));
         if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
       }
       return;
     }
 
-    if(f.weapon.category==='charger' && f.weapon.kind==='stringer'){
-      /* The existing charger input starts/stops charging; only HUD is upgraded here. */
-      if(f.isCharging){
-        const frac=Math.min(1,(now-f.chargeStart)/(f.weapon.chargeTime||800));
-        const gauge=document.getElementById('charge-gauge');
-        if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
-      }
+    if(w.category==='charger' && w.kind==='stringer' && f.isCharging){
+      const frac=Math.min(1,(now-f.chargeStart)/(w.chargeTime||800));
+      const gauge=document.getElementById('charge-gauge');
+      if(gauge){gauge.style.display='block';gauge.style.setProperty('--pct',Math.round(frac*100));}
     }
 
     movementPrev(delta);
+    f._moving=moveInput;
     if(f.v60CrabUntil&&now>=f.v60CrabUntil)f.root.scale.set(1,1,1);
     if(f.v60KrakenUntil&&now>=f.v60KrakenUntil){f.root.scale.set(1,1,1);f.v60KrakenUntil=0;}
     if(f.v60Zip&&now>=f.v60Zip.until){
-      const zipHome=f.v60Zip.home.clone();f.pos.copy(zipHome);f.v60Zip=null;trailPath(zipHome,f.pos,1,getFighterInkHex(f),false);
+      const zipHome=f.v60Zip.home.clone();
+      f.pos.copy(zipHome);
+      f.v60Zip=null;
+      trailPath(zipHome,f.pos,1,getFighterInkHex(f),false);
     }
   };
 
