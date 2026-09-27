@@ -45,7 +45,14 @@ const sessions = new Map();
 
 function json(res, status, obj) {
   const body = JSON.stringify(obj);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Length': Buffer.byteLength(body),
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+  });
   res.end(body);
 }
 async function readBody(req) {
@@ -115,6 +122,9 @@ function updateAccountResult(player, winnerTeam) {
 
 const server = http.createServer(async (req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (req.method === 'OPTIONS') {
+    return json(res, 204, {});
+  }
   if (req.method === 'GET' && p === '/health') {
     return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, time: new Date().toISOString() });
   }
