@@ -116,6 +116,7 @@ canvas{display:block;width:100%;height:100%;}
 #respawn-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:15;display:none;flex-direction:column;justify-content:center;align-items:center;color:#fff;}
 #respawn-overlay .msg{font-size:40px;color:#ff0055;text-shadow:3px 3px 0 #000;}
 #respawn-overlay .sub{font-size:18px;margin-top:10px;}
+#spectate-label{min-height:20px;text-shadow:1px 1px 0 #000;}
 #result-screen{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(10,0,40,.92);z-index:35;display:none;flex-direction:column;justify-content:center;align-items:center;color:#fff;}
 #result-title{font-size:56px;text-shadow:4px 4px 0 #000;margin-bottom:20px;}
 #result-detail{font-size:20px;margin-bottom:30px;text-align:center;line-height:1.8;}
@@ -325,13 +326,15 @@ html.cursor-force-visible canvas{
 <div class="custom-group"><span class="custom-label">ブキ（カテゴリごとに個性あり）</span>
 <select id="select-weapon" style="width:100%;padding:8px;background:#222;color:#fff;border:2px solid #ff0055;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;"></select>
 <div id="weapon-info"></div></div>
-<div class="custom-group"><span class="custom-label">アタマギア</span>
+<div class="custom-group"><span class="custom-label">ギア設定</span>
 <div class="opt-btns" id="grp-gear">
-<button class="opt-btn active" data-val="0">なし</button>
-<button class="opt-btn" data-val="1">ゴーグル(額)</button>
-<button class="opt-btn" data-val="2">ヘッドホン</button>
-<button class="opt-btn" data-val="3">キャップ</button>
-</div></div>
+<button class="opt-btn active" data-val="0">標準</button>
+<button class="opt-btn" data-val="1">スピード</button>
+<button class="opt-btn" data-val="2">インク効率</button>
+<button class="opt-btn" data-val="3">タフネス</button>
+</div>
+<div id="gear-config-note" style="font:11px/1.45 Arial,Meiryo,sans-serif;color:#ccc;margin-top:6px;">標準：基本性能</div>
+</div>
 <button id="btn-confirm">これでバッチリ！ ►</button>
 </div>
 </div>
@@ -393,7 +396,7 @@ html.cursor-force-visible canvas{
 <div id="fullmap"><div id="fullmap-card"><canvas id="fullmap-canvas" width="760" height="760"></canvas><div id="fullmap-title">STAGE MAP</div><div id="fullmap-help">味方をタップ：スーパージャンプ / M・ESC：閉じる</div></div></div>
 <div id="range-hint"></div>
 <div id="toast"></div>
-<div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div></div>
+<div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div><div id="spectate-label" style="margin-top:12px;color:#8eeaff;font:700 14px/1.4 Arial,Meiryo,sans-serif;"></div></div>
 <div id="special-ready">SPECIAL READY!</div>
 <div id="death-location-marker">💀 ここでやられた</div>
 <div id="result-screen">
@@ -918,6 +921,19 @@ function setupCustomizeUI(){
   renderHairButtons();
   bindGroup('grp-color','color');
   bindGroup('grp-gear','gear');
+  const gearNote=document.getElementById('gear-config-note');
+  const gearDescriptions={
+    0:'標準：基本性能',
+    1:'スピード：通常移動↑・イカ移動↑',
+    2:'インク効率：消費↓・回復↑',
+    3:'タフネス：最大HP↑・復活待ち時間↓'
+  };
+  document.querySelectorAll('#grp-gear .opt-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if(gearNote) gearNote.textContent=gearDescriptions[Number(playerConfig.gear)||0]||gearDescriptions[0];
+    });
+  });
+  if(gearNote) gearNote.textContent=gearDescriptions[Number(playerConfig.gear)||0]||gearDescriptions[0];
   applyDeviceSetting();
 
   // 保存済み設定をボタンの見た目にも反映。
@@ -1750,6 +1766,7 @@ function createFighter(opts){
     weapon: weaponList[cfg.weapon], specialGauge:0, lastShot:0, lastSub:0,
     invulnUntil:0, speedBoostUntil:0, chargeStart:0, isCharging:false,
     lastSwing:0, activeSpecialUntil:0,
+    lastDamagedById:null, lastDamagedAt:0, spectateTargetId:null,
     cfg: cfg,
     ai: opts.isPlayer ? null : { state:'patrol', target:null, waypoint: waypoints[Math.floor(Math.random()*waypoints.length)]||{x:0,z:0}, nextDecision:0, paintTick:0 }
   };
@@ -1774,9 +1791,12 @@ function respawnFighter(f){
   f.hp = f.maxHp;
   f.alive = true;
   f.root.visible = true;
-  f.invulnUntil = performance.now() + 1200;
+  f.invulnUntil = performance.now() + 1400;
+  f.spectateTargetId=null;
+  f.lastDamagedById=null;
   if(f.isPlayer){
     document.getElementById('respawn-overlay').style.display='none';
+    const sl=document.getElementById('spectate-label'); if(sl) sl.textContent='';
     hideDeathLocation();
   }
 }
@@ -1812,6 +1832,37 @@ function showDeathLocation(f){
 }
 function hideDeathLocation(){const m=document.getElementById('death-location-marker'); if(m)m.style.display='none';}
 
+function findSpectateTarget(dead){
+  if(!dead) return null;
+  const now=performance.now();
+  if(dead.lastDamagedById && now-dead.lastDamagedAt<8000){
+    const direct=fighters.find(x=>x.id===dead.lastDamagedById && x.alive && x.team!==dead.team);
+    if(direct) return direct;
+  }
+  let target=null,best=Infinity;
+  for(const x of fighters){
+    if(!x.alive || x.team===dead.team) continue;
+    const d=x.pos.distanceTo(dead.pos);
+    if(d<best){best=d;target=x;}
+  }
+  return target;
+}
+function updateSpectateCamera(dead){
+  const target=findSpectateTarget(dead);
+  if(!target) return null;
+  dead.spectateTargetId=target.id;
+  const t=performance.now()*0.0006;
+  const cam=target.pos.clone();
+  cam.x+=Math.cos(t)*5.5;
+  cam.z+=Math.sin(t)*5.5;
+  cam.y+=2.6;
+  camera.position.copy(cam);
+  const look=target.pos.clone(); look.y+=1.0;
+  camera.lookAt(look);
+  const label=document.getElementById('spectate-label');
+  if(label) label.textContent='観戦中：'+String(target.id);
+  return target;
+}
 function killFighter(f){
   if(!f.alive) return;
   f.alive = false;
@@ -1836,6 +1887,10 @@ function applyDamage(target, dmg, fromFighter){
   for(let i=0;i<shields.length;i++){
     const sh = shields[i];
     if(sh.team===target.team && target.pos.distanceTo(sh.pos)<sh.radius) return;
+  }
+  if(fromFighter && fromFighter.id){
+    target.lastDamagedById=fromFighter.id;
+    target.lastDamagedAt=performance.now();
   }
   target.hp -= dmg;
   if(target.hp <= 0){
@@ -2818,10 +2873,10 @@ function updatePlayerMovement(delta){
   f.squid_mode = isSquid;
   const wallOnInk = onFighterInk(f);
   const isJetpack = f.jetpackUntil && performance.now() < f.jetpackUntil;
-  let speedMult = isSquid ? (wallOnInk?1.8:0.35) : (isShooting?0.6:1.0);
-  if(f.weapon.category==='maneuver' && isShooting) speedMult = isSquid ? speedMult : 1.0;
-  if(performance.now() < f.speedBoostUntil) speedMult *= 1.5;
+  let speedMult = isSquid ? (wallOnInk?1.72:0.42) : (isShooting?0.72:1.0);
+  if(performance.now() < f.speedBoostUntil) speedMult *= 1.35;
   if(isJetpack) speedMult = 1.0;
+  speedMult *= (f.gearProfile?.move||1);
 
   const moveDir = new THREE.Vector3();
   if(keys.w) moveDir.z -= 1;
@@ -2833,8 +2888,8 @@ function updatePlayerMovement(delta){
   if(moveDir.lengthSq()>0){
     moveDir.normalize();
     moveDir.applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
-    playerVelocity.x = moveDir.x*15*speedMult;
-    playerVelocity.z = moveDir.z*15*speedMult;
+    playerVelocity.x = moveDir.x*12.5*speedMult;
+    playerVelocity.z = moveDir.z*12.5*speedMult;
     moving=true;
     if(!isSquid && !isShooting){
       f.human.rotation.y = Math.atan2(playerVelocity.x, playerVelocity.z);
@@ -3197,12 +3252,17 @@ function animate3D(token){
     if(battleTimer<=0 && battleActive){ endBattle(); return; }
   }
 
-  const offset = new THREE.Vector3(1.5,1.5,cameraDistance);
-  offset.applyAxisAngle(new THREE.Vector3(1,0,0), pitch);
-  offset.applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
-  camera.position.copy(playerFighter.pos).add(offset);
-  const lookTarget = playerFighter.pos.clone(); lookTarget.y += 1.5;
-  camera.lookAt(lookTarget);
+  if(!playerFighter.alive && updateSpectateCamera(playerFighter)){
+    const dm=document.getElementById('death-location-marker');
+    if(dm) dm.style.display='none';
+  }else{
+    const offset = new THREE.Vector3(1.5,1.5,cameraDistance);
+    offset.applyAxisAngle(new THREE.Vector3(1,0,0), pitch);
+    offset.applyAxisAngle(new THREE.Vector3(0,1,0), yaw);
+    camera.position.copy(playerFighter.pos).add(offset);
+    const lookTarget = playerFighter.pos.clone(); lookTarget.y += 1.5;
+    camera.lookAt(lookTarget);
+  }
   const dm=document.getElementById('death-location-marker');
   if(dm && playerFighter.deathLocation && !playerFighter.alive){
     const v=playerFighter.deathLocation.clone(); v.y+=1.8; v.project(camera);
@@ -3315,9 +3375,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       specialGain: pattern==="shirt" ? 1.12 : 1
     };
     switch(Number(f.cfg?.gear)||0){
-      case 1: p.move*=1.02; p.swim*=1.08; break;      // ゴーグル
-      case 2: p.inkRegen*=1.15; p.inkSaver*=.92; break;// ヘッドホン
-      case 3: p.move*=1.08; p.specialGain*=1.08; break;// キャップ
+      case 1:
+        p.move*=1.08; p.swim*=1.14;
+        break;
+      case 2:
+        p.inkRegen*=1.16; p.inkSaver*=.88;
+        break;
+      case 3:
+        p.maxHp=110; p.respawn=.88;
+        break;
     }
     return p;
   }
