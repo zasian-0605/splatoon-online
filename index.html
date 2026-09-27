@@ -8600,5 +8600,686 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+
+<script>
+/* V65: Tactical CPU Brain + E Gear Loadout
+   - CPU uses state-based movement, A* navigation and local obstacle avoidance.
+   - CPU enters squid mode on friendly ink, paints routes, retreats to refill, throws subs,
+     uses specials, and changes behavior by weapon category.
+   - E opens an in-battle gear selector. Three slots can be mixed freely.
+*/
+(function(){
+  'use strict';
+
+  /* =========================================================
+     Gear: free 3-slot loadout, usable with E during battle
+     ========================================================= */
+  const GEAR_CATALOG=[
+    {id:'head_swim',slot:'head',name:'イカランナー・バイザー',ability:'イカダッシュ速度',fx:{swim:1.07}},
+    {id:'head_ink',slot:'head',name:'インクメーターゴーグル',ability:'インク効率',fx:{inkSaver:.94}},
+    {id:'head_regen',slot:'head',name:'リカバリーヘッドホン',ability:'インク回復',fx:{inkRegen:1.10}},
+    {id:'head_special',slot:'head',name:'スペシャルキャップ',ability:'スペシャル増加',fx:{specialGain:1.07}},
+    {id:'head_tough',slot:'head',name:'タフヘルメット',ability:'耐久',fx:{maxHp:4}},
+    {id:'body_swim',slot:'body',name:'イカダッシュパーカー',ability:'イカダッシュ速度',fx:{swim:1.06},visualOutfit:9},
+    {id:'body_move',slot:'body',name:'スピードTシャツ',ability:'ヒト移動速度',fx:{move:1.06},visualOutfit:26},
+    {id:'body_ink',slot:'body',name:'メッシュシャツ',ability:'インク効率',fx:{inkSaver:.93},visualOutfit:31},
+    {id:'body_regen',slot:'body',name:'リペアジャージ',ability:'インク回復',fx:{inkRegen:1.08},visualOutfit:16},
+    {id:'body_special',slot:'body',name:'スペシャルジャケット',ability:'スペシャル増加',fx:{specialGain:1.08},visualOutfit:49},
+    {id:'body_tough',slot:'body',name:'アーマードジャケット',ability:'耐久',fx:{maxHp:6},visualOutfit:19},
+    {id:'shoe_move',slot:'shoes',name:'ネオンスニーカー',ability:'ヒト移動速度',fx:{move:1.045}},
+    {id:'shoe_swim',slot:'shoes',name:'スイムスニーカー',ability:'イカダッシュ速度',fx:{swim:1.06}},
+    {id:'shoe_ink',slot:'shoes',name:'ラバーブーツ',ability:'インク効率',fx:{inkSaver:.94}},
+    {id:'shoe_regen',slot:'shoes',name:'リカバリーシューズ',ability:'インク回復',fx:{inkRegen:1.08}},
+    {id:'shoe_respawn',slot:'shoes',name:'ジャンプシューズ',ability:'復活短縮',fx:{respawn:.93}},
+    {id:'shoe_special',slot:'shoes',name:'スペシャルブーツ',ability:'スペシャル増加',fx:{specialGain:1.06}}
+  ];
+  const GEAR_BY_ID=Object.fromEntries(GEAR_CATALOG.map(g=>[g.id,g]));
+  const GEAR_SLOTS=[
+    {key:'head',label:'アタマ'},
+    {key:'body',label:'フク'},
+    {key:'shoes',label:'クツ'}
+  ];
+  const DEFAULT_GEAR={head:'head_swim',body:'body_ink',shoes:'shoe_move'};
+
+  function normalizeGearLoadout(v){
+    const src=(v&&typeof v==='object')?v:{};
+    const out={};
+    GEAR_SLOTS.forEach(s=>{
+      const id=String(src[s.key]||DEFAULT_GEAR[s.key]);
+      out[s.key]=GEAR_BY_ID[id]?.slot===s.key?id:DEFAULT_GEAR[s.key];
+    });
+    return out;
+  }
+
+  playerConfig.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);
+
+  const _gearProfileBase=gearProfile;
+  gearProfile=function(f){
+    const p=_gearProfileBase(f);
+    const load=normalizeGearLoadout(f?.cfg?.gearLoadout || playerConfig.gearLoadout);
+    let hpAdd=0;
+    GEAR_SLOTS.forEach(s=>{
+      const item=GEAR_BY_ID[load[s.key]];
+      if(!item)return;
+      const fx=item.fx||{};
+      if(Number.isFinite(fx.inkSaver))p.inkSaver*=fx.inkSaver;
+      if(Number.isFinite(fx.inkRegen))p.inkRegen*=fx.inkRegen;
+      if(Number.isFinite(fx.move))p.move*=fx.move;
+      if(Number.isFinite(fx.swim))p.swim*=fx.swim;
+      if(Number.isFinite(fx.specialGain))p.specialGain*=fx.specialGain;
+      if(Number.isFinite(fx.maxHp))hpAdd+=fx.maxHp;
+      if(Number.isFinite(fx.respawn))p.respawn*=fx.respawn;
+    });
+    p.maxHp+=hpAdd;
+    return p;
+  };
+
+  function syncPlayerGearVisual(){
+    if(!playerFighter)return;
+    const load=normalizeGearLoadout(playerConfig.gearLoadout);
+    playerConfig.gearLoadout=load;
+    playerFighter.cfg=Object.assign({},playerFighter.cfg||{},{
+      gearLoadout:Object.assign({},load)
+    });
+    const body=GEAR_BY_ID[load.body];
+    /* Head/feet abilities are logical gear slots; body item also picks a visible outfit. */
+    if(body && Number.isFinite(body.visualOutfit)){
+      playerFighter.cfg.outfit=Math.max(0,Math.min(outfitList.length-1,Math.floor(body.visualOutfit)));
+      playerConfig.outfit=playerFighter.cfg.outfit;
+    }
+    try{
+      rebuildFighterModel(playerFighter,playerFighter.cfg);
+    }catch(_){}
+    playerFighter._customGearApplied=true;
+    refreshGearStats(playerFighter,true);
+    try{savePlayerConfig();}catch(_){}
+    updateGearHud();
+  }
+
+  function gearSummary(){
+    const load=normalizeGearLoadout(playerConfig.gearLoadout);
+    return GEAR_SLOTS.map(s=>GEAR_BY_ID[load[s.key]]?.name||'---').join(' / ');
+  }
+
+  let gearPanel=null;
+  function ensureGearPanel(){
+    if(gearPanel)return gearPanel;
+    gearPanel=document.createElement('div');
+    gearPanel.id='v65-gear-panel';
+    gearPanel.style.cssText=[
+      'position:fixed','left:50%','top:50%','transform:translate(-50%,-50%)',
+      'width:min(520px,90vw)','max-height:82vh','overflow:auto',
+      'z-index:9999','display:none','padding:18px','box-sizing:border-box',
+      'background:rgba(9,8,18,.97)','border:3px solid #e3ff00','border-radius:18px',
+      'box-shadow:0 12px 50px rgba(0,0,0,.65),0 0 35px rgba(227,255,0,.22)',
+      'color:#fff','font-family:Arial,Meiryo,sans-serif'
+    ].join(';');
+
+    const head=document.createElement('div');
+    head.innerHTML='<div style="font:900 27px/1.15 Arial Black,Meiryo,sans-serif;color:#e3ff00;text-shadow:2px 2px #ff0055">ギア装備</div>'+
+      '<div style="margin-top:5px;color:#bbb;font-size:13px">Eで開閉 ・ アタマ / フク / クツを好きな組み合わせに変更できます</div>';
+    gearPanel.appendChild(head);
+
+    const rows={};
+    GEAR_SLOTS.forEach(s=>{
+      const row=document.createElement('div');
+      row.style.cssText='margin-top:14px;padding:12px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)';
+      const label=document.createElement('div');
+      label.textContent=s.label;
+      label.style.cssText='font-weight:900;font-size:16px;margin-bottom:7px;color:#fff';
+      const sel=document.createElement('select');
+      sel.style.cssText='width:100%;padding:10px;background:#181722;color:#fff;border:2px solid #555;border-radius:8px;font-size:14px';
+      GEAR_CATALOG.filter(g=>g.slot===s.key).forEach(g=>{
+        const o=document.createElement('option');
+        o.value=g.id;
+        o.textContent=g.name+' ・ '+g.ability;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change',()=>{
+        playerConfig.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);
+        playerConfig.gearLoadout[s.key]=sel.value;
+        syncPlayerGearVisual();
+        refreshGearPanel();
+      });
+      row.appendChild(label);row.appendChild(sel);gearPanel.appendChild(row);
+      rows[s.key]=sel;
+    });
+
+    const note=document.createElement('div');
+    note.id='v65-gear-note';
+    note.style.cssText='margin-top:14px;padding:11px;border-radius:10px;background:rgba(227,255,0,.08);color:#e3ff00;font:700 12px/1.55 sans-serif';
+    gearPanel.appendChild(note);
+
+    const close=document.createElement('button');
+    close.textContent='装備して閉じる';
+    close.style.cssText='width:100%;margin-top:14px;padding:12px;border:0;border-radius:11px;background:#e3ff00;color:#141414;font-weight:900;font-size:15px;cursor:pointer';
+    close.addEventListener('click',hideGearPanel);
+    gearPanel.appendChild(close);
+
+    gearPanel.addEventListener('keydown',e=>e.stopPropagation());
+    gearPanel.addEventListener('mousedown',e=>e.stopPropagation());
+    document.body.appendChild(gearPanel);
+    gearPanel._rows=rows;
+    gearPanel._note=note;
+    return gearPanel;
+  }
+
+  function refreshGearPanel(){
+    const p=ensureGearPanel();
+    const load=normalizeGearLoadout(playerConfig.gearLoadout);
+    GEAR_SLOTS.forEach(s=>{if(p._rows[s.key])p._rows[s.key].value=load[s.key];});
+    const labels=GEAR_SLOTS.map(s=>{
+      const g=GEAR_BY_ID[load[s.key]];
+      return g?g.name+'（'+g.ability+'）':'---';
+    });
+    if(p._note)p._note.textContent='現在の装備：'+labels.join('　/　');
+  }
+
+  function showGearPanel(){
+    if(currentPhase!==2)return;
+    const p=ensureGearPanel();
+    refreshGearPanel();
+    p.style.display='block';
+    try{document.exitPointerLock?.();}catch(_){}
+  }
+  function hideGearPanel(){
+    if(gearPanel)gearPanel.style.display='none';
+  }
+  function toggleGearPanel(){
+    if(currentPhase!==2)return;
+    if(gearPanel?.style.display==='block')hideGearPanel();
+    else showGearPanel();
+  }
+
+  function updateGearHud(){
+    const e=document.getElementById('gear-effects');
+    if(!e||!playerFighter)return;
+    const load=normalizeGearLoadout(playerConfig.gearLoadout);
+    const names=GEAR_SLOTS.map(s=>GEAR_BY_ID[load[s.key]]?.name).filter(Boolean);
+    const gp=playerFighter.gearProfile||gearProfile(playerFighter);
+    e.textContent='ギア：'+names.join(' / ')+'　｜ インク×'+gp.inkSaver.toFixed(2)+'　移動×'+gp.move.toFixed(2)+'　イカ×'+gp.swim.toFixed(2);
+  }
+  window.__V65ToggleGear=toggleGearPanel;
+  window.__V65RefreshGear=syncPlayerGearVisual;
+
+  if(!playerConfig.gearLoadout)playerConfig.gearLoadout=Object.assign({},DEFAULT_GEAR);
+  if(playerFighter){
+    playerFighter.cfg.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);
+    refreshGearStats(playerFighter,true);
+  }
+  setTimeout(updateGearHud,0);
+
+  window.addEventListener('keydown',function(e){
+    if(currentPhase===2 && e.code==='KeyE'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toggleGearPanel();
+      return;
+    }
+    if(gearPanel && gearPanel.style.display==='block' && e.code==='Escape'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      hideGearPanel();
+    }
+  },true);
+
+  /* =========================================================
+     CPU Brain: navigation + state machine
+     ========================================================= */
+
+  function aiState(f){
+    if(!f.ai)f.ai={};
+    const a=f.ai;
+    if(!a.state)a.state='patrol';
+    if(!Array.isArray(a.path))a.path=[];
+    if(!Number.isFinite(a.pathIndex))a.pathIndex=0;
+    if(!Number.isFinite(a.nextThink))a.nextThink=0;
+    if(!Number.isFinite(a.nextBomb))a.nextBomb=0;
+    if(!Number.isFinite(a.nextSpecial))a.nextSpecial=0;
+    if(!Number.isFinite(a.lastPaint))a.lastPaint=0;
+    if(!Number.isFinite(a.lastPosAt))a.lastPosAt=performance.now();
+    if(!a.lastPos)a.lastPos=f.pos.clone();
+    if(!Number.isFinite(a.stuckFor))a.stuckFor=0;
+    if(!Number.isFinite(a.chargeStarted))a.chargeStarted=0;
+    if(!Number.isFinite(a.lastAttack))a.lastAttack=0;
+    return a;
+  }
+
+  function navClear(a,b){
+    const dist=Math.hypot(b.x-a.x,b.z-a.z);
+    if(dist<.5)return true;
+    const steps=Math.max(2,Math.ceil(dist/2.8));
+    for(let i=1;i<steps;i++){
+      const t=i/steps;
+      const x=a.x+(b.x-a.x)*t;
+      const z=a.z+(b.z-a.z)*t;
+      if(getBlockingWall(x,z,.95))return false;
+    }
+    return true;
+  }
+
+  function findNavPath(start,end){
+    const nodes=[{x:start.x,z:start.z},...waypoints.map(p=>({x:p.x,z:p.z})),{x:end.x,z:end.z}];
+    const n=nodes.length;
+    const g=new Array(n).fill(Infinity),fScore=new Array(n).fill(Infinity),came=new Array(n).fill(-1),open=[0];
+    g[0]=0;
+    fScore[0]=Math.hypot(end.x-start.x,end.z-start.z);
+
+    function nearestIndex(){
+      let best=n-1,bestD=Infinity;
+      for(let i=0;i<n;i++){
+        const d=Math.hypot(nodes[i].x-start.x,nodes[i].z-start.z);
+        if(d<bestD){bestD=d;best=i;}
+      }
+      return best;
+    }
+
+    /* Node 0 is always start; last node is goal. */
+    while(open.length){
+      let bestOpen=0;
+      for(let i=1;i<open.length;i++){
+        if(fScore[open[i]]<fScore[open[bestOpen]])bestOpen=i;
+      }
+      const current=open.splice(bestOpen,1)[0];
+      if(current===n-1){
+        const path=[];
+        let cur=current;
+        while(cur!==-1){path.push(nodes[cur]);cur=came[cur];}
+        path.reverse();
+        return path.slice(1);
+      }
+      for(let j=0;j<n;j++){
+        if(j===current)continue;
+        const d=Math.hypot(nodes[j].x-nodes[current].x,nodes[j].z-nodes[current].z);
+        if(d>48)continue;
+        if(!navClear(nodes[current],nodes[j]))continue;
+        const tentative=g[current]+d;
+        if(tentative<g[j]){
+          came[j]=current;g[j]=tentative;
+          fScore[j]=tentative+Math.hypot(nodes[j].x-end.x,nodes[j].z-end.z);
+          if(!open.includes(j))open.push(j);
+        }
+      }
+    }
+
+    /* No graph path: use the closest navigable waypoint before trying a direct steer. */
+    const startNear=waypoints
+      .filter(p=>navClear(start,p))
+      .sort((a,b)=>Math.hypot(a.x-end.x,a.z-end.z)-Math.hypot(b.x-end.x,b.z-end.z))[0];
+    return startNear?[{x:startNear.x,z:startNear.z},{x:end.x,z:end.z}]:[{x:end.x,z:end.z}];
+  }
+
+  function choosePatrolPoint(f){
+    const team=f.team;
+    const candidates=waypoints.filter(p=>{
+      if(team==='A')return p.z<18;
+      return p.z>-18;
+    });
+    const pool=candidates.length?candidates:waypoints;
+    const p=pool[Math.floor(Math.random()*pool.length)]||{x:0,z:0};
+    return {x:p.x,z:p.z};
+  }
+
+  function friendlyInkAt(f){
+    try{return onFighterInk(f);}
+    catch(_){return false;}
+  }
+
+  function pickEnemy(f){
+    let best=null,bestScore=Infinity;
+    for(const o of fighters){
+      if(!o||o===f||!o.alive||o.team===f.team)continue;
+      const d=f.pos.distanceTo(o.pos);
+      const seen=o.squid_mode ? (o.revealedUntil&&performance.now()<o.revealedUntil ? 0 : 10) : 0;
+      const score=d+seen+(o.isPlayer?-2:0);
+      if(score<bestScore){bestScore=score;best=o;}
+    }
+    return best;
+  }
+
+  function aimVector(f,target){
+    const d=new THREE.Vector3().subVectors(target.pos,f.pos);
+    d.y=0;
+    if(d.lengthSq()<.001)d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+    d.normalize();
+    const jitter=(f.weapon?.category==='charger'?.075:0.035);
+    d.x+=(Math.random()-.5)*jitter;
+    d.z+=(Math.random()-.5)*jitter;
+    d.normalize();
+    return d;
+  }
+
+  function engageRangeFor(w){
+    switch(w?.category){
+      case 'charger': return {min:18,max:34};
+      case 'spinner': return {min:12,max:27};
+      case 'roller': return {min:0,max:6.5};
+      case 'wiper': return {min:3,max:9};
+      case 'slosher': return {min:5,max:16};
+      case 'blaster': return {min:4,max:14};
+      case 'maneuver': return {min:5,max:16};
+      case 'brella': return {min:3,max:13};
+      default:return {min:6,max:21};
+    }
+  }
+
+  function moveAIVel(f,dir,delta,isSquid){
+    const speed=(isSquid?15.5:5.8)*(f.gearProfile?.[isSquid?'swim':'move']||1);
+    const vel=dir.clone().setY(0).normalize().multiplyScalar(speed);
+    const before=f.pos.clone();
+    tryMoveWithCollision(f,vel,delta,isSquid);
+    const moved=before.distanceTo(f.pos)>.025;
+    if(!moved){
+      /* Immediate anti-stuck steering: scan both sides before abandoning the route. */
+      const angles=[Math.PI/3,-Math.PI/3,Math.PI/2,-Math.PI/2,Math.PI*.75,-Math.PI*.75];
+      for(const a of angles){
+        const alt=dir.clone().setY(0).applyAxisAngle(new THREE.Vector3(0,1,0),a).normalize();
+        const test=before.clone().addScaledVector(alt,Math.max(.8,speed*delta*2.2));
+        if(!getBlockingWall(test.x,test.z,before.y)){
+          tryMoveWithCollision(f,alt.clone().multiplyScalar(speed),delta,isSquid);
+          if(before.distanceTo(f.pos)>.025)return true;
+        }
+      }
+    }
+    return moved;
+  }
+
+  function routeTarget(f,target,a,now){
+    const goal=new THREE.Vector3(target.x,0,target.z);
+    const direct=navClear(f.pos,goal);
+    if(direct){
+      a.path=[];
+      a.pathIndex=0;
+      return goal;
+    }
+    if(now>=a.nextThink || !a.path.length){
+      a.path=findNavPath(f.pos,goal);
+      a.pathIndex=0;
+      a.nextThink=now+450+Math.random()*250;
+    }
+    while(a.pathIndex<a.path.length){
+      const p=a.path[a.pathIndex];
+      if(Math.hypot(p.x-f.pos.x,p.z-f.pos.z)<1.15){a.pathIndex++;continue;}
+      return new THREE.Vector3(p.x,0,p.z);
+    }
+    return goal;
+  }
+
+  function paintAndRechargeAI(f,a,now,dir){
+    if(now-a.lastPaint>.24 && f.ink>1.5){
+      a.lastPaint=now;
+      const end=f.pos.clone().addScaledVector(dir||new THREE.Vector3(0,0,1),1.8);
+      paintGround(f.pos.x,f.pos.z,1.15,getFighterInkHex(f),{to:{x:end.x,z:end.z},noNetwork:true});
+      f.ink=Math.max(0,f.ink-1.5);
+    }
+    if(f.squid_mode && friendlyInkAt(f)){
+      f.ink=Math.min(100,f.ink+29*.0167);
+      if(f.hp<f.maxHp)f.hp=Math.min(f.maxHp,f.hp+9*.0167);
+    }
+  }
+
+  function useAIBomb(f,target,now){
+    if(!target||!f.weapon?.sub||now<(f.ai.nextBomb||0))return false;
+    if(!window.tryThrowSub)return false;
+    const d=aimVector(f,target);
+    const dist=f.pos.distanceTo(target.pos);
+    if(dist>22)return false;
+    /* Prefer bomb throws when blocked too: bombs are the CPU's way to pressure corners. */
+    window.tryThrowSub(f,d,now);
+    f.ai.nextBomb=now+2700+Math.random()*2200;
+    return true;
+  }
+
+  function useAISpecial(f,target,now){
+    if(!target||f.specialGauge<100||now<(f.ai.nextSpecial||0)||!window.fireSpecial)return false;
+    const dist=f.pos.distanceTo(target.pos);
+    if(dist>32 && f.weapon?.category!=='charger')return false;
+    window.fireSpecial(f);
+    f.ai.nextSpecial=now+12000+Math.random()*7000;
+    return true;
+  }
+
+  function attackWithWeaponAI(f,target,now){
+    const w=f.weapon;
+    const dir=aimVector(f,target);
+    f.human.rotation.y=Math.atan2(dir.x,dir.z);
+    f.root.rotation.y=f.human.rotation.y;
+
+    if(w.category==='roller'){
+      performRollerSwing(f,now);
+      return;
+    }
+    if(w.brush||w.name==='パブロ(筆)'||w.name==='パブロ'||w.name==='ホクサイ'||w.name==='フィンセント'){
+      performRollerSwing(f,now);
+      return;
+    }
+    if(w.category==='charger'){
+      if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+      const need=Math.max(280,(w.chargeTime||800)*.70);
+      if(now-f.ai.chargeStarted>=need && now-f.ai.lastAttack>500){
+        f.ai.lastAttack=now;
+        const frac=Math.min(1,(now-f.ai.chargeStarted)/(w.chargeTime||800));
+        try{
+          if(typeof fireStringerShot==='function'&&w.kind==='stringer')fireStringerShot(f,dir,frac);
+          else if(typeof fireChargerShotV60==='function')fireChargerShotV60(f,dir,frac);
+          else if(typeof fireChargerShot==='function')fireChargerShot(f,dir,frac);
+        }catch(_){}
+        f.ai.chargeStarted=0;
+      }
+      return;
+    }
+    if(w.category==='spinner'){
+      if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+      const need=Math.max(220,(w.chargeTime||650)*.72);
+      if(now-f.ai.chargeStarted>=need){
+        const frac=Math.min(1,(now-f.ai.chargeStarted)/(w.chargeTime||650));
+        try{
+          if(typeof fireSplatlingBurst==='function')fireSplatlingBurst(f,frac,dir);
+          else tryShoot(f,dir,now);
+        }catch(_){}
+        f.ai.chargeStarted=0;
+      }
+      return;
+    }
+    if(w.category==='wiper'){
+      if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+      const need=Math.max(230,(w.chargeTime||600)*.58);
+      if(now-f.ai.chargeStarted>=need){
+        const frac=Math.min(1,(now-f.ai.chargeStarted)/(w.chargeTime||600));
+        try{
+          if(typeof fireBladeSlashV60==='function')fireBladeSlashV60(f,frac,dir);
+          else if(typeof doWiperSlash==='function')doWiperSlash(f,frac);
+        }catch(_){}
+        f.ai.chargeStarted=0;
+      }
+      return;
+    }
+    tryShoot(f,dir,now);
+  }
+
+  function setAIRespawnState(f,now){
+    const a=aiState(f);
+    a.state='patrol';a.target=null;a.path=[];a.pathIndex=0;
+    a.nextThink=now+300;
+    a.nextBomb=now+1300+Math.random()*1600;
+    a.nextSpecial=now+5000+Math.random()*4000;
+    a.chargeStarted=0;a.stuckFor=0;a.lastPos=f.pos.clone();a.lastPosAt=now;
+    f.squid_mode=false;
+    updateFighterAnimation(f,false,false);
+  }
+
+  const _V65_OLD_UPDATE_AI=updateAI;
+  updateAI=function(f,delta,now){
+    if(!f||f.isPlayer||f.remote||!f.alive)return;
+    const a=aiState(f);
+    if(a.spawnToken!==f.respawnAt){
+      a.spawnToken=f.respawnAt;
+      setAIRespawnState(f,now);
+    }
+
+    const w=f.weapon||weaponList[0];
+    const target=pickEnemy(f);
+    const ranges=engageRangeFor(w);
+    const targetDist=target?f.pos.distanceTo(target.pos):Infinity;
+    const ownInk=friendlyInkAt(f);
+
+    /* Stuck watchdog: never keep walking into one wall. */
+    const movedRecently=f.pos.distanceTo(a.lastPos);
+    if(now-a.lastPosAt>.55){
+      if(movedRecently<.18)a.stuckFor+=now-a.lastPosAt;
+      else a.stuckFor=0;
+      a.lastPos=f.pos.clone();a.lastPosAt=now;
+    }
+    if(a.stuckFor>.70){
+      a.path=[];
+      a.pathIndex=0;
+      a.nextThink=0;
+      a.stuckFor=0;
+      a.strafe=(Math.random()<.5?-1:1)*1;
+      a.state='evade';
+    }
+
+    let destination=null;
+    let attacking=false;
+    let squidWanted=false;
+
+    if(!target){
+      a.state='patrol';
+      destination=a.waypoint&&Math.hypot(a.waypoint.x-f.pos.x,a.waypoint.z-f.pos.z)>1.3
+        ? a.waypoint
+        : choosePatrolPoint(f);
+      a.waypoint=destination;
+      squidWanted=ownInk;
+    }else if(f.hp<=30 || f.ink<16){
+      a.state='retreat';
+      /* Retreat to team-side friendly route. */
+      const homeCandidates=waypoints.filter(p=>f.team==='A'?p.z<=-20:p.z>=20);
+      destination=(homeCandidates.sort((p,q)=>{
+        const dp=Math.hypot(p.x-f.pos.x,p.z-f.pos.z),dq=Math.hypot(q.x-f.pos.x,q.z-f.pos.z);
+        return dp-dq;
+      })[0])||{x:0,z:f.team==='A'?-54:54};
+      squidWanted=ownInk || targetDist>14;
+      if(f.ink<25)paintAndRechargeAI(f,a,now,new THREE.Vector3(destination.x-f.pos.x,0,destination.z-f.pos.z).normalize());
+    }else if(a.state==='evade'){
+      const side=a.strafe||1;
+      const away=new THREE.Vector3().subVectors(f.pos,target.pos).setY(0);
+      if(away.lengthSq()<.01)away.set(side,0,0);
+      away.normalize();
+      const detour=away.clone().applyAxisAngle(new THREE.Vector3(0,1,0),side*Math.PI/2);
+      destination=f.pos.clone().addScaledVector(detour,6);
+      squidWanted=ownInk;
+      if(Math.random()<.04)a.state='attack';
+    }else if(targetDist>ranges.max){
+      a.state='approach';
+      destination=target.pos.clone();
+      squidWanted=ownInk && targetDist>ranges.max+3;
+    }else if(targetDist<ranges.min){
+      a.state='disengage';
+      const away=new THREE.Vector3().subVectors(f.pos,target.pos).setY(0);
+      if(away.lengthSq()<.01)away.set(a.strafe||1,0,0);
+      away.normalize();
+      destination=f.pos.clone().addScaledVector(away,4.5);
+      squidWanted=ownInk && w.category!=='roller' && w.category!=='wiper';
+    }else{
+      a.state='attack';
+      attacking=true;
+      const side=a.strafe||1;
+      if(now>=a.nextThink){
+        a.strafe=Math.random()<.5?-1:1;
+        a.nextThink=now+650+Math.random()*1000;
+      }
+      const rel=new THREE.Vector3().subVectors(f.pos,target.pos).setY(0);
+      if(rel.lengthSq()<.01)rel.set(0,0,1);
+      rel.normalize();
+      const strafe=new THREE.Vector3(-rel.z,0,rel.x).multiplyScalar(side);
+      const step=Math.max(1.8,Math.min(4.0,Math.abs(targetDist-(ranges.min+ranges.max)/2)));
+      destination=f.pos.clone().addScaledVector(strafe,step);
+      /* Every so often the CPU swims to a new angle on friendly ink. */
+      squidWanted=(ownInk && now-a.lastAttack>1800 && Math.random()<.025);
+    }
+
+    if(destination){
+      const goal=routeTarget(f,destination,a,now);
+      const dir=new THREE.Vector3().subVectors(goal,f.pos).setY(0);
+      if(dir.lengthSq()>.09){
+        dir.normalize();
+        if(squidWanted && !friendlyInkAt(f)){
+          /* Paint first, then swim. This makes squid mode a real tactical choice. */
+          paintAndRechargeAI(f,a,now,dir);
+        }
+        const canSwim=!!(squidWanted && friendlyInkAt(f) && f.ink>1);
+        f.squid_mode=canSwim;
+        f._moving=true;
+        moveAIVel(f,dir,delta,canSwim);
+        if(!canSwim){
+          f.human.rotation.y=Math.atan2(dir.x,dir.z);
+          f.root.rotation.y=f.human.rotation.y;
+        }
+      }else{
+        f._moving=false;
+      }
+    }
+
+    /* Apply ink / HP recovery during actual squid movement and paint useful turf. */
+    if(f.squid_mode){
+      f.ink=Math.min(100,f.ink+31*delta);
+      if(f.hp<f.maxHp)f.hp=Math.min(f.maxHp,f.hp+8*delta);
+    }else{
+      f.ink=Math.max(0,f.ink-delta*.55*(attacking?1:.25));
+    }
+    if(!attacking && a.state!=='retreat')paintAndRechargeAI(f,a,now,new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y)));
+
+    /* Weapon attacks happen after movement so the CPU can strafe while firing. */
+    if(attacking && target && !f.squid_mode){
+      attackWithWeaponAI(f,target,now);
+      a.lastAttack=now;
+      useAIBomb(f,target,now);
+      if(f.specialGauge>=100)useAISpecial(f,target,now);
+    }else if(w.category==='charger'||w.category==='spinner'||w.category==='wiper'){
+      a.chargeStarted=0;
+    }
+
+    /* A short ink burst after retreat prevents the CPU from starving forever. */
+    if(f.ink<10 && !f.squid_mode && friendlyInkAt(f)){
+      f.squid_mode=true;
+    }
+
+    updateFighterAnimation(f,!!f._moving,!!f.squid_mode);
+    if(f.squid_mode)f.root.rotation.y=f.human.rotation.y;
+  };
+
+  /* More varied CPU equipment so teams develop distinct roles. */
+  const oldMakeAiCfg=makeAiCfg;
+  makeAiCfg=function(team){
+    const cfg=oldMakeAiCfg(team);
+    const choices=[
+      'スプラシューター','N-ZAP85','プライムシューター','.52ガロン',
+      'バケツスロッシャー','ヒッセン','ノヴァブラスター',
+      'スプラローラー','ダイナモローラー','パブロ','ホクサイ',
+      'スプラスピナー','バレルスピナー','スプラチャージャー','リッター4K',
+      'スパッタリー','デュアルスイーパー','スプラマニューバー',
+      'ドライブワイパー','ジムワイパー','トライストリンガー'
+    ];
+    /* Keep random variety, but make sure the AI pool is drawn from actual named weapons. */
+    const valid=choices.map(n=>weaponList.findIndex(w=>w.name===n)).filter(i=>i>=0);
+    cfg.weapon=valid[Math.floor(Math.random()*valid.length)] ?? cfg.weapon;
+    cfg.gearLoadout={
+      head:GEAR_CATALOG[Math.floor(Math.random()*GEAR_CATALOG.length)].id,
+      body:GEAR_CATALOG.filter(g=>g.slot==='body')[Math.floor(Math.random()*6)].id,
+      shoes:GEAR_CATALOG.filter(g=>g.slot==='shoes')[Math.floor(Math.random()*6)].id
+    };
+    return cfg;
+  };
+
+  /* Existing CPU instances receive logical gear profiles on the next AI tick. */
+  const _oldAnimateGear=window.updateFighterAnimation;
+  setInterval(function(){
+    if(playerFighter&&currentPhase===2)updateGearHud();
+  },350);
+
+  window.__V65_AI_BUILD='TACTICAL-CPU-2026-09-28';
+  window.__V65_GEAR_CATALOG=GEAR_CATALOG;
+})();
+</script>
 </body>
 </html>
