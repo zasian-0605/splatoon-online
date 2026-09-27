@@ -3251,8 +3251,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     document.getElementById('online-panel').style.display='flex';
     const serverInput=document.getElementById('online-server-url');
     const savedServer=localStorage.getItem('splatoonOnlineServer')||'';
-    if(serverInput) serverInput.value=savedServer || (/github\\.io$/i.test(location.hostname)?'':'');
-    if(!savedServer && /github\\.io$/i.test(location.hostname)){
+    if(serverInput) serverInput.value=savedServer || (/github\.io$/i.test(location.hostname)?'':'');
+    if(!savedServer && /github\.io$/i.test(location.hostname)){
       setOnlineStatus('オンラインサーバーを自動設定しました。接続します…');
     }else{
       setOnlineStatus('サーバーに接続します…');
@@ -4989,7 +4989,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function origin(){
     let v=String(localStorage.getItem('splatoonOnlineServer')||'').trim();
     if(!v){
-      if(location.hostname && !/github\\.io$/i.test(location.hostname)) v=location.origin;
+      if(location.hostname && !/github\.io$/i.test(location.hostname)) v=location.origin;
       else v=DEFAULT;
     }
     if(!/^https?:\/\//i.test(v)) v='https://'+v;
