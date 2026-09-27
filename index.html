@@ -521,6 +521,27 @@ let isTyping=false;
 
 const playerConfig = { style:'girl', hair:0, color:0, outfit:0, weapon:0, gear:0, device:'pc' };
 const inkColorPalette = [0xe3ff00, 0xff0055, 0x00d4ff, 0x9900ff];
+
+function loadPlayerConfig(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('splatoonPlayerConfigV2')||'null');
+    if(!saved||typeof saved!=='object') return;
+    ['style','hair','color','outfit','weapon','gear','device'].forEach(k=>{
+      if(saved[k]!==undefined) playerConfig[k]=saved[k];
+    });
+    if(!['girl','boy'].includes(playerConfig.style)) playerConfig.style='girl';
+    if(!['pc','mobile'].includes(playerConfig.device)) playerConfig.device='pc';
+    playerConfig.hair=Number.isFinite(Number(playerConfig.hair))?Number(playerConfig.hair):0;
+    playerConfig.color=Math.max(0,Math.min(inkColorPalette.length-1,Number(playerConfig.color)||0));
+    playerConfig.outfit=Math.max(0,Math.min(49,Number(playerConfig.outfit)||0));
+    playerConfig.weapon=Math.max(0,Math.min(200,Number(playerConfig.weapon)||0));
+    playerConfig.gear=Math.max(0,Math.min(3,Number(playerConfig.gear)||0));
+  }catch(e){}
+}
+function savePlayerConfig(){
+  try{ localStorage.setItem('splatoonPlayerConfigV2',JSON.stringify(playerConfig)); }catch(e){}
+}
+loadPlayerConfig();
 let teamAHex = inkColorPalette[0];
 let teamBHex = 0xff2255;
 
@@ -786,7 +807,7 @@ function setupCustomizeUI(){
     selectOutfit.appendChild(opt);
   });
   selectOutfit.value = playerConfig.outfit;
-  selectOutfit.addEventListener('change',(e)=>{ playerConfig.outfit=parseInt(e.target.value); updateCustomPlayerModel(); });
+  selectOutfit.addEventListener('change',(e)=>{ playerConfig.outfit=parseInt(e.target.value); savePlayerConfig(); updateCustomPlayerModel(); });
 
   const selectWeapon = document.getElementById('select-weapon');
   selectWeapon.innerHTML='';
@@ -796,7 +817,7 @@ function setupCustomizeUI(){
     selectWeapon.appendChild(opt);
   });
   selectWeapon.value = playerConfig.weapon;
-  selectWeapon.addEventListener('change',(e)=>{ playerConfig.weapon=parseInt(e.target.value); updateCustomPlayerModel(); updateWeaponInfo(); });
+  selectWeapon.addEventListener('change',(e)=>{ playerConfig.weapon=parseInt(e.target.value); savePlayerConfig(); updateCustomPlayerModel(); updateWeaponInfo(); });
   updateWeaponInfo();
 
   const renderHairButtons = ()=>{
@@ -813,6 +834,7 @@ function setupCustomizeUI(){
         hairContainer.querySelectorAll('.opt-btn').forEach(b=>b.classList.remove('active'));
         btn.classList.add('active');
         playerConfig.hair = opt.val;
+        savePlayerConfig();
         updateCustomPlayerModel();
       });
       hairContainer.appendChild(btn);
@@ -830,6 +852,7 @@ function setupCustomizeUI(){
         playerConfig[key] = isNaN(val) ? val : parseInt(val);
         if(key==='style'){ playerConfig.hair=0; renderHairButtons(); }
         if(key==='device'){ applyDeviceSetting(); }
+        savePlayerConfig();
         updateCustomPlayerModel();
       });
     });
@@ -847,8 +870,9 @@ function setupCustomizeUI(){
     e.stopPropagation();
     cancelAnimationFrame(customAnimFrameId);
     document.getElementById('customize-screen').style.display='none';
-    teamAHex = inkColorPalette[playerConfig.color];
-    teamBHex = (playerConfig.color===1) ? 0x00e5ff : 0xff2255;
+    savePlayerConfig();
+    teamAHex = 0xe3ff00;
+    teamBHex = 0xff2255;
     if(playerFighter){
       playerFighter.weapon = weaponList[playerConfig.weapon];
       playerFighter.chargeStart = 0;
@@ -861,6 +885,12 @@ function setupCustomizeUI(){
 /* =========================================================
    3Dキャラクターモデル生成 (プレイヤー/AI共用)
    ========================================================= */
+function getFighterInkHex(f){
+  const fallback = f?.team==='B' ? teamBHex : teamAHex;
+  const v = f?.cfg?.inkColorHex;
+  return Number.isFinite(Number(v)) ? Number(v) : fallback;
+}
+
 function buildPlayerModelGroup(cfg){
   const root = new THREE.Group();
 
@@ -1476,7 +1506,8 @@ function rebuildFighterModel(f, cfg){
 }
 
 function respawnFighter(f){
-  const sp = f.team==='A' ? spawnPointA : spawnPointB;
+  const onlineSp=f.onlineSpawn;
+  const sp = onlineSp ? new THREE.Vector3(onlineSp.x||0,onlineSp.y||0,onlineSp.z||0) : (f.team==='A' ? spawnPointA : spawnPointB);
   f.pos.set(sp.x + (Math.random()-0.5)*6, 0, sp.z + (Math.random()-0.5)*6);
   f.hp = f.maxHp;
   f.alive = true;
@@ -1525,10 +1556,12 @@ function killFighter(f){
   f.deathLocation = f.pos.clone();
   f.root.visible = false;
   f.respawnAt = performance.now() + 3000;
+  f.respawnSeconds = 3;
   addKillFeed(`${weaponCategoryIcon(f)} ${f.team==='A'?'A':'B'} ${f.id} がやられた`, 'dead');
   updateTeamLifeStrip();
   if(f.isPlayer){
     document.getElementById('respawn-overlay').style.display='flex';
+    const sub=document.querySelector('#respawn-overlay .sub'); if(sub) sub.textContent='あと 3秒で復活';
     showDeathLocation(f);
     showToast(`💀 ${f.deathLocation.x.toFixed(1)}, ${f.deathLocation.z.toFixed(1)} でやられた`);
   }
@@ -2792,8 +2825,13 @@ function animate3D(token){
 
   if(playerFighter.alive){
     updatePlayerMovement(delta);
-  } else if(time > playerFighter.respawnAt){
-    respawnFighter(playerFighter);
+  } else {
+    const left=Math.max(0,Math.ceil((playerFighter.respawnAt-time)/1000));
+    const overlayMsg=document.querySelector('#respawn-overlay .msg');
+    const overlaySub=document.querySelector('#respawn-overlay .sub');
+    if(overlayMsg) overlayMsg.textContent=left>0?'やられた！':'復活！';
+    if(overlaySub) overlaySub.textContent=left>0?('あと '+left+'秒で復活'):'';
+    if(time > playerFighter.respawnAt) respawnFighter(playerFighter);
   }
 
   if(currentPhase===2){
@@ -2845,7 +2883,8 @@ function animate3D(token){
     document.getElementById('alive-count').textContent = `生存 A:${aliveA}/4  B:${aliveB}/4`;
     updateTeamLifeStrip();
     if(window.__battleDeadline && Date.now()>=window.__battleDeadline) battleTimer=0;
-    if((aliveA===0 || aliveB===0) && battleActive){ battleTimer=0; }
+    const onlineMatch=!!(onlineActive&&onlineStarted);
+    if((aliveA===0 || aliveB===0) && battleActive && !onlineMatch){ battleTimer=0; }
     if(battleTimer<=0 && battleActive){ endBattle(); return; }
   }
 
@@ -3252,7 +3291,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const cost=inkCost(fighter,22);
     if(!consumeInk(fighter,cost)) return;
     fighter.lastSub=now;
-    const col=fighter.team==='A'?teamAHex:teamBHex;
+    const col=getFighterInkHex(fighter);
     const geo=new THREE.SphereGeometry(.3,8,8), mat=new THREE.MeshBasicMaterial({color:col}), mesh=new THREE.Mesh(geo,mat);
     const spawnPos=fighter.pos.clone();spawnPos.y+=1.2;mesh.position.copy(spawnPos);scene.add(mesh);
     const vel=aimDir.clone().multiplyScalar(def.speed);vel.y+=7;
@@ -3503,7 +3542,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           window.__onlineLog?.('WS SEND', payload);
           onlineSocket.send(JSON.stringify(payload));
         }else{
-          onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+          onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon,config:Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]})}));
         }
       };
       onlineSocket.onmessage=(ev)=>{
@@ -3530,7 +3569,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
             return;
           }
           showOnlineProfile(m.profile);
-          const payload={type:'joinQueue',weaponId:playerConfig.weapon};
+          const payload={type:'joinQueue',weaponId:playerConfig.weapon,config:Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]})};
           window.__onlineLog?.('WS SEND', payload);
           onlineSocket.send(JSON.stringify(payload));
           return;
@@ -3646,17 +3685,35 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function startOnlineBattle(m){
     hideOnlinePanel(); clearRemoteFighters();
-    const me=playerFighter;me.team=m.team;me.id=onlinePlayerId;me.cfg.color=playerConfig.color;
-    me.root.position.copy(m.spawn|| (m.team==='A'?spawnPointA:spawnPointB));me.pos=me.root.position;me.hp=me.maxHp;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
-    teamAHex=inkColorPalette[playerConfig.color]; teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
+    const me=playerFighter;
+    me.team=m.team;me.id=onlinePlayerId;
+    me.cfg=Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]});
+    me.weapon=weaponList[playerConfig.weapon]||weaponList[0];
+    me.onlineSpawn=Object.assign({},m.spawn||(m.team==='A'?spawnPointA:spawnPointB));
+    rebuildFighterModel(me,me.cfg);
+    me.root.position.copy(me.onlineSpawn);me.pos=me.root.position;me.hp=me.maxHp;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
+    // チームカラーは固定（塗り判定用）。自分の見た目・弾の色はplayerConfig.colorを使う。
+    teamAHex=0xe3ff00; teamBHex=0xff2255;
     battleTimer=180; playerFighter.specialGauge=0; window.__battleDeadline=Date.now()+181000; battleActive=true; currentPhase=2;
     document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block';document.getElementById('range-hint').style.display='none';document.getElementById('kill-feed').innerHTML='';
     (m.players||[]).forEach(p=>{if(p.id!==onlinePlayerId)ensureRemoteFighter(p);});
   }
   function ensureRemoteFighter(p){
-    if(remoteMap.has(p.id))return remoteMap.get(p.id);
-    const cfg=makeAiCfg(p.team);cfg.weapon=p.weaponId??0;cfg.color=playerConfig.color;cfg.inkColorHex=p.team==='A'?teamAHex:teamBHex;
-    const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});rf.ai=null;rf.weapon=weaponList[p.weaponId]||weaponList[0];rf.remote=true;remoteMap.set(p.id,rf);fighters.push(rf);return rf;
+    if(remoteMap.has(p.id)) return remoteMap.get(p.id);
+    const src=p.config||p.cfg||{};
+    const cfg={
+      style:['girl','boy'].includes(src.style)?src.style:(Math.random()<0.5?'girl':'boy'),
+      hair:Number.isFinite(Number(src.hair))?Number(src.hair):0,
+      color:Number.isFinite(Number(src.color))?Number(src.color):0,
+      outfit:Number.isFinite(Number(src.outfit))?Number(src.outfit):0,
+      weapon:Number.isFinite(Number(p.weaponId))?Number(p.weaponId):Number(src.weapon)||0,
+      gear:Number.isFinite(Number(src.gear))?Number(src.gear):0,
+      device:'pc',
+      inkColorHex:Number.isFinite(Number(src.inkColorHex))?Number(src.inkColorHex):(inkColorPalette[Math.max(0,Math.min(3,Number(src.color)||0))]||teamBHex)
+    };
+    const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
+    rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;
+    remoteMap.set(p.id,rf);fighters.push(rf);return rf;
   }
   function applyRemoteState(m){
     if(m.id===onlinePlayerId)return;
@@ -3683,7 +3740,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   });
   document.getElementById('online-ready').addEventListener('click',()=>{
-    if(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted){onlineReady=!onlineReady;onlineSocket.send(JSON.stringify({type:'ready',ready:onlineReady,weaponId:playerConfig.weapon}));}
+    if(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted){onlineReady=!onlineReady;onlineSocket.send(JSON.stringify({type:'ready',ready:onlineReady,weaponId:playerConfig.weapon,config:Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]})}));}
   });
   document.getElementById('online-cancel').addEventListener('click',closeOnlinePanel);
   document.getElementById('online-server-save')?.addEventListener('click',()=>{
@@ -5006,8 +5063,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       ensureWorld();
       if(!stageBuilt) buildStage();
 
-      teamAHex=inkColorPalette[playerConfig.color];
-      teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
+      teamAHex=0xe3ff00;
+      teamBHex=0xff2255;
 
       // Keep only the player.
       fighters=fighters.filter(f=>{
