@@ -1310,16 +1310,13 @@ function buildPlayerModelGroup(cfg){
       addBox(weaponGroup,.16,.10,.16,dark,0,-r*2.0,0);
       addSubdividedBox(weaponGroup,.22,.14,.50,glow,0,-r*2.35,0);
     } else if(selectedWeapon.category==='maneuver'){
-      // マニューバー：二丁を左右に開いた未来的ブラスター
-      const side=0.23;
-      [[-side,0],[side,0]].forEach(([sx])=>{
-        const g=new THREE.Group(); g.position.x=sx; weaponGroup.add(g);
-        addSubdividedBox(g,.16,.16,.42,c,0,0,0,0, sx<0?-.10:.10,0);
-        addCyl(g,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
-        addCyl(g,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
-        addBox(g,.11,.26,.11,dark,0,-.20,-.02);
-      });
-      addBox(weaponGroup,.34,.07,.12,metal,0,.05,-.12);
+      // マニューバー：このweaponGroupは片手に1個ずつ配置されるため、
+      // ここでは「片手用の1丁」だけを作る。これで画面上は左右2丁になる。
+      addSubdividedBox(weaponGroup,.16,.16,.42,c,0,0,0,0,0,0);
+      addCyl(weaponGroup,.055,.055,.46,10,metal,0,0,.30,Math.PI/2,0,0);
+      addCyl(weaponGroup,.075,.075,.10,10,glow,0,0,.55,Math.PI/2,0,0);
+      addBox(weaponGroup,.11,.26,.11,dark,0,-.20,-.02);
+
     } else if(selectedWeapon.category==='slosher'){
       // スロッシャー：明確なバケツ形状＋液体チャンバー＋長い柄
       const bucket=new THREE.Group(); bucket.rotation.z=Math.PI/2; weaponGroup.add(bucket);
@@ -1989,7 +1986,7 @@ function getLaunchDirection35(aimDir, spread=0, fallbackYaw=0){
     const yawJitter=(Math.random()-0.5)*spread*2;
     raw.applyAxisAngle(new THREE.Vector3(0,1,0),yawJitter).normalize();
   }
-  const angleFromUp=THREE.MathUtils.degToRad(35);
+  const angleFromUp=THREE.MathUtils.degToRad(90);
   const horizontal=Math.sin(angleFromUp);
   const vertical=Math.cos(angleFromUp);
   return new THREE.Vector3(raw.x*horizontal,vertical,raw.z*horizontal).normalize();
@@ -2478,9 +2475,9 @@ function spawnChargeOrbProjectile(fighter,target,{remote=false}={}){
   mesh.position.copy(start);
   scene.add(mesh);
 
-  // 角度定義：上0° / 正面90° / 下180° → 35° = 水平から55°上。
-  // まず水平距離を求め、その角度で実際の放物線を飛ばして着地点に合わせる。
-  const launchAngle=THREE.MathUtils.degToRad(55);
+  // 角度定義：上0° / 正面90° / 下180° → 90° = 完全に正面。
+  // チャージオーブも通常射撃と同じく、初速は水平。重力で時間とともに落下する。
+  const launchAngle=THREE.MathUtils.degToRad(90);
   const g=24;
   const dx=goal.x-start.x, dz=goal.z-start.z;
   const horizontalDist=Math.max(0.1,Math.hypot(dx,dz));
@@ -2491,10 +2488,17 @@ function spawnChargeOrbProjectile(fighter,target,{remote=false}={}){
   // y = y0 + v*sinA*t - 1/2*g*t²
   // xz = v*cosA*t から、指定着地点まで飛ぶ初速を求める。
   let speed=18;
-  const denom=2*cosA*cosA*(horizontalDist*Math.tan(launchAngle)-dy);
-  if(denom>0.001){
-    const solved=(g*horizontalDist*horizontalDist)/denom;
-    if(Number.isFinite(solved) && solved>25) speed=Math.min(28,Math.sqrt(solved));
+  if(Math.abs(cosA)<0.0001){
+    // 水平発射。軽い落下を伴うので、一定時間で着地点へ届く速度にする。
+    const flightTime=0.82;
+    speed=horizontalDist/flightTime;
+    speed=Math.max(12,Math.min(32,speed));
+  }else{
+    const denom=2*cosA*cosA*(horizontalDist*Math.tan(launchAngle)-dy);
+    if(denom>0.001){
+      const solved=(g*horizontalDist*horizontalDist)/denom;
+      if(Number.isFinite(solved) && solved>25) speed=Math.min(28,Math.sqrt(solved));
+    }
   }
 
   const velocity=horizontalDir.clone().multiplyScalar(speed*cosA);
@@ -3969,11 +3973,71 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     sfx("special");
   };
 
+  /* ---------- マニューバーのスライド ---------- */
+  function startManeuverSlide(f){
+    if(!f||!f.alive||f.weapon?.category!=="maneuver") return false;
+    const now=performance.now();
+    if(f._maneuverSlideUntil && now<f._maneuverSlideUntil) return false;
+    if(f._maneuverSlideCooldown && now<f._maneuverSlideCooldown) return false;
+    if(!isShooting) return false;
+
+    setupFighterEconomy(f);
+    const cost=12;
+    if(!consumeInk(f,inkCost(f,cost))) return false;
+
+    const dir=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+    if(dir.lengthSq()<0.0001) dir.set(0,0,-1);
+    dir.normalize();
+
+    f._maneuverSlideUntil=now+420;
+    f._maneuverSlideCooldown=now+900;
+    f._maneuverSlideDir=dir;
+    f._maneuverSlideSpeed=24;
+    f.invulnUntil=Math.max(f.invulnUntil||0,now+260);
+    f._maneuverSlideWasActive=true;
+    canJump=false;
+    playerVelocity.y=0;
+    showToastFor(f,'スライド！');
+    return true;
+  }
+
   /* ---------- Player movement override: swim ink+HP, roller/brush/wiper ---------- */
   updatePlayerMovement = function(delta){
     const f=playerFighter;if(!f||!f.alive)return;
     setupFighterEconomy(f);
     const now=performance.now();
+
+    // マニューバーは「撃ちながらジャンプ入力」でスライド。
+    const wantsManeuverSlide=f.weapon?.category==="maneuver" && isShooting && keys.space;
+    if(wantsManeuverSlide && !f._maneuverSlideWasActive){
+      startManeuverSlide(f);
+    }
+    const slideActive=!!(f._maneuverSlideUntil && now<f._maneuverSlideUntil);
+
+    if(slideActive){
+      const d=f._maneuverSlideDir||new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+      f.human.rotation.y=yaw+Math.PI;
+      playerVelocity.x=d.x*(f._maneuverSlideSpeed||24);
+      playerVelocity.z=d.z*(f._maneuverSlideSpeed||24);
+      playerVelocity.y=0;
+      const climbed=tryMoveWithCollision(f,playerVelocity,delta,false);
+      if(!climbed){
+        const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
+        f.pos.y=floorY;
+      }
+      f.root.rotation.y=f.human.rotation.y;
+      f.squid_mode=false;
+      setSquidVisual?.(f,false);
+      updateFighterAnimation(f,true,false);
+
+      if(now>=f._maneuverSlideUntil){
+        f._maneuverSlideUntil=0;
+        f._maneuverSlideWasActive=false;
+      }
+      return;
+    }
+
+    if(!keys.space) f._maneuverSlideWasActive=false;
     const isSquid=!!keys.shift && onFighterInk(f) && f.ink>0;
     f.squid_mode=isSquid;
 
@@ -4023,7 +4087,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const climbing=tryMoveWithCollision(f,playerVelocity,delta,isSquid);
     if(isJetpack){playerVelocity.y=0;f.pos.y=Math.max(f.pos.y,3.2);}
     else{
-      if(keys.space&&canJump&&!climbing){playerVelocity.y=10;canJump=false;sfx("jump");}
+      if(keys.space&&canJump&&!climbing && !(f.weapon?.category==="maneuver" && isShooting)){
+        playerVelocity.y=10;canJump=false;sfx("jump");
+      }
       if(!climbing)playerVelocity.y-=30*delta;else playerVelocity.y=4.5;
       f.pos.y+=playerVelocity.y*delta;
     }
