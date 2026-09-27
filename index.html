@@ -123,6 +123,14 @@ html.battle-cursor-hidden,html.battle-cursor-hidden body,html.battle-cursor-hidd
 html.battle-cursor-hidden canvas{cursor:none !important;}
 body.pointer-lock-ready{cursor:none !important;}
 
+/* V47: 明示的にマウス解除中なら、ゲームcanvas上でもカーソルを必ず表示する。 */
+html.cursor-force-visible,
+html.cursor-force-visible body,
+html.cursor-force-visible body *,
+html.cursor-force-visible canvas{
+  cursor:auto !important;
+}
+
 
 /* v14 Battle HUD */
 #top-battle-status{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:18;display:none;pointer-events:none;min-width:min(720px,88vw);text-align:center;}
@@ -3618,11 +3626,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   const fullCanvas=document.getElementById('fullmap-canvas');
   const fullCtx=fullCanvas?.getContext('2d');
   let pointerLockWanted=false;
+  let cursorForceVisible=false;
   let mapFrame=0;
 
   function battleScreen(){ return currentPhase===1.5 || currentPhase===2; }
   function setCursorHard(hidden){
+    if(cursorForceVisible) hidden=false;
     root.classList.toggle('battle-cursor-hidden',!!hidden);
+    root.classList.toggle('cursor-force-visible',cursorForceVisible);
     document.body.classList.toggle('pointer-lock-ready',!!hidden);
     if(hidden){
       document.body.style.setProperty('cursor','none','important');
@@ -3638,9 +3649,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   function requestLock(){
+    cursorForceVisible=false;
+    root.classList.remove('cursor-force-visible');
     if(!battleScreen() || !renderer?.domElement) return;
     pointerLockWanted=true;
-    setCursorHard(true);
+    setCursorHard(true)
     try{
       if(document.pointerLockElement!==renderer.domElement){
         renderer.domElement.requestPointerLock?.();
@@ -3650,9 +3663,22 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   function releaseLock(){
     pointerLockWanted=false;
+    cursorForceVisible=true;
+    root.classList.add('cursor-force-visible');
     try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
+    // canvasへ残ったinline指定もここで完全に上書き。
+    document.querySelectorAll('*').forEach(el=>el.style.setProperty('cursor','auto','important'));
+    document.body.style.setProperty('cursor','auto','important');
+    if(renderer?.domElement) renderer.domElement.style.setProperty('cursor','auto','important');
     setCursorHard(false);
   }
+
+  function requestLock(){
+    cursorForceVisible=false;
+    root.classList.remove('cursor-force-visible');
+    if(!battleScreen() || !renderer?.domElement) return;
+    pointerLockWanted=true;
+    setCursorHard(true);
 
   document.addEventListener('pointerlockchange',()=>{
     const locked=document.pointerLockElement===renderer?.domElement;
@@ -5061,6 +5087,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 /* V41: temporarily release pointer lock for T/M overlays */
 (function(){
   function releaseForOverlay(){
+    document.documentElement.classList.add('cursor-force-visible');
+    document.documentElement.classList.remove('battle-cursor-hidden');
+    document.body.classList.remove('pointer-lock-ready');
     try{ window.__V10?.releaseLock?.(); }catch(e){
       try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(_){}
       document.documentElement.classList.remove('battle-cursor-hidden');
@@ -5288,9 +5317,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function unlock(){
     if(!outsideBattle()) return;
     try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
+    document.documentElement.classList.add('cursor-force-visible');
     document.documentElement.classList.remove('battle-cursor-hidden');
     document.body.classList.remove('pointer-lock-ready');
-    document.querySelectorAll('*').forEach(el=>el.style.removeProperty('cursor'));
+    document.querySelectorAll('*').forEach(el=>el.style.setProperty('cursor','auto','important'));
     document.body.style.setProperty('cursor','auto','important');
     if(renderer?.domElement) renderer.domElement.style.setProperty('cursor','auto','important');
   }
