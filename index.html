@@ -2600,7 +2600,7 @@ function updateOngoingEffects(delta){
       paintGround(c.pos.x+(Math.random()-0.5)*3, c.pos.z+(Math.random()-0.5)*3, 2.2, col);
       fighters.forEach(o=>{
         if(o.team!==c.team && o.alive && o.pos.distanceTo(c.pos)<5){
-          applyDamage(o, 6, null);
+          applyDamage(o, c.customDamage ? 18 : 6, null);
         }
       });
     }
