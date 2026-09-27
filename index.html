@@ -100,6 +100,8 @@ canvas{display:block;width:100%;height:100%;}
 #online-start{background:#e3ff00;color:#2f059c;}
 #online-cancel{background:#ff0055;color:#fff;}
 #online-note{font:12px/1.5 sans-serif;color:#c8c8d8;margin-top:12px;text-align:center;}
+#online-match-note{margin:8px 0 12px;text-align:center;font:800 14px/1.5 Arial,sans-serif;color:#fff;}
+#online-cancel{width:100%;background:#ff0055;color:#fff;}
 .online-team-badge{display:inline-block;padding:4px 10px;border-radius:999px;margin:3px;background:#222;border:1px solid #777;font:800 12px sans-serif;}
 
 /* v8: force browser cursor hidden during gameplay */
@@ -309,18 +311,12 @@ body.pointer-lock-ready{cursor:none !important;}
       <div id="online-count">0 / 8</div>
       <div id="online-progress-note" style="font:700 12px/1.4 Arial,sans-serif;color:#ddd;">対戦相手を探しています</div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin:8px 0;">
-      <input id="online-server-url" type="text" placeholder="オンラインサーバーURL（例：https://xxxxx.onrender.com）"
-        style="flex:1;padding:9px 10px;border-radius:8px;border:2px solid #555;background:#0c0c12;color:#fff;font:700 12px sans-serif;">
-      <button id="online-server-save" style="padding:9px 12px;border:0;border-radius:8px;background:#00d4ff;color:#07101a;font-weight:900;cursor:pointer;">保存</button>
-    </div>
-    <div id="online-room">部屋を作成しています…</div>
+    <div id="online-match-note">自動で対戦相手を探しています。準備OKを押す必要はありません。</div>
+    <div id="online-room">マッチング待機中…</div>
     <div id="online-actions">
-      <button id="online-start">部屋に入る</button>
-      <button id="online-ready">準備OK</button>
       <button id="online-cancel">戻る</button>
     </div>
-    <div id="online-note">2〜8人の部屋制。部屋の全員が準備OKになったら、その人数のまま対戦開始します。</div>
+    <div id="online-note">2〜8人でマッチング。人数がそろうと自動で対戦を開始します。</div>
   </div>
 </div>
 
@@ -3316,17 +3312,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(m.type==='room'){
           onlineRoomId=m.roomId;
           renderOnlineRoom(m.players||[]);
-          // 3キーのオンライン入口は「部屋に入る」まで自動で進める。
-          // 2台目が入ったら両方とも準備OKになり、手動操作なしで開始する。
+          // 自動準備: 「準備OK」ボタンを押さなくてよい。
           if(!onlineStarted && onlineSocket && onlineSocket.readyState===1 && !onlineReady){
             onlineReady=true;
             onlineSocket.send(JSON.stringify({type:'ready',ready:true,weaponId:playerConfig.weapon}));
-            setOnlineConnecting('マッチング中');
-            setOnlineCount(m.players.length,'準備完了。対戦相手を探しています');
-          }else{
-            setOnlineConnecting('マッチング中');
-            setOnlineCount(m.players.length,m.players.length<2?'対戦相手を探しています':'参加者を確認しています');
           }
+          setOnlineConnecting(m.players.length<2 ? 'オンライン接続中 / マッチング中' : 'マッチング成立待ち');
+          setOnlineCount(m.players.length,m.players.length<2?'対戦相手を探しています':'自動準備完了・対戦開始待ち');
           return;
         }
         if(m.type==='matchFound'){
@@ -3457,10 +3449,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     setOnlineConnecting('オンライン接続中');
     setOnlineCount(0,'Renderへ接続しています');
     const start=document.getElementById('online-start');
-    if(start){
-      start.textContent='接続中…';
-      start.disabled=true;
-    }
+    if(start) start.style.display='none';
   };
 
   /* ---------- Patch remote paint + matchFound color roster ---------- */
@@ -5286,34 +5275,30 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(test) test.style.display='none';
     const result=document.getElementById('result-screen');
     if(result) result.style.display='none';
+    const news=document.getElementById('news-screen');
+    if(news) news.style.display='none';
+    const customize=document.getElementById('customize-screen');
+    if(customize) customize.style.display='none';
     try{ window.__V10?.releaseLock?.(); }catch(e){}
 
-    if(currentPhase===1.5 || currentPhase===2){
-      try{
-        openOnlinePanel();
-        return true;
-      }catch(err){
-        console.error('[ONLINE MATCHMAKING]',err);
-        return false;
-      }
-    }
+    // P/3は試し撃ちを経由しない。オンラインUIを最初に表示してから接続する。
+    const panel=document.getElementById('online-panel');
+    if(!panel) return false;
+    panel.style.display='flex';
+    panel.style.visibility='visible';
+    panel.style.opacity='1';
 
-    // From customize/news/result/etc.: enter the playable world, then open the same UI.
     try{
-      const started=typeof window.__forcePractice==='function'
-        ? window.__forcePractice()
-        : (typeof startRangePhase==='function' ? (startRangePhase(),currentPhase===1.5) : false);
-      if(started){
-        setTimeout(()=>{
-          try{ window.__V10?.releaseLock?.(); }catch(e){}
-          try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE MATCHMAKING PANEL]',err); }
-        },120);
-        return true;
-      }
+      openOnlinePanel();
+      setOnlineConnecting('オンライン接続中');
+      setOnlineCount(0,'対戦相手を探しています');
+      return true;
     }catch(err){
-      console.error('[ONLINE MATCHMAKING RANGE]',err);
+      console.error('[ONLINE MATCHMAKING]',err);
+      setOnlineConnecting('オンライン接続エラー');
+      setOnlineCount(0,'Renderサーバーに接続できません');
+      return true;
     }
-    return false;
   };
 
   window.addEventListener('keydown',function(e){
