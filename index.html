@@ -6468,7 +6468,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         for(let k=0;k<6;k++){
           const a=b.angle+k*Math.PI/3;
           const p=b.f.pos.clone().add(new THREE.Vector3(Math.sin(a)*3,1.1,Math.cos(a)*3));
-          effectBeam(p,b.f.team,c);
+          effectBeam(p,b.f.team,col(b.f));
         }
       }
     }
@@ -6476,7 +6476,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const n=fx.nodes[i];if(now>n.end){fx.nodes.splice(i,1);continue;}
       n.next-=delta;
       if(n.next<=0){
-        n.next=2.3;ringFx(n.p,col({team:n.team}),3.5);
+        n.next=2.3;ringFx(n.p,n.team==='A'?teamAHex:teamBHex,3.5);
         fighters.forEach(o=>{if(o.alive&&o.team!==n.team&&o.pos.distanceTo(n.p)<7)applyDamage(o,45,null);});
       }
     }
