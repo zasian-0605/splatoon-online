@@ -7170,8 +7170,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     d.normalize();
     const end=traceForward(origin,d,w.range||55,.45);
     // Charger paints the entire line immediately, not just the impact point.
-    trailPath(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color,1.0);
-    sendPaintSegment(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color);
+    trailPath(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color, false);
+    if(f.isPlayer) sendPaintSegment(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color);
     const hitStep=.45;
     let hit=null;
     for(let t=.5;t<=origin.distanceTo(end);t+=hitStep){
@@ -7207,7 +7207,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const end=traceForward(origin,dir,w.range||30,.45);
     const radius=(w.paintRadius||.8)*(opts.paintMult||1);
     trailPath(origin,end,radius,color,1);
-    sendPaintSegment(origin,end,radius,color);
+    if(!opts.noNetwork && f.isPlayer) sendPaintSegment(origin,end,radius,color);
     const b=spawnBulletV60(f,dir,{
       speed:w.speed||35,damage:opts.damage===undefined?w.damage:opts.damage,
       gravity:opts.gravity||0,radius:opts.radius||.14,paintRadius:radius,life:w.life||1.1,
@@ -7994,6 +7994,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       f.human.rotation.y=yaw+Math.PI;
       f.root.rotation.y=f.human.rotation.y;
       if(moveInput) playerVelocity.multiplyScalar(.72);
+      if(!moveInput){f._v60RollLast=null;f._v60BrushLast=null;}
       if(w.brush) doBrushV60(f,now,moveInput);
       else doRollerV60(f,now,moveInput);
       f._moving=moveInput;
@@ -8337,8 +8338,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         fireLineShot(rf,d,rr,{kind:'splatling',paintMult:.82,noNetwork:true});
       }
     }else if(wp.category==='charger'){
-      if(wp.kind==='stringer')fireStringerShot(rf,d,.85);
-      else fireChargerShotV60(rf,d,1);
+      if(wp.kind==='stringer')fireStringerShot(rf,d,mode==='stringer'?charge:.85);
+      else fireChargerShotV60(rf,d,mode==='charger'?charge:1);
     }else if(wp.category==='wiper'){
       fireBladeSlashV60(rf,mode==='wiperSlash'?charge:.85,d);
     }else{
@@ -8459,7 +8460,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     subInstances.push(s);
     sfx('bomb');
     if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'sub',x:start.x,y:start.y,z:start.z,vx:vel.x,vy:vel.y,vz:vel.z,subType:'fizzyBomb',weaponId:f.weapon.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({type:'sub',x:start.x,y:start.y,z:start.z,vx:vel.x,vy:vel.y,vz:vel.z,subType:'fizzyBomb',weaponId:f.weapon.id,charge:held}));}catch{}
     }
   }
   document.addEventListener('mousedown',begin,true);
