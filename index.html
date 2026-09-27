@@ -329,6 +329,43 @@ body.pointer-lock-ready{cursor:none !important;}
 </div>
 
 <script>
+/* V46: 最優先のP/3オンライン入口。後続のゲーム処理に依存しない。 */
+(function(){
+  window.addEventListener('keydown',function(e){
+    if(e.code!=='KeyP' && e.code!=='Digit3') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    // 未ログインならログイン画面、それ以外はオンライン画面を即表示。
+    if(window.__accountReady!==true){
+      if(window.showAccountScreen) window.showAccountScreen();
+      return;
+    }
+
+    try{ window.__V10?.releaseLock?.(); }catch(_){}
+    const panel=document.getElementById('online-panel');
+    const count=document.getElementById('online-count');
+    const status=document.getElementById('online-status');
+    const note=document.getElementById('online-progress-note');
+    if(panel){
+      panel.style.display='flex';
+      panel.style.visibility='visible';
+      panel.style.opacity='1';
+    }
+    if(count) count.textContent='1 / 8';
+    if(status) status.textContent='オンライン接続中';
+    if(note) note.textContent='自分が参加中。対戦相手を探しています';
+
+    if(typeof window.openOnlineMatchmaking==='function'){
+      try{ window.openOnlineMatchmaking(); }catch(err){ console.error('[V46 ONLINE]',err); }
+    }else if(typeof openOnlinePanel==='function'){
+      try{ openOnlinePanel(); }catch(err){ console.error('[V46 PANEL]',err); }
+    }
+  },true);
+})();
+</script>
+
+<script>
 /* =========================================================
    グローバル状態
    ========================================================= */
@@ -1960,6 +1997,7 @@ function setupControls(){
   const knob = document.getElementById('joystick-knob');
 
   dom.addEventListener('touchstart',(e)=>{
+    if(playerConfig.device!=='mobile') return;
     for(let i=0;i<e.changedTouches.length;i++){
       const t=e.changedTouches[i];
       if(t.clientX < window.innerWidth/2){
@@ -1980,6 +2018,7 @@ function setupControls(){
   },{passive:false});
 
   dom.addEventListener('touchmove',(e)=>{
+    if(playerConfig.device!=='mobile') return;
     e.preventDefault();
     for(let i=0;i<e.changedTouches.length;i++){
       const t=e.changedTouches[i];
@@ -1999,6 +2038,7 @@ function setupControls(){
   },{passive:false});
 
   dom.addEventListener('touchend',(e)=>{
+    if(playerConfig.device!=='mobile') return;
     for(let i=0;i<e.changedTouches.length;i++){
       const t=e.changedTouches[i];
       if(t.identifier===leftTouchId){ leftTouchId=null; knob.style.display='none'; keys.w=keys.a=keys.s=keys.d=false; }
