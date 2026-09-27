@@ -8702,127 +8702,126 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   let gearPanel=null;
+  let gearSelectedSlot='head';
+  let gearSelectedId=null;
+
+  function gearEffectsText(item){
+    if(!item) return '効果なし';
+    const fx=item.fx||{}; const a=[];
+    if(Number.isFinite(fx.swim))a.push('🦑 イカダッシュ ×'+fx.swim.toFixed(2));
+    if(Number.isFinite(fx.move))a.push('🏃 ヒト移動 ×'+fx.move.toFixed(2));
+    if(Number.isFinite(fx.inkSaver))a.push('🫙 インク消費 '+((1-fx.inkSaver)*100).toFixed(0)+'%減');
+    if(Number.isFinite(fx.inkRegen))a.push('💧 インク回復 ×'+fx.inkRegen.toFixed(2));
+    if(Number.isFinite(fx.specialGain))a.push('⚡ スペシャル増加 ×'+fx.specialGain.toFixed(2));
+    if(Number.isFinite(fx.maxHp))a.push('❤ 耐久力 +'+fx.maxHp);
+    if(Number.isFinite(fx.respawn))a.push('↻ 復活時間 ×'+fx.respawn.toFixed(2));
+    return a.join('　')||'効果なし';
+  }
+
+  function gearTotal(load){
+    const s={move:1,swim:1,inkSaver:1,inkRegen:1,specialGain:1,maxHp:0,respawn:1};
+    GEAR_SLOTS.forEach(function(slot){
+      const g=GEAR_BY_ID[load[slot.key]]; const fx=g&&g.fx||{};
+      if(Number.isFinite(fx.move))s.move*=fx.move;
+      if(Number.isFinite(fx.swim))s.swim*=fx.swim;
+      if(Number.isFinite(fx.inkSaver))s.inkSaver*=fx.inkSaver;
+      if(Number.isFinite(fx.inkRegen))s.inkRegen*=fx.inkRegen;
+      if(Number.isFinite(fx.specialGain))s.specialGain*=fx.specialGain;
+      if(Number.isFinite(fx.maxHp))s.maxHp+=fx.maxHp;
+      if(Number.isFinite(fx.respawn))s.respawn*=fx.respawn;
+    }); return s;
+  }
+
   function ensureGearPanel(){
     if(gearPanel)return gearPanel;
-    gearPanel=document.createElement('div');
-    gearPanel.id='v65-gear-panel';
-    gearPanel.style.cssText=[
-      'position:fixed','left:50%','top:50%','transform:translate(-50%,-50%)',
-      'width:min(520px,90vw)','max-height:82vh','overflow:auto',
-      'z-index:9999','display:none','padding:18px','box-sizing:border-box',
-      'background:rgba(9,8,18,.97)','border:3px solid #e3ff00','border-radius:18px',
-      'box-shadow:0 12px 50px rgba(0,0,0,.65),0 0 35px rgba(227,255,0,.22)',
-      'color:#fff','font-family:Arial,Meiryo,sans-serif'
-    ].join(';');
-
-    const head=document.createElement('div');
-    head.innerHTML='<div style="font:900 27px/1.15 Arial Black,Meiryo,sans-serif;color:#e3ff00;text-shadow:2px 2px #ff0055">ギア装備</div>'+
-      '<div style="margin-top:5px;color:#bbb;font-size:13px">Eで開閉 ・ アタマ / フク / クツを好きな組み合わせに変更できます</div>';
-    gearPanel.appendChild(head);
-
-    const rows={};
-    GEAR_SLOTS.forEach(s=>{
-      const row=document.createElement('div');
-      row.style.cssText='margin-top:14px;padding:12px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)';
-      const label=document.createElement('div');
-      label.textContent=s.label;
-      label.style.cssText='font-weight:900;font-size:16px;margin-bottom:7px;color:#fff';
-      const sel=document.createElement('select');
-      sel.style.cssText='width:100%;padding:10px;background:#181722;color:#fff;border:2px solid #555;border-radius:8px;font-size:14px';
-      GEAR_CATALOG.filter(g=>g.slot===s.key).forEach(g=>{
-        const o=document.createElement('option');
-        o.value=g.id;
-        o.textContent=g.name+' ・ '+g.ability;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change',()=>{
-        playerConfig.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);
-        playerConfig.gearLoadout[s.key]=sel.value;
-        syncPlayerGearVisual();
-        refreshGearPanel();
-      });
-      row.appendChild(label);row.appendChild(sel);gearPanel.appendChild(row);
-      rows[s.key]=sel;
-    });
-
-    const note=document.createElement('div');
-    note.id='v65-gear-note';
-    note.style.cssText='margin-top:14px;padding:11px;border-radius:10px;background:rgba(227,255,0,.08);color:#e3ff00;font:700 12px/1.55 sans-serif';
-    gearPanel.appendChild(note);
-
-    const close=document.createElement('button');
-    close.textContent='装備して閉じる';
-    close.style.cssText='width:100%;margin-top:14px;padding:12px;border:0;border-radius:11px;background:#e3ff00;color:#141414;font-weight:900;font-size:15px;cursor:pointer';
-    close.addEventListener('click',hideGearPanel);
-    gearPanel.appendChild(close);
-
-    gearPanel.addEventListener('keydown',e=>e.stopPropagation());
-    gearPanel.addEventListener('mousedown',e=>e.stopPropagation());
+    gearPanel=document.createElement('div'); gearPanel.id='v65-gear-panel';
+    gearPanel.style.cssText='position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(780px,94vw);max-height:88vh;overflow:auto;z-index:9999;display:none;padding:20px;background:rgba(9,8,18,.98);border:3px solid #e3ff00;border-radius:20px;box-shadow:0 12px 60px rgba(0,0,0,.72),0 0 40px rgba(227,255,0,.2);color:#fff;font-family:Arial,Meiryo,sans-serif';
+    gearPanel.innerHTML='<style>'+
+      '#v65-gear-panel .g65grid{display:grid;grid-template-columns:150px 1fr;gap:12px;margin-top:15px}'+
+      '#v65-gear-panel .g65tabs{display:flex;flex-direction:column;gap:7px}'+
+      '#v65-gear-panel button{font-family:inherit}'+
+      '#v65-gear-panel .g65tab{padding:12px;text-align:left;border:2px solid #444;border-radius:11px;background:#171620;color:#ddd;cursor:pointer;font-weight:900}'+
+      '#v65-gear-panel .g65tab.active{border-color:#e3ff00;background:rgba(227,255,0,.13);color:#e3ff00}'+
+      '#v65-gear-panel .g65tab small{display:block;color:#888;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+      '#v65-gear-panel .g65items{display:grid;grid-template-columns:1fr 1fr;gap:8px}'+
+      '#v65-gear-panel .g65card{min-height:88px;padding:11px;text-align:left;border:2px solid #393842;border-radius:12px;background:#15141d;color:#fff;cursor:pointer}'+
+      '#v65-gear-panel .g65card:hover{border-color:#aaa}'+
+      '#v65-gear-panel .g65card.sel{border-color:#e3ff00;background:rgba(227,255,0,.12);box-shadow:0 0 0 1px #e3ff00 inset}'+
+      '#v65-gear-panel .g65name{font-weight:900;font-size:14px}'+
+      '#v65-gear-panel .g65ability{margin-top:7px;color:#e3ff00;font-size:12px;line-height:1.4}'+
+      '#v65-gear-panel .g65preview{margin-top:12px;padding:13px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid #444}'+
+      '#v65-gear-panel .g65total{margin-top:12px;padding:12px;border-radius:11px;background:rgba(227,255,0,.07);border:1px solid rgba(227,255,0,.25)}'+
+      '#v65-gear-panel .g65stats{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px}'+
+      '#v65-gear-panel .g65stat{padding:7px;border-radius:7px;background:rgba(0,0,0,.25);font-size:11px}'+
+      '#v65-gear-panel .g65stat b{color:#ccc}.g65stat strong{float:right;color:#e3ff00}'+
+      '#v65-gear-panel .g65current{display:flex;gap:6px;margin-top:12px}'+
+      '#v65-gear-panel .g65current div{flex:1;min-width:0;padding:8px;background:#121119;border:1px solid #333;border-radius:9px;font-size:10px}'+
+      '#v65-gear-panel .g65current b{display:block;color:#e3ff00;margin-bottom:4px}'+
+      '#v65-gear-panel .g65current span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+      '@media(max-width:650px){#v65-gear-panel .g65grid{grid-template-columns:105px 1fr}#v65-gear-panel .g65items,#v65-gear-panel .g65stats{grid-template-columns:1fr}}'+
+    '</style>'+
+    '<div style="font:900 30px/1 Arial Black,Meiryo,sans-serif;color:#e3ff00;text-shadow:2px 2px #ff0055">ギア装備</div>'+
+    '<div style="margin-top:7px;color:#aaa;font-size:13px">Eで開閉 ・ ギアをクリックして装備 ・ 選んだ瞬間に効果を確認できます</div>'+
+    '<div class="g65grid"><div class="g65tabs"></div><div><div class="g65items"></div><div class="g65preview"></div></div></div>'+
+    '<div class="g65current"></div><button class="g65close" style="width:100%;margin-top:13px;padding:12px;border:0;border-radius:11px;background:#e3ff00;color:#111;font-weight:900;font-size:15px;cursor:pointer">装備して閉じる</button>';
     document.body.appendChild(gearPanel);
-    gearPanel._rows=rows;
-    gearPanel._note=note;
+    gearPanel._tabs=gearPanel.querySelector('.g65tabs'); gearPanel._items=gearPanel.querySelector('.g65items');
+    gearPanel._preview=gearPanel.querySelector('.g65preview'); gearPanel._current=gearPanel.querySelector('.g65current');
+    gearPanel.querySelector('.g65close').addEventListener('click',hideGearPanel);
+    gearPanel.addEventListener('mousedown',function(e){e.stopPropagation()});
     return gearPanel;
   }
 
   function refreshGearPanel(){
-    const p=ensureGearPanel();
-    const load=normalizeGearLoadout(playerConfig.gearLoadout);
-    GEAR_SLOTS.forEach(s=>{if(p._rows[s.key])p._rows[s.key].value=load[s.key];});
-    const labels=GEAR_SLOTS.map(s=>{
-      const g=GEAR_BY_ID[load[s.key]];
-      return g?g.name+'（'+g.ability+'）':'---';
+    const p=ensureGearPanel(); const load=normalizeGearLoadout(playerConfig.gearLoadout);
+    const slot=GEAR_SLOTS.find(function(s){return s.key===gearSelectedSlot})||GEAR_SLOTS[0];
+    if(!gearSelectedId||!GEAR_BY_ID[gearSelectedId]||GEAR_BY_ID[gearSelectedId].slot!==slot.key)gearSelectedId=load[slot.key];
+    p._tabs.innerHTML=GEAR_SLOTS.map(function(s){const g=GEAR_BY_ID[load[s.key]];return '<button class="g65tab '+(s.key===slot.key?'active':'')+'" data-slot="'+s.key+'">'+s.label+'<small>'+(g?g.name:'---')+'</small></button>'}).join('');
+    p._tabs.querySelectorAll('[data-slot]').forEach(function(b){b.onclick=function(){gearSelectedSlot=b.dataset.slot;gearSelectedId=load[gearSelectedSlot];refreshGearPanel()}});
+    const items=GEAR_CATALOG.filter(function(g){return g.slot===slot.key});
+    p._items.innerHTML=items.map(function(g){return '<button class="g65card '+(g.id===load[slot.key]?'sel':'')+'" data-gear="'+g.id+'"><div class="g65name">'+g.name+(g.id===load[slot.key]?' ✓':'')+'</div><div class="g65ability">'+gearEffectsText(g)+'</div></button>'}).join('');
+    p._items.querySelectorAll('[data-gear]').forEach(function(b){
+      b.onclick=function(){playerConfig.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);playerConfig.gearLoadout[slot.key]=b.dataset.gear;gearSelectedId=b.dataset.gear;syncPlayerGearVisual();refreshGearPanel()};
+      b.onmouseenter=function(){gearSelectedId=b.dataset.gear;refreshGearPanel()};
     });
-    if(p._note)p._note.textContent='現在の装備：'+labels.join('　/　');
+    const selected=GEAR_BY_ID[gearSelectedId]||GEAR_BY_ID[load[slot.key]]; const t=gearTotal(load);
+    p._preview.innerHTML='<div style="font-size:18px;font-weight:900">'+(selected?selected.name:'---')+(selected&&selected.id===load[slot.key]?' ✓ 装備中':'')+'</div>'+
+      '<div style="margin-top:4px;color:#888;font-size:11px">'+slot.label+'</div>'+
+      '<div style="margin-top:9px;color:#e3ff00;font-weight:800;line-height:1.6">'+gearEffectsText(selected)+'</div>'+
+      '<div class="g65total"><b>3つ合わせた最終効果</b><div class="g65stats">'+
+      '<div class="g65stat">🦑 イカダッシュ <strong>×'+t.swim.toFixed(2)+'</strong></div>'+
+      '<div class="g65stat">🏃 ヒト移動 <strong>×'+t.move.toFixed(2)+'</strong></div>'+
+      '<div class="g65stat">🫙 インク消費 <strong>'+((1-t.inkSaver)*100).toFixed(0)+'%減</strong></div>'+
+      '<div class="g65stat">💧 インク回復 <strong>×'+t.inkRegen.toFixed(2)+'</strong></div>'+
+      '<div class="g65stat">⚡ スペシャル <strong>×'+t.specialGain.toFixed(2)+'</strong></div>'+
+      '<div class="g65stat">❤ 耐久力 <strong>+'+t.maxHp+'</strong></div>'+
+      '<div class="g65stat">↻ 復活時間 <strong>×'+t.respawn.toFixed(2)+'</strong></div>'+
+      '</div></div>';
+    p._current.innerHTML=GEAR_SLOTS.map(function(s){return '<div><b>'+s.label+'</b><span>'+(GEAR_BY_ID[load[s.key]]?.name||'---')+'</span></div>'}).join('');
   }
 
   function showGearPanel(){
-    if(currentPhase!==2)return;
-    const p=ensureGearPanel();
-    refreshGearPanel();
-    p.style.display='block';
-    try{document.exitPointerLock?.();}catch(_){}
+    if(currentPhase!==2)return; const p=ensureGearPanel(); const load=normalizeGearLoadout(playerConfig.gearLoadout);
+    gearSelectedSlot=gearSelectedSlot||'head'; gearSelectedId=load[gearSelectedSlot]; refreshGearPanel(); p.style.display='block';
+    try{document.exitPointerLock?.()}catch(_){ }
   }
-  function hideGearPanel(){
-    if(gearPanel)gearPanel.style.display='none';
-  }
-  function toggleGearPanel(){
-    if(currentPhase!==2)return;
-    if(gearPanel?.style.display==='block')hideGearPanel();
-    else showGearPanel();
-  }
+  function hideGearPanel(){if(gearPanel)gearPanel.style.display='none'}
+  function toggleGearPanel(){if(currentPhase!==2)return;if(gearPanel?.style.display==='block')hideGearPanel();else showGearPanel()}
 
   function updateGearHud(){
-    const e=document.getElementById('gear-effects');
-    if(!e||!playerFighter)return;
-    const load=normalizeGearLoadout(playerConfig.gearLoadout);
-    const names=GEAR_SLOTS.map(s=>GEAR_BY_ID[load[s.key]]?.name).filter(Boolean);
+    const e=document.getElementById('gear-effects'); if(!e||!playerFighter)return;
+    const load=normalizeGearLoadout(playerConfig.gearLoadout); const names=GEAR_SLOTS.map(function(s){return GEAR_BY_ID[load[s.key]]?.name}).filter(Boolean);
     const gp=playerFighter.gearProfile||gearProfile(playerFighter);
     e.textContent='ギア：'+names.join(' / ')+'　｜ インク×'+gp.inkSaver.toFixed(2)+'　移動×'+gp.move.toFixed(2)+'　イカ×'+gp.swim.toFixed(2);
   }
-  window.__V65ToggleGear=toggleGearPanel;
-  window.__V65RefreshGear=syncPlayerGearVisual;
-
+  window.__V65ToggleGear=toggleGearPanel; window.__V65RefreshGear=syncPlayerGearVisual;
   if(!playerConfig.gearLoadout)playerConfig.gearLoadout=Object.assign({},DEFAULT_GEAR);
-  if(playerFighter){
-    playerFighter.cfg.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);
-    refreshGearStats(playerFighter,true);
-  }
+  if(playerFighter){playerFighter.cfg.gearLoadout=normalizeGearLoadout(playerConfig.gearLoadout);refreshGearStats(playerFighter,true)}
   setTimeout(updateGearHud,0);
-
   window.addEventListener('keydown',function(e){
-    if(currentPhase===2 && e.code==='KeyE'){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      toggleGearPanel();
-      return;
-    }
-    if(gearPanel && gearPanel.style.display==='block' && e.code==='Escape'){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      hideGearPanel();
-    }
+    if(currentPhase===2&&e.code==='KeyE'){e.preventDefault();e.stopImmediatePropagation();toggleGearPanel();return}
+    if(gearPanel&&gearPanel.style.display==='block'&&e.code==='Escape'){e.preventDefault();e.stopImmediatePropagation();hideGearPanel()}
   },true);
-
   /* =========================================================
      CPU Brain: navigation + state machine
      ========================================================= */
