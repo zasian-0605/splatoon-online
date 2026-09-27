@@ -2169,7 +2169,7 @@ function startRangePhase(){
   document.getElementById('alive-count').style.display='none';
   document.getElementById('range-hint').style.display='block';
   document.getElementById('range-hint').innerHTML =
-    '試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズに戻る　[O] CPU対戦(4vs4)スタート　[P] オンライン8人マッチ';
+    '試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズに戻る　[O] CPU対戦(4vs4)スタート　[P] 街（ロビー）へ';
   document.getElementById('instructions').innerHTML =
     '【PC】WASD:移動 / マウス:視点＆撃つ(右クリックでサブ) / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>チャージャーは左クリック長押しでチャージ、離すと発射<br>【スマホ】左半分スワイプ:移動 / 右半分スワイプ:視点＆タップで撃つ';
 
@@ -2505,7 +2505,8 @@ function updateAI(f, delta, now){
 
   if(wantShoot && aimAt){
     const dir = new THREE.Vector3().subVectors(aimAt, f.pos);
-    dir.y = 0.05;
+    // Keep the upper-body aim and give the AI shot a visible upward trajectory.
+    dir.y = Math.max(0.34, dir.y);
     dir.normalize();
     if(wp.category!=='roller'){
       const jitterBase=wp.category==='charger' ? (0.20+Math.min(.28,nearestD/70)) : 0.045;
@@ -4392,9 +4393,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function moveLobbyCamera(){
     const p=lobby.player;if(!p||!camera)return;
-    const target=p.pos.clone();target.y+=1.55;
-    const offset=new THREE.Vector3(0,2.7,7.2).applyAxisAngle(new THREE.Vector3(0,1,0),lobbyYaw);
-    offset.y += Math.sin(lobbyPitch)*3;
+    const target=p.pos.clone();target.y+=1.82;
+    const offset=new THREE.Vector3(0,3.35,7.2).applyAxisAngle(new THREE.Vector3(0,1,0),lobbyYaw);
+    offset.y += Math.sin(lobbyPitch)*2.4;
     const cp=target.clone().add(offset);
     camera.position.lerp(cp,.18);
     camera.lookAt(target);
@@ -4831,9 +4832,42 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE]',err); }
   }
 
+  function goToTownNow(){
+    try{ if(typeof closeOnlinePanel==='function') closeOnlinePanel(); }catch(err){}
+    try{
+      battleActive=false;
+      battleTimer=0;
+      window.__battleDeadline=0;
+      gameLoopToken++;
+      for(let i=bullets.length-1;i>=0;i--){
+        try{scene.remove(bullets[i].mesh);}catch(err){}
+      }
+      bullets.length=0;
+      for(let i=particles.length-1;i>=0;i--){
+        try{scene.remove(particles[i].mesh);}catch(err){}
+      }
+      particles.length=0;
+      if(typeof remoteMap!=='undefined') remoteMap.clear();
+      fighters=fighters.filter(f=>{
+        if(f.isPlayer)return true;
+        try{scene.remove(f.root);}catch(err){}
+        return false;
+      });
+    }catch(err){}
+    try{
+      startLobbyPhase();
+      showToast('街に移動しました');
+    }catch(err){
+      console.error('[TOWN]',err);
+      try{ window.startLobbyPhase(); }catch(e){}
+    }
+  }
+
   window.addEventListener('keydown',(e)=>{
-    if(currentPhase===1.25 && e.code==='KeyP'){
-      e.preventDefault(); e.stopImmediatePropagation(); openOnline(); return;
+    if(e.code==='KeyP' && (currentPhase===1.25 || currentPhase===1.5 || currentPhase===2)){
+      e.preventDefault(); e.stopImmediatePropagation();
+      goToTownNow();
+      return;
     }
     if(currentPhase!==1.5 && currentPhase!==2) return;
 
