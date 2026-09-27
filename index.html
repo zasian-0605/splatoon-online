@@ -1971,10 +1971,9 @@ function spawnBullet(fighter, dir, opts){
   });
 }
 
-/* V58: 全射撃系の発射角を統一
+/* V59: 全射撃系の発射角を統一
    ユーザー指定の角度系：上=0° / 正面=90° / 下=180°
-   35°は「正面から55°上」ではなく「真上から35°」。
-   したがって水平成分=sin(35°)、上成分=cos(35°)。 */
+   今回は90°なので完全に水平、真正面へ発射する。 */
 function getLaunchDirection35(aimDir, spread=0, fallbackYaw=0){
   const raw=aimDir?.clone ? aimDir.clone() : new THREE.Vector3();
   raw.y=0;
@@ -3994,7 +3993,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     f._maneuverSlideDir=dir;
     f._maneuverSlideSpeed=24;
     f.invulnUntil=Math.max(f.invulnUntil||0,now+260);
-    f._maneuverSlideWasActive=true;
+    f._maneuverSlideInputConsumed=true;
     canJump=false;
     playerVelocity.y=0;
     showToastFor(f,'スライド！');
@@ -4009,7 +4008,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     // マニューバーは「撃ちながらジャンプ入力」でスライド。
     const wantsManeuverSlide=f.weapon?.category==="maneuver" && isShooting && keys.space;
-    if(wantsManeuverSlide && !f._maneuverSlideWasActive){
+    if(wantsManeuverSlide && !f._maneuverSlideInputConsumed){
       startManeuverSlide(f);
     }
     const slideActive=!!(f._maneuverSlideUntil && now<f._maneuverSlideUntil);
@@ -4032,12 +4031,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
       if(now>=f._maneuverSlideUntil){
         f._maneuverSlideUntil=0;
-        f._maneuverSlideWasActive=false;
       }
       return;
     }
 
-    if(!keys.space) f._maneuverSlideWasActive=false;
+    // スペースを一度離すまで、同じ長押し入力では再発動しない。
+    if(!keys.space) f._maneuverSlideInputConsumed=false;
     const isSquid=!!keys.shift && onFighterInk(f) && f.ink>0;
     f.squid_mode=isSquid;
 
