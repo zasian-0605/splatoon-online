@@ -98,17 +98,36 @@ function assignTeamsAndStart(room) {
 function joinRoom(player) {
   if (player.roomId) return rooms.get(player.roomId);
   const room = waitingRoomFor();
-  room.players.set(player.id, player); player.roomId = room.id; player.team = null; player.ready = false;
-  const payload = { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 };
-  broadcast(room, payload);
-  send(player.ws, payload);
+  room.players.set(player.id, player);
+  player.roomId = room.id;
+  player.team = null;
+  player.ready = false;
+
+  // 参加者が入るたび、部屋全員へ現在人数を即時通知する。
+  const players = roster(room);
+  const roomPayload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+  const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
+  for (const p of room.players.values()) {
+    send(p.ws, roomPayload);
+    send(p.ws, queuePayload);
+  }
+  console.log(`[MATCH] ${room.id}: ${players.length}/8 players joined`);
   return room;
 }
 function leaveRoom(player) {
   const room = player.roomId ? rooms.get(player.roomId) : null;
   if (!room) { player.roomId = null; return; }
   room.players.delete(player.id); player.roomId = null; player.team = null; player.ready = false;
-  if (!room.started) { broadcast(room, { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 }); if (room.players.size === 0) rooms.delete(room.id); }
+  if (!room.started) {
+    const players = roster(room);
+    const payload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+    const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
+    for (const p of room.players.values()) {
+      send(p.ws, payload);
+      send(p.ws, queuePayload);
+    }
+    if (room.players.size === 0) rooms.delete(room.id);
+  }
   else if (room.players.size === 0) rooms.delete(room.id);
 }
 function updateAccountResult(player, winnerTeam) {
