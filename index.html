@@ -4870,41 +4870,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE]',err); }
   }
 
-  function goToTownNow(){
-    try{ if(typeof closeOnlinePanel==='function') closeOnlinePanel(); }catch(err){}
-    try{
-      battleActive=false;
-      battleTimer=0;
-      window.__battleDeadline=0;
-      gameLoopToken++;
-      for(let i=bullets.length-1;i>=0;i--){
-        try{scene.remove(bullets[i].mesh);}catch(err){}
-      }
-      bullets.length=0;
-      for(let i=particles.length-1;i>=0;i--){
-        try{scene.remove(particles[i].mesh);}catch(err){}
-      }
-      particles.length=0;
-      if(typeof remoteMap!=='undefined') remoteMap.clear();
-      fighters=fighters.filter(f=>{
-        if(f.isPlayer)return true;
-        try{scene.remove(f.root);}catch(err){}
-        return false;
-      });
-    }catch(err){}
-    try{
-      startLobbyPhase();
-      showToast('街に移動しました');
-    }catch(err){
-      console.error('[TOWN]',err);
-      try{ window.startLobbyPhase(); }catch(e){}
-    }
-  }
-
   window.addEventListener('keydown',(e)=>{
-    if(e.code==='KeyP' && (currentPhase===1.25 || currentPhase===1.5 || currentPhase===2)){
+    if(e.code==='KeyP' && (currentPhase===1.5 || currentPhase===2)){
       e.preventDefault(); e.stopImmediatePropagation();
-      goToTownNow();
+      startOnlineDirect();
       return;
     }
     if(currentPhase!==1.5 && currentPhase!==2) return;
