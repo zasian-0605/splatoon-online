@@ -231,7 +231,7 @@ body.pointer-lock-ready{cursor:none !important;}
       <button id="account-login" class="account-primary">ログイン</button>
       <button id="account-register" class="account-secondary">新規登録</button>
     </div>
-    <div class="account-actions"><button id="account-guest" class="account-ghost">ゲストで続ける（オフライン）</button></div>
+    <div class="account-actions"><button id="account-guest" class="account-ghost" style="display:none" disabled>ゲストで続ける（オフライン）</button></div>
     <div id="account-status"></div>
     <div id="account-profile"></div>
   </div>
@@ -3968,20 +3968,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     else window.showAccountScreen();
   };
 
-  // Auto-restore a valid local profile in offline mode, or server token online.
-  (async()=>{
-    const saved=localStorage.getItem(profileKey);
-    if(saved){try{window.playerAccount.profile=JSON.parse(saved);}catch{}}
-    if(location.protocol!=='file:'){
-      const token=localStorage.getItem(tokenKey);
-      if(token){try{
-        const origin=(typeof getOnlineServerOrigin==='function'?getOnlineServerOrigin():'') || location.origin;
-        const r=await fetch(origin+'/api/account/me',{headers:{Authorization:'Bearer '+token}});
-        const d=await r.json();
-        if(d.ok){window.__accountReady=true;window.playerAccount={token,profile:d.profile,online:true};updateAccountProfileUI(d.profile);}
-      }catch{}}
-    } else if(window.playerAccount.profile){window.__accountReady=true;}
-  })();
+  // V43: require an explicit login on every page load.
+  // Stored tokens/profiles are intentionally not auto-restored.
+  window.__accountReady=false;
+  window.playerAccount={token:null,profile:null,online:false};
 
   // ---------------------------------------------------------
   // v37 safe squid system
@@ -4869,8 +4859,33 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   }
   window.__startOnlineDirect=startOnlineDirect;
-  // V38's P-key handler calls the global name. Expose the launcher explicitly.
   window.startOnlineDirect=startOnlineDirect;
+
+  // V43: one definitive online-room launcher for the P key.
+  window.__forceOnlineRoom=function(){
+    if(window.__accountReady!==true){
+      if(window.showAccountScreen) window.showAccountScreen();
+      return false;
+    }
+    const test=document.getElementById('online-test-panel');
+    if(test) test.style.display='none';
+    const result=document.getElementById('result-screen');
+    if(result) result.style.display='none';
+    try{ window.__V10?.releaseLock?.(); }catch(e){}
+    if(currentPhase===1.5 || currentPhase===2){
+      try{ openOnlinePanel(); return true; }catch(err){ console.error('[ONLINE FORCE]',err); return false; }
+    }
+    try{
+      const started=typeof window.__forcePractice==='function'
+        ? window.__forcePractice()
+        : (typeof startRangePhase==='function' ? (startRangePhase(), currentPhase===1.5) : false);
+      if(started){
+        setTimeout(()=>{ try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE FORCE PANEL]',err); } },120);
+        return true;
+      }
+    }catch(err){ console.error('[ONLINE FORCE RANGE]',err); }
+    return false;
+  };
 
   // openOnlinePanel itself now auto-joins and auto-readies through its room handler.
 
@@ -4898,9 +4913,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   window.addEventListener('keydown',(e)=>{
-    if(e.code==='KeyP' && (currentPhase===1.5 || currentPhase===2)){
+    if(e.code==='KeyP'){
       e.preventDefault(); e.stopImmediatePropagation();
-      startOnlineDirect();
+      if(window.__forceOnlineRoom) window.__forceOnlineRoom();
+      else if(window.startOnlineDirect) window.startOnlineDirect();
       return;
     }
     if(currentPhase!==1.5 && currentPhase!==2) return;
@@ -4954,10 +4970,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   // This runs in capture phase so the old M handler cannot immediately re-lock it.
   window.addEventListener('keydown',e=>{
-    if(e.code==='KeyT' && currentPhase!==0 && currentPhase!==3){
+    if(e.code==='KeyT' && currentPhase!==0){
       e.preventDefault(); e.stopImmediatePropagation();
-      releaseForOverlay();
-      if(window.__runOnlineDiagnostic) window.__runOnlineDiagnostic();
+      const panel=document.getElementById('online-test-panel');
+      if(panel && panel.style.display!=='none'){
+        panel.style.display='none';
+        releaseForOverlay();
+      }else{
+        releaseForOverlay();
+        if(window.__runOnlineDiagnostic) window.__runOnlineDiagnostic();
+      }
       return;
     }
 
@@ -5168,6 +5190,45 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   document.addEventListener('pointerlockchange',unlock,true);
   window.addEventListener('blur',unlock,true);
   setInterval(unlock,200);
+})();
+</script>
+<script>
+/* V43: every load starts at the login gate; P always forces the online room */
+(function(){
+  function requireLogin(){
+    window.__accountReady=false;
+    window.playerAccount={token:null,profile:null,online:false};
+    try{
+      localStorage.removeItem('splatoonAccountToken');
+      localStorage.removeItem('splatoonAccountProfile');
+    }catch(e){}
+    if(window.showAccountScreen) window.showAccountScreen();
+  }
+
+  // The account module's old Guest button is deliberately unavailable.
+  const guest=document.getElementById('account-guest');
+  if(guest){ guest.disabled=true; guest.style.display='none'; }
+
+  // Login is mandatory on every fresh load/reload.
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',requireLogin,{once:true});
+  }else{
+    setTimeout(requireLogin,0);
+  }
+
+  // Keep T as a strict toggle: open / close the diagnostic panel.
+  window.addEventListener('keydown',function(e){
+    if(e.code!=='KeyT' || currentPhase===0) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const p=document.getElementById('online-test-panel');
+    if(p && p.style.display!=='none'){
+      p.style.display='none';
+      try{ window.__V10?.releaseLock?.(); }catch(_){}
+    }else if(window.__runOnlineDiagnostic){
+      try{ window.__V10?.releaseLock?.(); }catch(_){}
+      window.__runOnlineDiagnostic();
+    }
+  },true);
 })();
 </script>
 </body>
