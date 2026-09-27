@@ -281,6 +281,42 @@ wss.on('connection', ws => {
       return;
     }
     const room = player.roomId ? rooms.get(player.roomId) : null; if (!room) return;
+    if (m.type === 'shot') {
+      const nums = ['x','y','z','dx','dy','dz'].map(k => Number(m[k]));
+      if (nums.some(v => !Number.isFinite(v))) return;
+      const dirLen = Math.hypot(nums[3], nums[4], nums[5]);
+      if (dirLen < 0.001 || dirLen > 2.0) return;
+      const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      broadcast(room, {
+        type: 'shot',
+        id: player.id,
+        team: player.team,
+        x: nums[0], y: nums[1], z: nums[2],
+        dx: nums[3] / dirLen, dy: nums[4] / dirLen, dz: nums[5] / dirLen,
+        weaponId
+      }, player.id);
+      return;
+    }
+    if (m.type === 'sub') {
+      const nums = ['x','y','z','vx','vy','vz'].map(k => Number(m[k]));
+      if (nums.some(v => !Number.isFinite(v))) return;
+      const subType = String(m.subType || '');
+      const allowed = ['timed','stick','instant','slide','bounce','seek','homing','sensor','turret'];
+      if (!allowed.includes(subType)) return;
+      const speed = Math.hypot(nums[3], nums[4], nums[5]);
+      if (speed < 0.01 || speed > 40) return;
+      const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      broadcast(room, {
+        type: 'sub',
+        id: player.id,
+        team: player.team,
+        x: nums[0], y: nums[1], z: nums[2],
+        vx: nums[3], vy: nums[4], vz: nums[5],
+        subType,
+        weaponId
+      }, player.id);
+      return;
+    }
     if (m.type === 'state') {
       const now = Date.now(); if (now - player.lastStateAt < 28) return; player.lastStateAt = now;
       player.weaponId = Number.isFinite(m.weaponId) ? m.weaponId : player.weaponId;
