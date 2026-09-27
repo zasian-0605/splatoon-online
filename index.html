@@ -2337,19 +2337,25 @@ function chargeOrbClampTarget(v){
   return v;
 }
 function getChargeOrbTarget(fighter, aimDirOverride=null){
+  // 発射角は「真上0° / 正面90° / 真下180°」で35°に固定。
+  // つまり水平面からは55°上向き。カメラの上下は無視し、左右の向きだけ使う。
   let dir;
-  if(fighter?.isPlayer && camera){ dir=new THREE.Vector3(); camera.getWorldDirection(dir); }
-  else if(aimDirOverride) dir=aimDirOverride.clone();
-  else dir=new THREE.Vector3(Math.sin(fighter.root.rotation.y),0,Math.cos(fighter.root.rotation.y));
-  dir.normalize();
-  const start=camera&&fighter?.isPlayer ? camera.position.clone() : fighter.pos.clone().add(new THREE.Vector3(0,1.6,0));
-  let dist=14;
-  if(Math.abs(dir.y)>0.05){
-    const t=(0-start.y)/dir.y;
-    if(t>4&&t<34) dist=t;
+  if(fighter?.isPlayer && camera){
+    dir=new THREE.Vector3();
+    camera.getWorldDirection(dir);
+  }else if(aimDirOverride){
+    dir=aimDirOverride.clone();
+  }else{
+    dir=new THREE.Vector3(Math.sin(fighter.root.rotation.y),0,Math.cos(fighter.root.rotation.y));
   }
-  const p=start.clone().addScaledVector(dir,Math.min(34,Math.max(8,dist)));
-  if(fighter?.isPlayer&&Math.abs(dir.y)<=0.05)p.y=0;
+  dir.y=0;
+  if(dir.lengthSq()<0.0001){
+    dir.set(Math.sin(fighter.root.rotation.y),0,Math.cos(fighter.root.rotation.y));
+  }
+  dir.normalize();
+  const start=fighter.pos.clone().add(new THREE.Vector3(0,1.6,0));
+  const p=start.clone().addScaledVector(dir,14);
+  p.y=getSupportHeight(p.x,p.z,50)+0.08;
   return chargeOrbClampTarget(p);
 }
 function removeChargeOrbVisual(fighter){
@@ -2443,10 +2449,49 @@ function chargeOrbNiceInput(){
 }
 window.tryChargeOrbFromNice=chargeOrbNiceInput;
 function spawnChargeOrbProjectile(fighter,target,{remote=false}={}){
-  const col=chargeOrbColor(fighter),mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(.52,2),new THREE.MeshBasicMaterial({color:col}));
-  const start=fighter.pos.clone();start.y+=1.95;const goal=target.clone();
-  goal.y=Math.max(0,getSupportHeight(goal.x,goal.z,50)+.12);mesh.position.copy(start);scene.add(mesh);
-  chargeOrbProjectiles.push({mesh,start,goal,team:fighter.team,charge:Math.max(0,Math.min(100,fighter.specialCharge||0)),colorHex:col,fromFighter:fighter,startedAt:performance.now(),duration:remote?520:620});
+  const col=chargeOrbColor(fighter);
+  const mesh=new THREE.Mesh(
+    new THREE.IcosahedronGeometry(.52,2),
+    new THREE.MeshBasicMaterial({color:col})
+  );
+  const start=fighter.pos.clone();
+  start.y+=1.95;
+  const goal=target.clone();
+  goal.y=Math.max(0,getSupportHeight(goal.x,goal.z,50)+.12);
+  mesh.position.copy(start);
+  scene.add(mesh);
+
+  // 角度定義：上0° / 正面90° / 下180° → 35° = 水平から55°上。
+  // まず水平距離を求め、その角度で実際の放物線を飛ばして着地点に合わせる。
+  const launchAngle=THREE.MathUtils.degToRad(55);
+  const g=24;
+  const dx=goal.x-start.x, dz=goal.z-start.z;
+  const horizontalDist=Math.max(0.1,Math.hypot(dx,dz));
+  const horizontalDir=new THREE.Vector3(dx/horizontalDist,0,dz/horizontalDist);
+  const dy=goal.y-start.y;
+  const sinA=Math.sin(launchAngle), cosA=Math.cos(launchAngle);
+
+  // y = y0 + v*sinA*t - 1/2*g*t²
+  // xz = v*cosA*t から、指定着地点まで飛ぶ初速を求める。
+  let speed=18;
+  const denom=2*cosA*cosA*(horizontalDist*Math.tan(launchAngle)-dy);
+  if(denom>0.001){
+    const solved=(g*horizontalDist*horizontalDist)/denom;
+    if(Number.isFinite(solved) && solved>25) speed=Math.min(28,Math.sqrt(solved));
+  }
+
+  const velocity=horizontalDir.clone().multiplyScalar(speed*cosA);
+  velocity.y=speed*sinA;
+
+  chargeOrbProjectiles.push({
+    mesh,start,goal,velocity,gravity:g,
+    team:fighter.team,
+    charge:Math.max(0,Math.min(100,fighter.specialCharge||0)),
+    colorHex:col,fromFighter:fighter,
+    startedAt:performance.now(),remote:!!remote,
+    // 安全側の寿命。基本的には弾道がgoal付近に着いた時点で終了する。
+    maxLife:remote?2.2:2.2
+  });
 }
 function releaseChargeOrbSpecial(fighter,{remote=false,target=null,chargeOverride=null}={}){
   if(!fighter?.alive||!fighter.specialChargeMode)return false;
@@ -2485,10 +2530,24 @@ function updateChargeOrbSystems(delta){
     }
   }
   for(let i=chargeOrbProjectiles.length-1;i>=0;i--){
-    const p=chargeOrbProjectiles[i];if(!p.mesh){chargeOrbProjectiles.splice(i,1);continue;}
-    const t=Math.max(0,Math.min(1,(now-p.startedAt)/p.duration));
-    p.mesh.position.copy(p.start).lerp(p.goal,t);p.mesh.position.y+=Math.sin(Math.PI*t)*4.5;p.mesh.rotation.x+=delta*6;p.mesh.rotation.z+=delta*5;
-    if(t>=1){scene.remove(p.mesh);beginChargeOrbImpact(p.goal,p.team,p.charge,p.fromFighter);chargeOrbProjectiles.splice(i,1);}
+    const p=chargeOrbProjectiles[i];
+    if(!p.mesh){chargeOrbProjectiles.splice(i,1);continue;}
+    const elapsed=(now-p.startedAt)/1000;
+    p.velocity.y-=p.gravity*delta;
+    p.mesh.position.addScaledVector(p.velocity,delta);
+    p.mesh.rotation.x+=delta*8;
+    p.mesh.rotation.z+=delta*6;
+
+    const reachedXz=Math.hypot(p.mesh.position.x-p.goal.x,p.mesh.position.z-p.goal.z)<0.75;
+    const belowGoal=p.mesh.position.y<=p.goal.y+0.08;
+    const expired=elapsed>=p.maxLife;
+
+    if((reachedXz&&belowGoal)||expired){
+      const impact=p.goal.clone();
+      scene.remove(p.mesh);
+      beginChargeOrbImpact(impact,p.team,p.charge,p.fromFighter);
+      chargeOrbProjectiles.splice(i,1);
+    }
   }
   for(let i=chargeOrbImpacts.length-1;i>=0;i--){
     const e=chargeOrbImpacts[i],t=Math.max(0,Math.min(1,(now-e.startedAt)/e.duration)),grow=Math.sin(Math.min(1,t)*Math.PI*.5);
