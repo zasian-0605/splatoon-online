@@ -244,20 +244,6 @@ body.pointer-lock-ready{cursor:none !important;}
 </div>
 
 
-<div id="lobby-ui">
-  <div id="lobby-brand"><div class="small">ORIGINAL WEB CITY</div><div class="big">BANDARU CENTRAL</div></div>
-  <div id="lobby-menu">
-    <div id="lobby-menu-title">ロビー</div>
-    <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
-    <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">試し撃ち：ボタン または [1] で直接開始　／　他の施設は入口まで歩いてね</div>
-    <button class="lobby-btn" data-lobby-action="range" id="btn-direct-practice" onclick="window.__forcePractice&&window.__forcePractice();">🎯 試し撃ち場 <span class="k">1 / E</span></button>
-    <button class="lobby-btn" data-lobby-action="cpu">⚔ CPU 4vs4 <span class="k">2</span></button>
-    <button class="lobby-btn" data-lobby-action="online">🌐 オンライン8人 <span class="k">3</span></button>
-    <button class="lobby-btn" data-lobby-action="custom">👕 カスタマイズ <span class="k">4</span></button>
-  </div>
-  <div id="lobby-location">現在地：中央広場</div>
-  <div id="lobby-prompt">施設の入口に近づくと案内が出ます　[E] 入る</div>
-</div>
 <div id="battle-ui">
 <div id="instructions"></div>
 <div id="top-battle-status"><div id="team-life-strip"><div class="life-team"><span class="life-team-label">A</span><span id="life-a"></span></div><div class="life-team"><span class="life-team-label">B</span><span id="life-b"></span></div></div></div>
@@ -292,7 +278,7 @@ body.pointer-lock-ready{cursor:none !important;}
 <div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div></div>
 <div id="special-ready">SPECIAL READY!</div>
 <div id="death-location-marker">💀 ここでやられた</div>
-<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">試し撃ち場に戻る</button></div>
+<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">試し撃ち場へ</button></div>
 
 
 <div id="online-panel">
@@ -706,7 +692,7 @@ function setupCustomizeUI(){
       playerFighter.chargeStart = 0;
       rebuildFighterModel(playerFighter, playerConfig);
     }
-    if(hasSeenNews){ window.startLobbyPhase ? window.startLobbyPhase() : startRangePhase(); } else { startNewsPhase(); }
+    if(hasSeenNews){ startRangePhase(); } else { startNewsPhase(); }
   });
 }
 
@@ -2034,7 +2020,7 @@ window.addEventListener('keydown',(e)=>{
     if(currentPhase===1.5){
       e.preventDefault();
       e.stopPropagation();
-      returnToLobbyFromRange();
+      goToCustomizeFromGame();
       return;
     }
     if(currentPhase===2){
@@ -2110,7 +2096,7 @@ function showNextLine(){
     setTimeout(()=>{
       ns.style.display='none';
       hasSeenNews=true;
-      window.startLobbyPhase ? window.startLobbyPhase() : startRangePhase();
+      startRangePhase();
     },800);
     return;
   }
@@ -2169,7 +2155,7 @@ function startRangePhase(){
   document.getElementById('alive-count').style.display='none';
   document.getElementById('range-hint').style.display='block';
   document.getElementById('range-hint').innerHTML =
-    '試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズに戻る　[O] CPU対戦(4vs4)スタート　[P] 街（ロビー）へ';
+    '試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズに戻る　[O] CPU対戦(4vs4)　[3] オンライン';
   document.getElementById('instructions').innerHTML =
     '【PC】WASD:移動 / マウス:視点＆撃つ(右クリックでサブ) / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>チャージャーは左クリック長押しでチャージ、離すと発射<br>【スマホ】左半分スワイプ:移動 / 右半分スワイプ:視点＆タップで撃つ';
 
@@ -4693,7 +4679,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       document.getElementById('range-hint').style.display='block';
       playerFighter.ink=100;
       playerFighter.specialGauge=100;
-      document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] ロビーに戻る　[O] CPU対戦(4vs4)　[P] オンライン';
+      document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズに戻る　[O] CPU対戦(4vs4)　[3] オンライン';
       document.getElementById('instructions').innerHTML='【PC】WASD:移動 / マウス:視点＆撃つ / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ】左半分:移動 / 右半分:視点＆射撃';
 
       document.getElementById('respawn-overlay').style.display='none';
@@ -4826,6 +4812,87 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 </script>
 
 <script>
+/* V39 direct online + no-lobby flow */
+(function(){
+  let directOnlineBusy=false;
+
+  function startOnlineDirect(){
+    if(directOnlineBusy) return;
+    if(currentPhase===1.5 || currentPhase===2){
+      try{ openOnlinePanel(); }catch(err){ console.error('[ONLINE DIRECT]',err); }
+      return;
+    }
+    try{
+      directOnlineBusy=true;
+      if(typeof startRangePhase==='function'){
+        startRangePhase();
+        setTimeout(()=>{ try{openOnlinePanel();}catch(err){} },80);
+      }
+    }finally{
+      setTimeout(()=>directOnlineBusy=false,1500);
+    }
+  }
+  window.__startOnlineDirect=startOnlineDirect;
+
+  // Make every successful connection immediately join the Render room.
+  // Once at least one other player is present, automatically mark ready.
+  const oldOpen=window.openOnlinePanel;
+  window.openOnlinePanel=function(){
+    oldOpen();
+  };
+
+  // Intercept the online room status without replacing the core WebSocket handler.
+  const NativeWS=window.WebSocket;
+  if(!window.__v39WrappedWS){
+    window.__v39WrappedWS=true;
+    window.WebSocket=function(url,protocols){
+      const ws=protocols?new NativeWS(url,protocols):new NativeWS(url);
+      const nativeAdd=ws.addEventListener.bind(ws);
+      ws.addEventListener=function(type,listener,opts){
+        if(type==='message'){
+          const wrapped=function(ev){
+            try{
+              const m=JSON.parse(ev.data);
+              if(m.type==='room' && onlineSocket===ws){
+                // One player is already ready; prepare this client too.
+                if(onlineSocket.readyState===1 && onlineRoomId===m.roomId && !onlineStarted && !onlineReady){
+                  onlineReady=true;
+                  onlineSocket.send(JSON.stringify({type:'ready',ready:true,weaponId:playerConfig.weapon}));
+                  setOnlineStatus('Render接続OK。準備完了、対戦相手を待っています…');
+                }
+              }
+            }catch(err){}
+            listener.call(ws,ev);
+          };
+          return nativeAdd(type,wrapped,opts);
+        }
+        return nativeAdd(type,listener,opts);
+      };
+      return ws;
+    };
+    window.WebSocket.CONNECTING=NativeWS.CONNECTING;
+    window.WebSocket.OPEN=NativeWS.OPEN;
+    window.WebSocket.CLOSING=NativeWS.CLOSING;
+    window.WebSocket.CLOSED=NativeWS.CLOSED;
+  }
+
+  window.addEventListener('keydown',e=>{
+    // Number 3 is now the real online shortcut; the lobby no longer exists.
+    if(e.code==='Digit3' && (currentPhase===1.5 || currentPhase===2)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      startOnlineDirect();
+      return;
+    }
+  },true);
+
+  // There is no town/lobby phase anymore.
+  window.startLobbyPhase=function(){
+    startRangePhase();
+  };
+  const lobbyUI=document.getElementById('lobby-ui');
+  if(lobbyUI) lobbyUI.remove();
+})();
 /* V38 control hotfix v2: Q=sub, R=special, P=online. */
 (function(){
   function openOnline(){
