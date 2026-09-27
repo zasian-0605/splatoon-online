@@ -3673,13 +3673,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     setCursorHard(false);
   }
 
-  function requestLock(){
-    cursorForceVisible=false;
-    root.classList.remove('cursor-force-visible');
-    if(!battleScreen() || !renderer?.domElement) return;
-    pointerLockWanted=true;
-    setCursorHard(true);
-
   document.addEventListener('pointerlockchange',()=>{
     const locked=document.pointerLockElement===renderer?.domElement;
     if(locked){
