@@ -89,7 +89,12 @@ canvas{display:block;width:100%;height:100%;}
 #online-card{width:min(620px,92vw);background:linear-gradient(145deg,#18004e,#071a35);border:4px solid #e3ff00;border-radius:20px;box-shadow:12px 12px 0 #000;padding:24px;color:#fff;font-family:"Impact","Arial Black",sans-serif;}
 #online-card h2{margin:0 0 8px;text-align:center;font-size:36px;color:#e3ff00;text-shadow:3px 3px 0 #ff0055;}
 #online-status{text-align:center;font-family:sans-serif;font-weight:800;font-size:18px;min-height:52px;padding:10px;}
+#online-progress{margin:8px 0 12px;padding:16px 18px;background:rgba(0,0,0,.28);border:3px solid #00d4ff;border-radius:14px;text-align:center;}
+#online-progress-label{font:900 13px/1.2 Arial,sans-serif;color:#c9f6ff;letter-spacing:1px;}
+#online-count{font:900 clamp(42px,8vw,68px)/1 Impact,"Arial Black",sans-serif;color:#e3ff00;text-shadow:4px 4px 0 #ff0055;margin:4px 0;}
 #online-room{font-family:monospace;background:#05050a;border:2px solid #555;border-radius:10px;padding:10px;max-height:180px;overflow:auto;white-space:pre-wrap;}
+#online-dots{display:inline-block;min-width:24px;text-align:left;}
+
 #online-actions{display:flex;gap:10px;margin-top:14px;}
 #online-actions button{flex:1;padding:12px;border:0;border-radius:10px;font-size:18px;font-weight:900;cursor:pointer;}
 #online-start{background:#e3ff00;color:#2f059c;}
@@ -299,6 +304,11 @@ body.pointer-lock-ready{cursor:none !important;}
     <h2>オンラインルーム</h2>
     <div id="online-profile">プロフィール未読込</div>
     <div id="online-status">接続準備中…</div>
+    <div id="online-progress">
+      <div id="online-progress-label">オンライン接続 <span id="online-dots">...</span></div>
+      <div id="online-count">0 / 8</div>
+      <div id="online-progress-note" style="font:700 12px/1.4 Arial,sans-serif;color:#ddd;">対戦相手を探しています</div>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;margin:8px 0;">
       <input id="online-server-url" type="text" placeholder="オンラインサーバーURL（例：https://xxxxx.onrender.com）"
         style="flex:1;padding:9px 10px;border-radius:8px;border:2px solid #555;background:#0c0c12;color:#fff;font:700 12px sans-serif;">
@@ -3234,11 +3244,23 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!origin) return '';
     return origin.replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
   }
+  function setOnlineCount(n, note){
+    const safe=Math.max(0,Math.min(8,Number(n)||0));
+    const count=document.getElementById('online-count');
+    const noteEl=document.getElementById('online-progress-note');
+    if(count) count.textContent=`${safe} / 8`;
+    if(noteEl) noteEl.textContent=note||'対戦相手を探しています';
+  }
+  function setOnlineConnecting(label){
+    const status=document.getElementById('online-status');
+    if(status) status.textContent=label;
+  }
   function renderOnlineRoom(players=[]){
     const r=document.getElementById('online-room'); if(!r)return;
     const lines=players.map((p,i)=>`[${p.ready?'✓':'　'}] ${p.name||p.id}${p.team?' ['+p.team+']':''}${p.id===onlinePlayerId?' ← YOU':''}`).join('\n');
     r.textContent=`部屋 ${onlineRoomId||'----'}\n${players.length}/8人（2〜8人で開始）\n${lines||'まだ誰もいません'}`;
-    const ready=document.getElementById('online-ready'); if(ready){ready.disabled=!onlineSocket||onlineSocket.readyState!==1||players.length<2;ready.textContent=onlineReady?'準備解除':'準備OK';ready.classList.toggle('ready',onlineReady);}
+    setOnlineCount(players.length, players.length<2 ? '対戦相手を探しています' : '参加者を確認しています');
+    const ready=document.getElementById('online-ready'); if(ready){ready.disabled=!onlineSocket||onlineSocket.readyState!==1;ready.textContent=onlineReady?'準備解除':'準備OK';ready.classList.toggle('ready',onlineReady);}
   }
   function showOnlineProfile(profile){
     const e=document.getElementById('online-profile');if(e&&profile)e.innerHTML=`${profile.name}　<span class="rank-badge">${profile.rank}</span>　レート ${profile.rating}　｜ 勝 ${profile.wins} / 負 ${profile.losses}`;
@@ -3249,6 +3271,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function openOnlinePanel(){
     document.getElementById('online-panel').style.display='flex';
+    setOnlineCount(0,'Renderへ接続しています');
+    setOnlineConnecting('オンライン接続中');
     const serverInput=document.getElementById('online-server-url');
     const savedServer=localStorage.getItem('splatoonOnlineServer')||'';
     if(serverInput) serverInput.value=savedServer || (/github\.io$/i.test(location.hostname)?'':'');
@@ -3265,7 +3289,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     try{
       onlineSocket=new WebSocket(url);
       onlineSocket.onopen=()=>{
-        setOnlineStatus('接続OK。Renderの部屋に入ります…');
+        setOnlineConnecting('Render接続OK / ルームを検索中');
+        setOnlineCount(0,'Renderの部屋を探しています');
+
         if(token){
           onlineSocket.send(JSON.stringify({type:'bindAccount',token}));
         }else{
@@ -3276,10 +3302,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         let m;try{m=JSON.parse(ev.data);}catch{return;}
         if(m.type==='accountBound'){
           if(m.error){
-            // Render再起動などで古いセッションが消えていても、
-            // マッチング自体はゲストとして続行する。
-            setOnlineStatus('ログイン情報が切れています。ゲストで接続します…');
-            onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon}));
+            setOnlineConnecting('ログイン情報が切れています');
+            setOnlineCount(0,'もう一度ログインしてください');
+            const p=document.getElementById('online-panel'); if(p) p.style.display='none';
+            try{ localStorage.removeItem('splatoonAccountToken'); }catch{}
+            if(window.showAccountScreen) window.showAccountScreen();
             return;
           }
           showOnlineProfile(m.profile);
@@ -3287,7 +3314,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
         if(m.type==='queue'){
-          onlineRoomId=m.roomId;setOnlineStatus(`部屋 ${m.roomId} に参加しました`);return;
+          onlineRoomId=m.roomId;
+          setOnlineConnecting('マッチング中');
+          setOnlineCount(m.count||0,'対戦相手を探しています');
+          return;
         }
         if(m.type==='room'){
           onlineRoomId=m.roomId;
@@ -3297,16 +3327,19 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           if(!onlineStarted && onlineSocket && onlineSocket.readyState===1 && !onlineReady){
             onlineReady=true;
             onlineSocket.send(JSON.stringify({type:'ready',ready:true,weaponId:playerConfig.weapon}));
-            setOnlineStatus(`Render接続OK。準備完了、対戦相手を待っています… ${m.players.length}/8人`);
+            setOnlineConnecting('マッチング中');
+            setOnlineCount(m.players.length,'準備完了。対戦相手を探しています');
           }else{
-            setOnlineStatus(`部屋待機中　${m.players.length}/8人`);
+            setOnlineConnecting('マッチング中');
+            setOnlineCount(m.players.length,m.players.length<2?'対戦相手を探しています':'参加者を確認しています');
           }
           return;
         }
         if(m.type==='matchFound'){
           onlineActive=true;onlineStarted=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;onlineResultSent=false;
           renderOnlineRoom(m.players||[]);
-          setOnlineStatus(`全員準備OK！ ${m.team}チームへ移動します…`);
+          setOnlineConnecting('マッチング成立');
+          setOnlineCount((m.players||[]).length,'対戦開始準備中');
           const wait=Math.max(0,(m.startAt||Date.now()+1200)-Date.now());
           setTimeout(()=>startOnlineBattle(m),wait);
           
@@ -3326,8 +3359,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
       };
-      onlineSocket.onerror=()=>setOnlineStatus('オンラインサーバーに接続できません。');
-      onlineSocket.onclose=()=>{if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}};
+      onlineSocket.onerror=()=>{
+        setOnlineConnecting('オンライン接続エラー');
+        setOnlineCount(0,'Renderサーバーに接続できません');
+      };
+      onlineSocket.onclose=()=>{
+        if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}
+      };
     }catch{setOnlineStatus('WebSocket開始に失敗しました。');}
   }
   function hideOnlinePanel(){document.getElementById('online-panel').style.display='none';}
@@ -4893,11 +4931,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   // openOnlinePanel itself now auto-joins and auto-readies through its room handler.
 
   window.addEventListener('keydown',e=>{
-    // Number 3 is now the real online shortcut; the lobby no longer exists.
-    if(e.code==='Digit3' && currentPhase!==3 && currentPhase!==0){
+    // Number 3 shares exactly the same online matchmaking flow as P.
+    if(e.code==='Digit3' && currentPhase!==0){
       e.preventDefault();
       e.stopImmediatePropagation();
-      startOnlineDirect();
+      if(window.openOnlineMatchmaking) window.openOnlineMatchmaking();
       return;
     }
   },true);
@@ -4916,10 +4954,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   window.addEventListener('keydown',(e)=>{
-    if(e.code==='KeyP'){
+    if(e.code==='KeyP' || e.code==='Digit3'){
       e.preventDefault(); e.stopImmediatePropagation();
-      if(window.__forceOnlineRoom) window.__forceOnlineRoom();
-      else if(window.startOnlineDirect) window.startOnlineDirect();
+      if(window.openOnlineMatchmaking) window.openOnlineMatchmaking();
       return;
     }
     if(currentPhase!==1.5 && currentPhase!==2) return;
@@ -5235,45 +5272,83 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 <script>
-/* V44: P navigates to the actual Render game; T is a strict diagnostic toggle */
+/* V44 replacement: P and 3 use the same Render matchmaking UI */
 (function(){
-  const RENDER_GAME_URL='https://splatoon-online-8r1r.onrender.com';
+  window.openOnlineMatchmaking=function(){
+    if(window.__accountReady!==true){
+      if(window.showAccountScreen) window.showAccountScreen();
+      return false;
+    }
 
-  function isDiagnosticOpen(){
-    const p=document.getElementById('online-test-panel');
-    return !!p && p.style.display!=='none';
-  }
-  function openDiagnostic(){
-    try{ window.__V10?.releaseLock?.(); }catch(e){}
-    if(window.__runOnlineDiagnostic) window.__runOnlineDiagnostic();
-  }
-  function closeDiagnostic(){
-    const p=document.getElementById('online-test-panel');
-    if(p) p.style.display='none';
-    try{ window.__V10?.releaseLock?.(); }catch(e){}
-  }
+    const test=document.getElementById('online-test-panel');
+    if(test) test.style.display='none';
+    const result=document.getElementById('result-screen');
+    if(result) result.style.display='none';
 
-  window.addEventListener('keydown',function(e){
-    if(e.code==='KeyP'){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      // Login must be completed before leaving this page for the online game.
-      if(window.__accountReady!==true){
-        if(window.showAccountScreen) window.showAccountScreen();
-        return;
+    try{ window.__V10?.releaseLock?.(); }catch(e){}
+
+    const openNow=function(){
+      try{
+        if(typeof openOnlinePanel==='function'){
+          openOnlinePanel();
+          return true;
+        }
+      }catch(err){
+        console.error('[ONLINE MATCHMAKING]',err);
       }
-      // This is intentionally a real navigation to the Render-hosted game.
-      window.location.assign(RENDER_GAME_URL);
-      return;
+      return false;
+    };
+
+    if(currentPhase===1.5 || currentPhase===2){
+      return openNow();
     }
 
-    if(e.code==='KeyT'){
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if(isDiagnosticOpen()) closeDiagnostic();
-      else if(currentPhase!==0) openDiagnostic();
-      return;
+    if(typeof window.__forcePractice==='function'){
+      try{
+        if(window.__forcePractice()){
+          setTimeout(openNow,120);
+          return true;
+        }
+      }catch(err){ console.error('[ONLINE PRACTICE]',err); }
+    }else if(typeof startRangePhase==='function'){
+      try{
+        startRangePhase();
+        if(currentPhase===1.5){
+          setTimeout(openNow,120);
+          return true;
+        }
+      }catch(err){ console.error('[ONLINE RANGE]',err); }
     }
+
+    return openNow();
+  };
+
+  // Final T toggle. It never opens a different screen than the diagnostic.
+  window.addEventListener('keydown',function(e){
+    if(e.code!=='KeyT' || currentPhase===0) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const p=document.getElementById('online-test-panel');
+    try{ window.__V10?.releaseLock?.(); }catch(_){}
+    if(p && p.style.display!=='none'){
+      p.style.display='none';
+    }else if(window.__runOnlineDiagnostic){
+      window.__runOnlineDiagnostic();
+    }
+  },true);
+})();
+</script>
+<script>
+/* V45: final key routing — P and 3 are one online action */
+(function(){
+  window.addEventListener('keydown',function(e){
+    if(e.code!=='KeyP' && e.code!=='Digit3') return;
+    if(currentPhase===0) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    try{
+      if(window.openOnlineMatchmaking) window.openOnlineMatchmaking();
+    }catch(err){ console.error('[ONLINE KEY]',err); }
   },true);
 })();
 </script>
