@@ -69,6 +69,12 @@ const sockets = new Map();
 let nextPlayerNo = 1;
 let nextRoomNo = 1;
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function onlinePlayerCount() { return sockets.size; }
+function broadcastGlobalOnlineCount() {
+  const payload = { type: 'globalOnlineCount', count: onlinePlayerCount() };
+  for (const player of sockets.values()) send(player.ws, payload);
+}
+
 function roster(room) {
   return [...room.players.values()].map(p => ({ id: p.id, name: p.accountName || p.id, team: p.team, ready: !!p.ready, weaponId: p.weaponId, spawn: p.spawn }));
 }
@@ -198,6 +204,7 @@ wss.on('connection', ws => {
   const player = { id, ws, roomId: null, team: null, ready: false, weaponId: 0, spawn: { x: 0, y: 0, z: 0 }, lastStateAt: 0, accountName: null, accountToken: null };
   sockets.set(ws, player);
   send(ws, { type: 'hello', id });
+  broadcastGlobalOnlineCount();
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
     if (m.type === 'bindAccount') {
@@ -241,7 +248,7 @@ wss.on('connection', ws => {
       setTimeout(() => { if (rooms.get(room.id) === room) rooms.delete(room.id); }, 5000); return;
     }
   });
-  ws.on('close', () => { sockets.delete(ws); leaveRoom(player); });
+  ws.on('close', () => { sockets.delete(ws); leaveRoom(player); broadcastGlobalOnlineCount(); });
 });
 setInterval(() => {
   const now = Date.now();
