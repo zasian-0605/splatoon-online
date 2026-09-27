@@ -3523,10 +3523,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function setCursorHard(hidden){
     root.classList.toggle('battle-cursor-hidden',!!hidden);
     document.body.classList.toggle('pointer-lock-ready',!!hidden);
-    document.body.style.setProperty('cursor',hidden?'none':'auto','important');
-    if(renderer?.domElement) renderer.domElement.style.setProperty('cursor',hidden?'none':'auto','important');
     if(hidden){
+      document.body.style.setProperty('cursor','none','important');
+      if(renderer?.domElement) renderer.domElement.style.setProperty('cursor','none','important');
+      // Hide all descendants while the battle camera owns the pointer.
       document.querySelectorAll('*').forEach(el=>el.style.setProperty('cursor','none','important'));
+    }else{
+      // Clear the inline cursor overrides that the battle mode applied.
+      document.querySelectorAll('*').forEach(el=>el.style.removeProperty('cursor'));
+      document.body.style.setProperty('cursor','auto','important');
+      if(renderer?.domElement) renderer.domElement.style.setProperty('cursor','auto','important');
     }
   }
 
@@ -3709,6 +3715,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }else{
       if(full) full.style.display='none';
       if(mini) mini.style.display='none';
+      // Result/news/lobby/customize screens must never keep the battle pointer lock.
+      if(document.pointerLockElement){
+        try{ document.exitPointerLock(); }catch(e){}
+      }
+      pointerLockWanted=false;
+      setCursorHard(false);
     }
   },250);
 
@@ -4857,6 +4869,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   }
   window.__startOnlineDirect=startOnlineDirect;
+  // V38's P-key handler calls the global name. Expose the launcher explicitly.
+  window.startOnlineDirect=startOnlineDirect;
 
   // openOnlinePanel itself now auto-joins and auto-readies through its room handler.
 
@@ -5134,6 +5148,26 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       if(p&&p.style.display!=='none'){e.preventDefault();p.style.display='none';}
     }
   },true);
+})();
+</script>
+<script>
+/* V42: final pointer-lock cleanup outside gameplay */
+(function(){
+  function outsideBattle(){
+    return currentPhase!==1.5 && currentPhase!==2;
+  }
+  function unlock(){
+    if(!outsideBattle()) return;
+    try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
+    document.documentElement.classList.remove('battle-cursor-hidden');
+    document.body.classList.remove('pointer-lock-ready');
+    document.querySelectorAll('*').forEach(el=>el.style.removeProperty('cursor'));
+    document.body.style.setProperty('cursor','auto','important');
+    if(renderer?.domElement) renderer.domElement.style.setProperty('cursor','auto','important');
+  }
+  document.addEventListener('pointerlockchange',unlock,true);
+  window.addEventListener('blur',unlock,true);
+  setInterval(unlock,200);
 })();
 </script>
 </body>
