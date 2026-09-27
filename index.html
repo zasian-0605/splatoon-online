@@ -123,6 +123,56 @@ html.battle-cursor-hidden,html.battle-cursor-hidden body,html.battle-cursor-hidd
 html.battle-cursor-hidden canvas{cursor:none !important;}
 body.pointer-lock-ready{cursor:none !important;}
 
+/* V48: 右上オンライン人数HUD */
+#global-online-hud{
+  position:fixed;
+  top:14px;
+  right:16px;
+  z-index:55;
+  display:none;
+  min-width:150px;
+  padding:8px 12px 9px;
+  box-sizing:border-box;
+  background:rgba(8,8,18,.88);
+  border:2px solid #e3ff00;
+  border-radius:11px;
+  box-shadow:4px 4px 0 rgba(0,0,0,.4),0 0 14px rgba(227,255,0,.22);
+  color:#fff;
+  pointer-events:none;
+  font-family:Arial Black,Meiryo,sans-serif;
+  text-align:right;
+}
+#global-online-hud .label{
+  display:block;
+  font-size:10px;
+  line-height:1.1;
+  letter-spacing:1px;
+  color:#e3ff00;
+  opacity:.95;
+}
+#global-online-hud .count{
+  display:block;
+  margin-top:2px;
+  font-size:25px;
+  line-height:1;
+  color:#fff;
+  text-shadow:2px 2px 0 #ff0055;
+}
+#global-online-hud .note{
+  display:block;
+  margin-top:3px;
+  font:700 10px/1.25 Arial,sans-serif;
+  color:#ddd;
+  max-width:220px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@media(max-width:800px){
+  #global-online-hud{top:8px;right:8px;min-width:126px;padding:7px 9px;}
+  #global-online-hud .count{font-size:21px;}
+}
+
 /* V47: 明示的にマウス解除中なら、ゲームcanvas上でもカーソルを必ず表示する。 */
 html.cursor-force-visible,
 html.cursor-force-visible body,
@@ -315,6 +365,12 @@ html.cursor-force-visible canvas{
       <button id="online-test-close" style="flex:1;padding:12px;border:0;border-radius:10px;background:#ff0055;color:#fff;font-weight:900;font-size:16px;cursor:pointer;">閉じる</button>
     </div>
   </div>
+</div>
+
+<div id="global-online-hud" aria-live="polite">
+  <span class="label">ONLINE PLAYERS</span>
+  <span id="global-online-count" class="count">1 / 8</span>
+  <span id="global-online-note" class="note">対戦相手を探しています</span>
 </div>
 <div id="online-panel">
   <div id="online-card">
@@ -3300,13 +3356,23 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!origin) return '';
     return origin.replace(/^http:/i,'ws:').replace(/^https:/i,'wss:');
   }
+  function showGlobalOnlineHud(show){
+    const hud=document.getElementById('global-online-hud');
+    if(hud) hud.style.display=show?'block':'none';
+  }
   function setOnlineCount(n, note){
     const requested=Number(n);
     const safe=Math.max(1,Math.min(8,Number.isFinite(requested)?requested:1));
+    const text=`${safe} / 8`;
+    const message=note||'対戦相手を探しています';
     const count=document.getElementById('online-count');
     const noteEl=document.getElementById('online-progress-note');
-    if(count) count.textContent=`${safe} / 8`;
-    if(noteEl) noteEl.textContent=note||'対戦相手を探しています';
+    const globalCount=document.getElementById('global-online-count');
+    const globalNote=document.getElementById('global-online-note');
+    if(count) count.textContent=text;
+    if(noteEl) noteEl.textContent=message;
+    if(globalCount) globalCount.textContent=text;
+    if(globalNote) globalNote.textContent=message;
   }
   function setOnlineConnecting(label){
     const status=document.getElementById('online-status');
@@ -3330,6 +3396,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     // オンライン画面ではマウスを自由に動かせるよう、最初に確実にロック解除。
     try{ window.__V10?.releaseLock?.(); }catch(e){}
     document.getElementById('online-panel').style.display='flex';
+    showGlobalOnlineHud(true);
     setOnlineCount(1,'自分が参加しました。対戦相手を探しています');
     setOnlineConnecting('オンライン接続中');
     const serverInput=document.getElementById('online-server-url');
@@ -3424,7 +3491,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function closeOnlinePanel(){
     // オンライン画面を閉じた瞬間は必ずマウスロックを解除する。
     try{ window.__V10?.releaseLock?.(); }catch(e){}
-    hideOnlinePanel();onlineReady=false;
+    hideOnlinePanel();showGlobalOnlineHud(false);onlineReady=false;
     if(onlineSocket&&onlineSocket.readyState<=1){try{onlineSocket.send(JSON.stringify({type:'leaveQueue'}));}catch{} try{onlineSocket.close();}catch{}}
     onlineSocket=null;onlineActive=false;onlineStarted=false;
   }
@@ -5381,6 +5448,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     panel.style.display='flex';
     panel.style.visibility='visible';
     panel.style.opacity='1';
+    if(typeof showGlobalOnlineHud==='function') showGlobalOnlineHud(true);
 
     try{
       openOnlinePanel();
