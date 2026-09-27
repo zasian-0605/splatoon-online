@@ -75,8 +75,29 @@ function broadcastGlobalOnlineCount() {
   for (const player of sockets.values()) send(player.ws, payload);
 }
 
+function sanitizeConfig(cfg, fallbackWeapon=0) {
+  const c = cfg && typeof cfg === 'object' ? cfg : {};
+  return {
+    style: c.style === 'boy' ? 'boy' : 'girl',
+    hair: Number.isFinite(Number(c.hair)) ? Math.max(0, Math.min(3, Math.floor(Number(c.hair)))) : 0,
+    color: Number.isFinite(Number(c.color)) ? Math.max(0, Math.min(3, Math.floor(Number(c.color)))) : 0,
+    outfit: Number.isFinite(Number(c.outfit)) ? Math.max(0, Math.min(49, Math.floor(Number(c.outfit)))) : 0,
+    weapon: Number.isFinite(Number(c.weapon)) ? Math.max(0, Math.min(200, Math.floor(Number(c.weapon)))) : fallbackWeapon,
+    gear: Number.isFinite(Number(c.gear)) ? Math.max(0, Math.min(3, Math.floor(Number(c.gear)))) : 0,
+    device: c.device === 'mobile' ? 'mobile' : 'pc',
+    inkColorHex: Number.isFinite(Number(c.inkColorHex)) ? Math.max(0, Math.min(0xffffff, Math.floor(Number(c.inkColorHex)))) : null
+  };
+}
 function roster(room) {
-  return [...room.players.values()].map(p => ({ id: p.id, name: p.accountName || p.id, team: p.team, ready: !!p.ready, weaponId: p.weaponId, spawn: p.spawn }));
+  return [...room.players.values()].map(p => ({
+    id: p.id,
+    name: p.accountName || p.id,
+    team: p.team,
+    ready: !!p.ready,
+    weaponId: p.weaponId,
+    spawn: p.spawn,
+    config: p.config || sanitizeConfig(null,p.weaponId)
+  }));
 }
 function broadcast(room, obj, exceptId = null) {
   for (const p of room.players.values()) if (p.id !== exceptId) send(p.ws, obj);
@@ -232,7 +253,7 @@ const server = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
   const id = `Player_${String(nextPlayerNo++).padStart(4, '0')}`;
-  const player = { id, ws, roomId: null, team: null, ready: false, weaponId: 0, spawn: { x: 0, y: 0, z: 0 }, lastStateAt: 0, accountName: null, accountToken: null };
+  const player = { id, ws, roomId: null, team: null, ready: false, weaponId: 0, config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 }, lastStateAt: 0, accountName: null, accountToken: null };
   sockets.set(ws, player);
   console.log(`[WS CONNECT] ${player.id} activeSockets=${sockets.size}`);
   send(ws, { type: 'hello', id });
@@ -254,6 +275,9 @@ wss.on('connection', ws => {
       return;
     }
     if (m.type === 'joinQueue') {
+      if (m.config && typeof m.config === 'object') player.config = sanitizeConfig(m.config, player.weaponId);
+      if (Number.isFinite(Number(m.weaponId))) player.weaponId = Math.max(0, Math.min(200, Math.floor(Number(m.weaponId))));
+      player.config.weapon = player.weaponId;
       // Online battles can also use Render without a WEB ID.
       // Registered users keep their account/rating; guests simply use their connection id.
       if (!player.accountName) player.accountName = `Guest_${player.id}`;
@@ -269,7 +293,10 @@ wss.on('connection', ws => {
         console.log(`[WS READY IGNORED] ${player.id} room=${player.roomId || '-'} reason=no-waiting-room-or-started`);
         return;
       }
-      player.ready = !!m.ready; player.weaponId = Number.isFinite(m.weaponId) ? m.weaponId : player.weaponId;
+      player.ready = !!m.ready;
+      player.weaponId = Number.isFinite(m.weaponId) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      if(m.config && typeof m.config === 'object') player.config=sanitizeConfig(m.config,player.weaponId);
+      player.config.weapon=player.weaponId;
       console.log(`[WS READY] ${player.id} room=${room.id} ready=${player.ready} roomPlayers=${room.players.size}`);
       broadcast(room, { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 });
       assignTeamsAndStart(room); return;
