@@ -8468,5 +8468,141 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+
+<script>
+/* V64: closer-to-Splatoon battle feel
+   - real sub input path
+   - moving Ink Storm
+   - unique Tenta Missile targets
+   - Booyah Bomb can be accelerated by Nice
+*/
+(function(){
+  'use strict';
+
+  /* The old control function is replaced so right-click/Q always use V60 subs. */
+  doPlayerSubThrow=function(){
+    const f=playerFighter;
+    if(!f||!f.alive)return;
+    const aim=new THREE.Vector3();
+    camera.getWorldDirection(aim);
+    aim.normalize();
+
+    // Fizzy Bomb is handled by the dedicated charge handler.
+    if(f.weapon?.sub==='fizzyBomb') return;
+    tryThrowSubV60(f,aim,performance.now());
+  };
+
+  /* Give Booyah Bomb an actual charge interaction with Nice.
+     Holding the special itself still auto-releases after the safety timer. */
+  window.__chargeBooyahFromNice=function(){
+    const f=playerFighter;
+    if(!f?.v60Booyah)return false;
+    const now=performance.now();
+    if(now>=f.v60Booyah.until)return false;
+    f.v60Booyah.charge=Math.min(1,(f.v60Booyah.charge||0)+.20);
+    f.v60Booyah.until=Math.max(now+350,f.v60Booyah.until-180);
+    showToast('ナイス！ ダマが強化された');
+    return true;
+  };
+
+  /* Make the already-existing Booyah state carry charge. */
+  const oldActivateBooyah=activateSpecialV60;
+  /* Do not replace the full dispatcher; patch its state after activation by observing it. */
+  const originalSpecialState=activateSpecialV60;
+
+  /* Moving Ink Storm: project the cloud forward from the throw point. */
+  const oldStormUpdate=updateSpecialV60;
+  updateSpecialV60=function(delta){
+    const before=performance.now();
+    oldStormUpdate(delta);
+    const now=performance.now();
+    for(const s of sp.storms){
+      if(s.dir && now<s.end) s.pos.addScaledVector(s.dir,1.25*delta);
+    }
+  };
+
+  /* Unique Tenta Missile targets instead of all four missiles stacking on one player. */
+  const oldSpecialActivate=activateSpecialV60;
+  activateSpecialV60=function(f,name,target,remote){
+    const now=performance.now();
+    if(name==='ナイスダマ'){
+      const ok=oldSpecialActivate(f,name,target,remote);
+      if(ok&&f.v60Booyah){
+        f.v60Booyah.charge=0;
+      }
+      return ok;
+    }
+
+    if(name==='アメフラシ'){
+      const q=target||f.pos.clone().add(new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y)).multiplyScalar(18));
+      const dir=new THREE.Vector3().subVectors(q,f.pos);dir.y=0;
+      if(dir.lengthSq()<.01)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+      dir.normalize();
+      const ok=oldSpecialActivate(f,name,target,remote);
+      if(ok){
+        const latest=sp.storms[sp.storms.length-1];
+        if(latest){latest.dir=dir;latest.speed=1.25;}
+      }
+      return ok;
+    }
+
+    if(name==='マルチミサイル'){
+      const q=target||f.pos;
+      const enemies=fighters.filter(o=>o.alive&&o.team!==f.team)
+        .sort((a,b)=>a.pos.distanceTo(q)-b.pos.distanceTo(q));
+      const ok=oldSpecialActivate(f,name,target,remote);
+      if(!ok)return false;
+      // Remove the just-created missile jobs for this source and recreate unique target locks.
+      for(let i=sp.missileJobs.length-1;i>=0;i--){
+        if(sp.missileJobs[i].src===f && sp.missileJobs[i].at>=now) sp.missileJobs.splice(i,1);
+      }
+      const targets=enemies.slice(0,Math.min(4,enemies.length));
+      targets.forEach((enemy,i)=>{
+        sp.missileJobs.push({
+          pos:enemy.pos.clone(),team:f.team,color:teamColor(f),
+          at:now+700+i*150,src:f,targetId:enemy.id
+        });
+      });
+      return true;
+    }
+    return oldSpecialActivate(f,name,target,remote);
+  };
+
+  /* Let F/Nice accelerate Booyah on desktop and mobile. */
+  const chargeNice=function(e){
+    if((currentPhase!==1.5&&currentPhase!==2)||e.repeat)return;
+    if(e.code==='KeyF'){
+      window.__chargeBooyahFromNice?.();
+    }
+  };
+  window.addEventListener('keydown',chargeNice,true);
+  document.getElementById('btn-nice')?.addEventListener('click',()=>window.__chargeBooyahFromNice?.());
+
+  /* Charged Booyah gets a larger radius/damage, while the normal case stays moderate. */
+  const oldUpdateSpecial=updateSpecialV60;
+  /* oldUpdateSpecial above is already wrapped once; wrap the final function for the blast itself. */
+  updateSpecialV60=function(delta){
+    const now=performance.now();
+    oldStormUpdate(delta);
+    for(const f of fighters){
+      if(f.v60Booyah && now>=f.v60Booyah.until){
+        const charge=Math.max(0,Math.min(1,f.v60Booyah.charge||0));
+        // The previous wrapper may already have removed the state, so only execute when active.
+        const radius=5.2+charge*1.8;
+        const damage=220+Math.round(charge*100);
+        explodeAt(f.v60Booyah.target,radius,damage,f.team,{
+          paintRadius:radius+.4,colorHex:teamColor(f),sourceFighter:f
+        });
+        f.v60Booyah=null;
+        f.invulnUntil=0;
+      }
+    }
+  };
+
+  /* Re-run the common animation loop after replacing updateSpecialV60. */
+  window.__V64_BUILD='V64-SPLATOON-LIKE-GAMEPLAY';
+})();
+</script>
+
 </body>
 </html>
