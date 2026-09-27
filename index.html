@@ -69,6 +69,30 @@ canvas{display:block;width:100%;height:100%;}
 #btn-sub{bottom:20px;right:100px;width:64px;height:64px;font-size:14px;}
 #btn-special{bottom:190px;right:20px;width:70px;height:70px;font-size:12px;background:rgba(255,0,85,.5);}
 #btn-map{bottom:270px;right:20px;width:62px;height:62px;font-size:12px;}
+#btn-nice{bottom:350px;right:18px;width:68px;height:50px;border-radius:14px;font-size:14px;background:rgba(0,180,255,.72);}
+#btn-cmon{bottom:408px;right:18px;width:68px;height:50px;border-radius:14px;font-size:13px;background:rgba(255,110,0,.72);}
+#callout-feed{position:absolute;top:150px;left:50%;transform:translateX(-50%);z-index:24;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;font-family:Arial Black,Meiryo,sans-serif;}
+.callout-pop{padding:7px 15px;border:3px solid #fff;border-radius:14px;background:rgba(18,12,40,.92);color:#fff;font-size:18px;text-shadow:2px 2px 0 #000;box-shadow:4px 4px 0 rgba(0,0,0,.4);animation:calloutPop .16s ease-out;}
+.callout-pop.nice{border-color:#4ddcff;}
+.callout-pop.cmon{border-color:#ff9a4d;}
+@keyframes calloutPop{from{transform:scale(.75);opacity:0}to{transform:scale(1);opacity:1}}
+#result-screen{gap:12px;padding:24px;box-sizing:border-box;overflow:auto;}
+#result-feedback{width:min(720px,92vw);background:rgba(0,0,0,.35);border:3px solid #00d4ff;border-radius:14px;padding:14px;box-sizing:border-box;font-family:Arial,Meiryo,sans-serif;}
+#result-feedback h3,#github-changes h3{margin:0 0 8px;color:#e3ff00;font-size:18px;}
+#feedback-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+.feedback-chip{padding:9px 7px;border:2px solid #555;background:#1a1a29;color:#fff;border-radius:9px;cursor:pointer;font-weight:800;}
+.feedback-chip.active{border-color:#e3ff00;background:#35215b;}
+#feedback-text{width:100%;min-height:72px;margin-top:9px;resize:vertical;background:#08080f;color:#fff;border:2px solid #555;border-radius:9px;padding:8px;box-sizing:border-box;font:14px/1.45 Arial,Meiryo,sans-serif;}
+#feedback-send{margin-top:8px;padding:9px 16px;border:0;border-radius:9px;background:#e3ff00;color:#2f059c;font-weight:900;cursor:pointer;}
+#feedback-status{display:inline-block;margin-left:8px;font:12px Arial,Meiryo,sans-serif;color:#cfcfd8;}
+#github-changes{width:min(720px,92vw);background:rgba(0,0,0,.28);border:2px solid #555;border-radius:14px;padding:12px;box-sizing:border-box;font:13px/1.55 Arial,Meiryo,sans-serif;}
+#github-changes ul{margin:6px 0 0 20px;padding:0;}
+#github-build{margin-top:7px;color:#bbb;font-size:11px;font-family:monospace;}
+@media(max-width:800px){
+  #btn-nice{bottom:350px;right:12px;}
+  #btn-cmon{bottom:408px;right:12px;}
+  #feedback-grid{grid-template-columns:1fr;}
+}
 #joystick-area{position:absolute;bottom:20px;left:20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.1);border:2px dashed rgba(255,255,255,.3);pointer-events:none;}
 #joystick-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:rgba(227,255,0,.5);pointer-events:none;display:none;}
 #instructions{position:absolute;top:10px;left:10px;color:#fff;font-family:sans-serif;text-shadow:1px 1px 2px black;font-size:12px;pointer-events:none;line-height:1.6;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px;}
@@ -360,6 +384,9 @@ html.cursor-force-visible canvas{
 <div id="btn-sub" class="mobile-btn">ボム</div>
 <div id="btn-special" class="mobile-btn">SP</div>
 <div id="btn-map" class="mobile-btn">MAP</div>
+<div id="btn-nice" class="mobile-btn">ナイス</div>
+<div id="btn-cmon" class="mobile-btn">カモン</div>
+<div id="callout-feed"></div>
 </div>
 
 <div id="minimap"><canvas id="minimap-canvas" width="190" height="190"></canvas><div id="map-label">MAP · M</div></div>
@@ -369,7 +396,35 @@ html.cursor-force-visible canvas{
 <div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div></div>
 <div id="special-ready">SPECIAL READY!</div>
 <div id="death-location-marker">💀 ここでやられた</div>
-<div id="result-screen"><div id="result-title"></div><div id="result-detail"></div><button id="btn-result-ok">試し撃ち場へ</button></div>
+<div id="result-screen">
+  <div id="result-title"></div>
+  <div id="result-detail"></div>
+  <div id="result-feedback">
+    <h3>この試合のフィードバック</h3>
+    <div id="feedback-grid">
+      <button class="feedback-chip" data-feedback="バグ">バグがあった</button>
+      <button class="feedback-chip" data-feedback="ラグ">ラグ・通信</button>
+      <button class="feedback-chip" data-feedback="操作">操作しにくい</button>
+      <button class="feedback-chip" data-feedback="マッチング">マッチング</button>
+      <button class="feedback-chip" data-feedback="見た目">見た目</button>
+      <button class="feedback-chip" data-feedback="その他">その他</button>
+    </div>
+    <textarea id="feedback-text" maxlength="1000" placeholder="気になったことを1,000文字以内で書けます"></textarea>
+    <button id="feedback-send">フィードバックを送る</button><span id="feedback-status"></span>
+  </div>
+  <div id="github-changes">
+    <h3>今回のGitHub改造点</h3>
+    <ul>
+      <li>キャラクターの胴体・脚の接続と腰まわりを調整</li>
+      <li>復活処理に一時的な無敵時間を設定</li>
+      <li>オンライン通信の入力レート・位置・メッセージ量をサーバー側で監視</li>
+      <li>ナイス／カモンのオンライン同期と画面表示を追加</li>
+      <li>試合終了直後にフィードバックと更新内容を確認できる画面を追加</li>
+    </ul>
+    <div id="github-build">build: V49 / latest client commit: 5717997f0fe8a398064c163aaa842a8dacfbe569</div>
+  </div>
+  <button id="btn-result-ok">試し撃ち場へ</button>
+</div>
 
 
 <div id="online-test-panel" style="position:absolute;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(3,0,18,.94);font-family:Arial,Meiryo,sans-serif;color:#fff;">
@@ -3813,6 +3868,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           showGlobalOnlineHud(true);
           return;
         }
+        if(m.type==='callout'){
+          showOnlineCallout(m.calloutType==='nice'?'ナイス!':'カモン!',m.calloutType==='nice'?'nice':'cmon',m.name||m.id);
+          return;
+        }
         if(m.type==='accountBound'){
           if(m.error){
             setOnlineConnecting('ログイン情報が切れています');
@@ -5972,5 +6031,90 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+<script>
+/* V50: communication UI + result feedback */
+(function(){
+  const BUILD='V50-CALLOUT-FEEDBACK-2026-09-27';
+
+  function showOnlineCallout(text,kind,from){
+    const box=document.getElementById('callout-feed');
+    if(!box) return;
+    const el=document.createElement('div');
+    el.className='callout-pop '+(kind==='nice'?'nice':'cmon');
+    el.textContent=(from?String(from)+'  ':'')+text;
+    box.appendChild(el);
+    while(box.children.length>3) box.removeChild(box.firstChild);
+    setTimeout(()=>{if(el.parentNode)el.remove();},2200);
+  }
+  window.showOnlineCallout=showOnlineCallout;
+
+  function sendCallout(type){
+    if(currentPhase!==1.5 && currentPhase!==2) return;
+    const label=type==='nice'?'ナイス!':'カモン!';
+    showOnlineCallout(label,type==='nice'?'nice':'cmon','あなた');
+    try{
+      if(onlineSocket&&onlineSocket.readyState===1&&onlineStarted){
+        onlineSocket.send(JSON.stringify({type:'callout',calloutType:type}));
+      }
+    }catch{}
+  }
+  window.sendCallout=sendCallout;
+
+  document.getElementById('btn-nice')?.addEventListener('click',()=>sendCallout('nice'));
+  document.getElementById('btn-cmon')?.addEventListener('click',()=>sendCallout('cmon'));
+
+  window.addEventListener('keydown',e=>{
+    if(currentPhase!==1.5 && currentPhase!==2) return;
+    if(e.code==='KeyF'){e.preventDefault();sendCallout('nice');}
+    if(e.code==='KeyG'){e.preventDefault();sendCallout('cmon');}
+  },true);
+
+  // Result feedback.
+  let feedbackType='その他';
+  document.querySelectorAll('.feedback-chip').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      feedbackType=btn.dataset.feedback||'その他';
+      document.querySelectorAll('.feedback-chip').forEach(x=>x.classList.toggle('active',x===btn));
+    });
+  });
+
+  document.getElementById('feedback-send')?.addEventListener('click',async()=>{
+    const status=document.getElementById('feedback-status');
+    const text=document.getElementById('feedback-text')?.value.trim()||'';
+    const payload={
+      category:feedbackType,
+      text,
+      build:BUILD,
+      roomId:onlineRoomId||null
+    };
+    if(status) status.textContent='送信中…';
+    try{
+      const origin=location.origin;
+      const res=await fetch(origin+'/api/feedback',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||data.ok!==true) throw new Error(data.error||'送信に失敗しました');
+      if(status) status.textContent='送信しました。ありがとう！';
+      const ta=document.getElementById('feedback-text'); if(ta) ta.value='';
+    }catch(err){
+      localStorage.setItem('splatoonLastFeedback',JSON.stringify(payload));
+      if(status) status.textContent='保存しました（次回も確認できます）';
+    }
+  });
+
+  // Mobile communication buttons follow device setting.
+  const applyCalloutVisibility=()=>{
+    const mobile=playerConfig?.device==='mobile';
+    ['btn-nice','btn-cmon'].forEach(id=>{
+      const e=document.getElementById(id);
+      if(e) e.style.display=mobile?'flex':'none';
+    });
+  };
+  setInterval(applyCalloutVisibility,500);
+})();
+</script>
 </body>
 </html>
