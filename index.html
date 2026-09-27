@@ -62,6 +62,14 @@ canvas{display:block;width:100%;height:100%;}
 #reticle::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:6px;height:6px;background-color:#e3ff00;border-radius:50%;}
 #charge-gauge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:74px;height:74px;border-radius:50%;pointer-events:none;display:none;background:conic-gradient(#ff0055 calc(var(--pct,0)*1%), rgba(255,255,255,.15) 0);}
 #charge-gauge::after{content:"";position:absolute;top:5px;left:5px;right:5px;bottom:5px;border-radius:50%;background:rgba(20,0,50,.5);}
+#special-charge-panel{position:absolute;top:56%;left:50%;transform:translate(-50%,-50%);width:min(390px,72vw);z-index:22;display:none;pointer-events:none;text-align:center;font-family:Arial Black,Meiryo,sans-serif;}
+#special-charge-title{font-size:22px;color:#fff;text-shadow:3px 3px 0 #000;margin-bottom:7px;letter-spacing:1px;}
+#special-charge-track{height:18px;border:3px solid #fff;border-radius:12px;background:rgba(0,0,0,.58);overflow:hidden;box-shadow:0 0 16px rgba(227,255,0,.45);}
+#special-charge-fill{height:100%;width:0%;background:linear-gradient(90deg,#00d4ff,#ff0055,#e3ff00);transition:width .08s;}
+#special-charge-hint{margin-top:7px;font:800 12px/1.4 Arial,Meiryo,sans-serif;color:#eafcff;text-shadow:1px 1px 0 #000;}
+#special-charge-panel.ready #special-charge-fill{box-shadow:0 0 18px #e3ff00;}
+@media(max-width:800px){#special-charge-panel{top:55%;width:min(340px,82vw)}#special-charge-title{font-size:18px}}
+
 .mobile-btn{pointer-events:auto;position:absolute;background:rgba(47,5,156,.6);color:#fff;border:3px solid #e3ff00;border-radius:50%;display:flex;justify-content:center;align-items:center;font-size:20px;font-weight:bold;text-shadow:2px 2px 0 #000;user-select:none;-webkit-user-select:none;box-shadow:0 4px 6px rgba(0,0,0,.3);}
 .mobile-btn:active{transform:scale(.9);background:rgba(227,255,0,.8);color:#2f059c;}
 #btn-squid{bottom:20px;right:180px;width:64px;height:64px;}
@@ -380,6 +388,11 @@ html.cursor-force-visible canvas{
 </div>
 <div id="reticle"></div>
 <div id="charge-gauge"></div>
+<div id="special-charge-panel">
+  <div id="special-charge-title">チャージボール</div>
+  <div id="special-charge-track"><div id="special-charge-fill"></div></div>
+  <div id="special-charge-hint">F / ナイス連打でチャージ　・　満タンでSPを押すと投げる</div>
+</div>
 <div id="sensor-layer"></div>
 <div id="joystick-area"><div id="joystick-knob"></div></div>
 <div id="btn-squid" class="mobile-btn">🦑</div>
@@ -1766,6 +1779,8 @@ function createFighter(opts){
     weapon: weaponList[cfg.weapon], specialGauge:0, lastShot:0, lastSub:0,
     invulnUntil:0, speedBoostUntil:0, chargeStart:0, isCharging:false,
     lastSwing:0, activeSpecialUntil:0,
+    specialChargeMode:false, specialCharge:0, specialChargeStarted:0, specialChargeOrbVisual:null,
+    specialReleaseQueued:false, specialRemote:false,
     lastDamagedById:null, lastDamagedAt:0, spectateTargetId:null,
     cfg: cfg,
     ai: opts.isPlayer ? null : { state:'patrol', target:null, waypoint: waypoints[Math.floor(Math.random()*waypoints.length)]||{x:0,z:0}, nextDecision:0, paintTick:0 }
@@ -1792,6 +1807,7 @@ function respawnFighter(f){
   f.alive = true;
   f.root.visible = true;
   f.invulnUntil = performance.now() + 1400;
+  cancelChargeOrbSpecial(f);
   f.spectateTargetId=null;
   f.lastDamagedById=null;
   if(f.isPlayer){
@@ -1865,6 +1881,7 @@ function updateSpectateCamera(dead){
 }
 function killFighter(f){
   if(!f.alive) return;
+  cancelChargeOrbSpecial(f);
   f.alive = false;
   f.deathLocation = f.pos.clone();
   f.root.visible = false;
@@ -1919,7 +1936,7 @@ function explodeAt(pos, radius, damage, team, opts={}){
     const d = o.pos.distanceTo(pos);
     if(d < radius){
       const falloff = 1 - (d/radius)*0.5;
-      applyDamage(o, Math.round(damage*falloff), null);
+      applyDamage(o, Math.round(damage*falloff), opts.sourceFighter || null);
     }
   });
   // 近くの壁があれば少し塗る
@@ -2297,6 +2314,199 @@ function updateSubs(delta){
 /* =========================================================
    スペシャルウェポン
    ========================================================= */
+
+/* =========================================================
+   自作チャージボール・スペシャル
+   - 発動すると上昇してチャージ姿勢へ
+   - F / 「ナイス」でチャージ
+   - 満タン後にSPボタン / Rで投擲
+   - 着地点で円形エフェクトが拡大し、最後に爆発
+   - オンラインでは発動・投擲イベントだけを同期
+   ========================================================= */
+const chargeOrbProjectiles = [];
+const chargeOrbImpacts = [];
+
+function chargeOrbColor(f){ return getFighterInkHex(f); }
+function chargeOrbClampTarget(v){
+  v.x=Math.max(-48,Math.min(48,v.x));
+  v.z=Math.max(-74,Math.min(74,v.z));
+  v.y=Math.max(0,getSupportHeight(v.x,v.z,50)+0.08);
+  return v;
+}
+function getChargeOrbTarget(fighter, aimDirOverride=null){
+  let dir;
+  if(fighter?.isPlayer && camera){ dir=new THREE.Vector3(); camera.getWorldDirection(dir); }
+  else if(aimDirOverride) dir=aimDirOverride.clone();
+  else dir=new THREE.Vector3(Math.sin(fighter.root.rotation.y),0,Math.cos(fighter.root.rotation.y));
+  dir.normalize();
+  const start=camera&&fighter?.isPlayer ? camera.position.clone() : fighter.pos.clone().add(new THREE.Vector3(0,1.6,0));
+  let dist=14;
+  if(Math.abs(dir.y)>0.05){
+    const t=(0-start.y)/dir.y;
+    if(t>4&&t<34) dist=t;
+  }
+  const p=start.clone().addScaledVector(dir,Math.min(34,Math.max(8,dist)));
+  if(fighter?.isPlayer&&Math.abs(dir.y)<=0.05)p.y=0;
+  return chargeOrbClampTarget(p);
+}
+function removeChargeOrbVisual(fighter){
+  if(!fighter?.specialChargeOrbVisual)return;
+  scene.remove(fighter.specialChargeOrbVisual);
+  fighter.specialChargeOrbVisual=null;
+}
+function createChargeOrbVisual(fighter){
+  removeChargeOrbVisual(fighter);
+  const col=chargeOrbColor(fighter), group=new THREE.Group();
+  const armMat=new THREE.MeshBasicMaterial({color:col});
+  const coreMat=new THREE.MeshBasicMaterial({color:0xffffff});
+  const ringMat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.85});
+  const armGeo=new THREE.CylinderGeometry(.07,.11,1.15,10);
+  const padGeo=new THREE.SphereGeometry(.16,10,10);
+  const coreGeo=new THREE.IcosahedronGeometry(.42,1);
+  const ringGeo=new THREE.TorusGeometry(.62,.07,8,24);
+  const a1=new THREE.Mesh(armGeo,armMat),a2=new THREE.Mesh(armGeo,armMat);
+  a1.position.set(-.52,1.72,.02);a2.position.set(.52,1.72,.02);
+  a1.rotation.z=-.62;a2.rotation.z=.62;
+  const p1=new THREE.Mesh(padGeo,armMat),p2=new THREE.Mesh(padGeo,armMat);
+  p1.position.set(-.90,2.12,.02);p2.position.set(.90,2.12,.02);
+  const core=new THREE.Mesh(coreGeo,coreMat);core.position.set(0,2.08,.02);
+  const ring=new THREE.Mesh(ringGeo,ringMat);ring.rotation.x=Math.PI/2;ring.position.set(0,2.08,.02);
+  group.add(a1,a2,p1,p2,core,ring);
+  group.userData.core=core;group.userData.ring=ring;
+  scene.add(group);fighter.specialChargeOrbVisual=group;
+}
+function updateChargeOrbVisual(fighter,now){
+  const g=fighter?.specialChargeOrbVisual;if(!g)return;
+  g.position.copy(fighter.pos);
+  const phase=(now-(fighter.specialChargeStarted||now))*.008;
+  g.position.y+=.35+Math.sin(phase)*.10;
+  const pct=Math.max(0,Math.min(1,(fighter.specialCharge||0)/100));
+  if(g.userData.core)g.userData.core.scale.setScalar(.82+pct*.5+Math.sin(phase*2)*.05);
+  if(g.userData.ring){
+    g.userData.ring.rotation.z=phase*.7;
+    g.userData.ring.scale.setScalar(.82+pct*.55);
+    g.userData.ring.material.opacity=.42+.5*pct;
+  }
+}
+function setChargeOrbHud(fighter){
+  const panel=document.getElementById('special-charge-panel'),fill=document.getElementById('special-charge-fill');
+  const hint=document.getElementById('special-charge-hint'),title=document.getElementById('special-charge-title'),btn=document.getElementById('btn-special');
+  if(!panel||!fill)return;
+  const active=!!fighter?.specialChargeMode,pct=active?Math.max(0,Math.min(100,Number(fighter.specialCharge)||0)):0;
+  panel.style.display=active?'block':'none';panel.classList.toggle('ready',pct>=100);fill.style.width=pct+'%';
+  if(title)title.textContent=pct>=100?'チャージ完了！':'チャージボール';
+  if(hint)hint.textContent=pct>=100?'SP / R：投げる　・　まだ「ナイス」でも反応します':'F / ナイス連打でチャージ　・　発動中は移動を停止';
+  if(btn&&fighter?.isPlayer)btn.textContent=active?(pct>=100?'投げる':'チャージ中'):'SP';
+}
+function sendChargeOrbOnline(phase,payload={}){
+  try{
+    const ws=window.onlineSocket;
+    if(window.onlineActive&&window.onlineStarted&&ws&&ws.readyState===1)
+      ws.send(JSON.stringify(Object.assign({type:'special',specialType:'chargeOrb',phase},payload)));
+  }catch{}
+}
+function startChargeOrbSpecial(fighter,{remote=false}={}){
+  if(!fighter||!fighter.alive)return false;
+  if(fighter.specialChargeMode){
+    if(fighter.specialCharge>=100)return releaseChargeOrbSpecial(fighter,{remote});
+    return true;
+  }
+  fighter.specialChargeMode=true;fighter.specialCharge=0;fighter.specialChargeStarted=performance.now();
+  fighter.specialReleaseQueued=false;fighter.specialRemote=!!remote;fighter.invulnUntil=performance.now()+2200;
+  createChargeOrbVisual(fighter);showToastFor(fighter,'チャージボール起動！ ナイスでためる');
+  if(!remote)sendChargeOrbOnline('start',{x:fighter.pos.x,y:fighter.pos.y,z:fighter.pos.z});
+  return true;
+}
+function cancelChargeOrbSpecial(fighter){
+  if(!fighter)return;
+  removeChargeOrbVisual(fighter);fighter.specialChargeMode=false;fighter.specialCharge=0;
+  fighter.specialChargeStarted=0;fighter.specialReleaseQueued=false;fighter.specialRemote=false;
+  if(fighter.isPlayer){setChargeOrbHud(fighter);const btn=document.getElementById('btn-special');if(btn)btn.textContent='SP';}
+}
+function chargeChargeOrb(fighter,amount=14){
+  if(!fighter?.alive||!fighter.specialChargeMode||fighter.specialCharge>=100)return false;
+  fighter.specialCharge=Math.min(100,fighter.specialCharge+Math.max(1,amount));
+  if(fighter.isPlayer)showToast('ナイス！ チャージ '+Math.round(fighter.specialCharge)+'%');
+  if(fighter.isPlayer)setChargeOrbHud(fighter);
+  return true;
+}
+function chargeOrbNiceInput(){
+  const f=playerFighter;
+  if(!f?.alive||!f.specialChargeMode)return false;
+  chargeChargeOrb(f,16);
+  if(window.showOnlineCallout)window.showOnlineCallout('ナイス!','nice','あなた');
+  try{if(window.onlineSocket&&window.onlineSocket.readyState===1&&window.onlineStarted)window.onlineSocket.send(JSON.stringify({type:'callout',calloutType:'nice'}));}catch{}
+  return true;
+}
+window.tryChargeOrbFromNice=chargeOrbNiceInput;
+function spawnChargeOrbProjectile(fighter,target,{remote=false}={}){
+  const col=chargeOrbColor(fighter),mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(.52,2),new THREE.MeshBasicMaterial({color:col}));
+  const start=fighter.pos.clone();start.y+=1.95;const goal=target.clone();
+  goal.y=Math.max(0,getSupportHeight(goal.x,goal.z,50)+.12);mesh.position.copy(start);scene.add(mesh);
+  chargeOrbProjectiles.push({mesh,start,goal,team:fighter.team,charge:Math.max(0,Math.min(100,fighter.specialCharge||0)),colorHex:col,fromFighter:fighter,startedAt:performance.now(),duration:remote?520:620});
+}
+function releaseChargeOrbSpecial(fighter,{remote=false,target=null,chargeOverride=null}={}){
+  if(!fighter?.alive||!fighter.specialChargeMode)return false;
+  const effectiveCharge=chargeOverride===null?fighter.specialCharge:Math.max(0,Math.min(100,Number(chargeOverride)||0));
+  if(effectiveCharge<100)return false;
+  const aimTarget=target?chargeOrbClampTarget(target.clone()):getChargeOrbTarget(fighter);
+  removeChargeOrbVisual(fighter);fighter.specialChargeMode=false;fighter.specialCharge=effectiveCharge;fighter.specialChargeStarted=0;
+  fighter.specialReleaseQueued=false;fighter.specialRemote=!!remote;fighter.invulnUntil=performance.now()+450;
+  fighter.pos.y=getSupportHeight(fighter.pos.x,fighter.pos.z,50);
+  spawnChargeOrbProjectile(fighter,aimTarget,{remote});showToastFor(fighter,'チャージボール投擲！');
+  const sentCharge=fighter.specialCharge;fighter.specialCharge=0;
+  if(!remote)sendChargeOrbOnline('throw',{x:aimTarget.x,y:aimTarget.y,z:aimTarget.z,charge:sentCharge,weaponId:weaponList.indexOf(fighter.weapon)});
+  return true;
+}
+function beginChargeOrbImpact(pos,team,charge,sourceFighter=null){
+  const col=sourceFighter?chargeOrbColor(sourceFighter):(team==='A'?teamAHex:teamBHex),group=new THREE.Group();
+  const ringMat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.9,depthWrite:false});
+  const coreMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88});
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1,.10,10,36),ringMat),core=new THREE.Mesh(new THREE.SphereGeometry(.48,20,20),coreMat);
+  ring.rotation.x=Math.PI/2;group.add(ring,core);group.position.copy(pos);scene.add(group);
+  const safeCharge=Math.max(0,Math.min(100,Number(charge)||0)),radius=4.2+safeCharge/100*3;
+  chargeOrbImpacts.push({group,ring,core,startedAt:performance.now(),duration:900,detonateAt:620,radius,damage:58+Math.round(safeCharge*.42),paintRadius:radius+.6,team,colorHex:col,sourceFighter,detonated:false});
+}
+function updateChargeOrbSystems(delta){
+  const now=performance.now();
+  for(const f of fighters){
+    if(f.specialChargeMode){
+      if(!f.isPlayer&&!f.specialRemote){
+        chargeChargeOrb(f,delta*52);
+        if(f.specialCharge>=100&&!f.specialReleaseQueued){
+          f.specialReleaseQueued=true;
+          setTimeout(()=>{if(f.alive&&f.specialChargeMode&&f.specialCharge>=100)releaseChargeOrbSpecial(f,{remote:false,target:getChargeOrbTarget(f)});},320);
+        }
+      }
+      updateChargeOrbVisual(f,now);
+    }
+  }
+  for(let i=chargeOrbProjectiles.length-1;i>=0;i--){
+    const p=chargeOrbProjectiles[i];if(!p.mesh){chargeOrbProjectiles.splice(i,1);continue;}
+    const t=Math.max(0,Math.min(1,(now-p.startedAt)/p.duration));
+    p.mesh.position.copy(p.start).lerp(p.goal,t);p.mesh.position.y+=Math.sin(Math.PI*t)*4.5;p.mesh.rotation.x+=delta*6;p.mesh.rotation.z+=delta*5;
+    if(t>=1){scene.remove(p.mesh);beginChargeOrbImpact(p.goal,p.team,p.charge,p.fromFighter);chargeOrbProjectiles.splice(i,1);}
+  }
+  for(let i=chargeOrbImpacts.length-1;i>=0;i--){
+    const e=chargeOrbImpacts[i],t=Math.max(0,Math.min(1,(now-e.startedAt)/e.duration)),grow=Math.sin(Math.min(1,t)*Math.PI*.5);
+    const scale=.18+grow*(e.radius/1.55);e.ring.scale.set(scale,scale,scale);e.core.scale.setScalar(.35+grow*2.1);
+    e.ring.material.opacity=.95*(1-t*.92);e.core.material.opacity=.92*(1-t*.85);
+    if(!e.detonated&&now-e.startedAt>=e.detonateAt){
+      e.detonated=true;
+      explodeAt(e.group.position.clone(),e.radius,e.damage,e.team,{paintRadius:e.paintRadius,colorHex:e.colorHex,sourceFighter:e.sourceFighter});
+      e.core.scale.setScalar(3.1);
+    }
+    if(t>=1){scene.remove(e.group);chargeOrbImpacts.splice(i,1);}
+  }
+  if(playerFighter)setChargeOrbHud(playerFighter);
+}
+function updateChargeOrbFighterMotion(fighter,delta){
+  const now=performance.now(),elapsed=now-(fighter.specialChargeStarted||now),rise=Math.min(1,elapsed/700),floor=getSupportHeight(fighter.pos.x,fighter.pos.z,50);
+  fighter.pos.y=floor+1.55*Math.sin(rise*Math.PI*.5);playerVelocity.x=0;playerVelocity.z=0;playerVelocity.y=0;
+  fighter.human.visible=true;fighter.squid.visible=false;fighter.root.rotation.y=yaw;updateFighterAnimation(fighter,false,false);updateChargeOrbVisual(fighter,now);
+  return delta;
+}
+
 function fireSpecial(fighter){
   if(!fighter || !fighter.alive) return;
   if(fighter.specialGauge < specialCostReady){
@@ -2322,15 +2532,7 @@ function fireSpecial(fighter){
     shootOne();
     fighter.invulnUntil = now + 300;
   } else if(type==="ナイスダマ"){
-    showToastFor(fighter, 'ナイスダマ チャージ中…');
-    fighter.invulnUntil = now + 1000;
-    setTimeout(()=>{
-      if(!fighter) return;
-      const dir = facing.clone();
-      const landPos = fighter.pos.clone().addScaledVector(dir, 6);
-      landPos.y = getSupportHeight(landPos.x, landPos.z, 0);
-      explodeAt(landPos, 6.5, 95, fighter.team, {paintRadius:7});
-    }, 900);
+    startChargeOrbSpecial(fighter);
   } else if(type==="サメライド"){
     fighter.reefUntil = now + 1200;
     fighter.reefDir = facing.clone();
@@ -3209,6 +3411,7 @@ function animate3D(token){
   updateBullets(delta);
   updateSubs(delta);
   updateOngoingEffects(delta);
+  updateChargeOrbSystems(delta);
 
   document.getElementById('hp-bar').style.width = Math.max(0,playerFighter.hp) + '%';
   document.getElementById('hp-bar').style.background = playerFighter.hp>40?'#4caf50':'#ff3333';
@@ -4006,6 +4209,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           scene.add(mesh);
           const vx=Number(m.vx)||0,vy=Number(m.vy)||0,vz=Number(m.vz)||0;
           subsList.push({mesh,velocity:new THREE.Vector3(vx,vy,vz),team:m.team,colorHex:Number.isFinite(Number(m.colorHex))?Number(m.colorHex):getFighterInkHex({team:m.team}),subType:m.subType,def,age:0,fuse:def.fuse,exploded:false,stuckAt:null,bounceCount:0,facing:new THREE.Vector3(vx,0,vz).normalize()});
+          return;
+        }
+        if(m.type==='special' && m.specialType==='chargeOrb'){
+          const rf=fighters.find(f=>f.id===m.id);
+          if(!rf)return;
+          if(m.phase==='start'){
+            startChargeOrbSpecial(rf,{remote:true});
+          }else if(m.phase==='throw'){
+            const target=new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0);
+            const charge=Math.max(0,Math.min(100,Number(m.charge)||100));
+            if(rf.specialChargeMode){
+              rf.specialCharge=100;
+              releaseChargeOrbSpecial(rf,{remote:true,target,chargeOverride:charge});
+            }else{
+              rf.specialChargeMode=true;
+              rf.specialCharge=100;
+              releaseChargeOrbSpecial(rf,{remote:true,target,chargeOverride:charge});
+            }
+          }
           return;
         }
         if(m.type==='state'){applyRemoteState(m);return;}
@@ -4844,6 +5066,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   updatePlayerMovement=function(delta){
     const f=playerFighter;
     if(!f || !f.alive){ stableMoveBeforeSquid(delta); return; }
+    if(f.specialChargeMode){
+      updateChargeOrbFighterMotion(f,delta);
+      return;
+    }
 
     const now=performance.now();
     const enemy=sampleEnemyInkCached(f);
@@ -6116,6 +6342,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   function sendCallout(type){
     if(currentPhase!==1.5 && currentPhase!==2) return;
+    if(type==='nice' && window.tryChargeOrbFromNice?.()) return;
     const label=type==='nice'?'ナイス!':'カモン!';
     showOnlineCallout(label,type==='nice'?'nice':'cmon','あなた');
     try{
