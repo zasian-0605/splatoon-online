@@ -250,7 +250,7 @@ body.pointer-lock-ready{cursor:none !important;}
     <div id="lobby-menu-title">ロビー</div>
     <div id="lobby-menu-note">自作3Dシティを歩いて施設へ。WASD / 左スティックで移動、マウス・右側スワイプで視点。</div>
     <div style="font:900 11px/1.5 sans-serif;color:#ddd;padding:6px 8px;background:rgba(255,255,255,.07);border-radius:8px;margin-bottom:6px;">試し撃ち：ボタン または [1] で直接開始　／　他の施設は入口まで歩いてね</div>
-    <button class="lobby-btn" data-lobby-action="range">🎯 試し撃ち場 <span class="k">1 / E</span></button>
+    <button class="lobby-btn" data-lobby-action="range" id="btn-direct-practice" onclick="window.__forcePractice&&window.__forcePractice();">🎯 試し撃ち場 <span class="k">1 / E</span></button>
     <button class="lobby-btn" data-lobby-action="cpu">⚔ CPU 4vs4 <span class="k">2</span></button>
     <button class="lobby-btn" data-lobby-action="online">🌐 オンライン8人 <span class="k">3</span></button>
     <button class="lobby-btn" data-lobby-action="custom">👕 カスタマイズ <span class="k">4</span></button>
@@ -4666,6 +4666,110 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(currentPhase===1.25){leaveLobby();oldGoToCustomize();return;}
     oldGoToCustomize();
   };
+
+  // FINAL PRACTICE ENTRY: one clean path that bypasses every older range wrapper.
+  window.__forcePractice=function(){
+    try{
+      // Stop the city loop first.
+      lobby.active=false;
+      if(lobby.frame){ cancelAnimationFrame(lobby.frame); lobby.frame=0; }
+      if(lobby.group) lobby.group.visible=false;
+      const lobbyUI=document.getElementById('lobby-ui');
+      if(lobbyUI) lobbyUI.style.display='none';
+
+      // Prepare the actual game world without calling any wrapped startRangePhase.
+      ensureWorld();
+      if(!stageBuilt) buildStage();
+
+      teamAHex=inkColorPalette[playerConfig.color];
+      teamBHex=(playerConfig.color===1)?0x00e5ff:0xff2255;
+
+      // Keep only the player.
+      fighters=fighters.filter(f=>{
+        if(f.isPlayer) return true;
+        try{scene.remove(f.root);}catch(e){}
+        return false;
+      });
+
+      if(!playerFighter){
+        playerFighter=createFighter({
+          id:'player',
+          isPlayer:true,
+          team:'A',
+          x:spawnPointA.x,
+          z:spawnPointA.z-4,
+          cfg:Object.assign({},playerConfig)
+        });
+        fighters=[playerFighter];
+      }else{
+        playerFighter.pos.set(spawnPointA.x,0,spawnPointA.z-4);
+        playerFighter.hp=playerFighter.maxHp;
+        playerFighter.alive=true;
+        playerFighter.root.visible=true;
+        playerFighter.squid_mode=false;
+        playerFighter.squid=false;
+        if(playerFighter.human) playerFighter.human.visible=true;
+        if(playerFighter.squid) playerFighter.squid.visible=false;
+        fighters=[playerFighter];
+      }
+
+      // Switch the actual phase only after all required objects exist.
+      battleActive=false;
+      battleTimer=0;
+      currentPhase=1.5;
+      document.getElementById('battle-ui').style.display='block';
+      document.getElementById('top-battle-status').style.display='none';
+      document.getElementById('kill-feed').innerHTML='';
+      document.getElementById('special-ready').style.display='none';
+      document.getElementById('death-location-marker').style.display='none';
+      document.getElementById('hud').style.display='none';
+      document.getElementById('alive-count').style.display='none';
+      document.getElementById('range-hint').style.display='block';
+      document.getElementById('range-hint').innerHTML='試し撃ち場：自由に移動＆射撃できます<br>[E] ロビーに戻る　[O] CPU対戦(4vs4)　[P] オンライン';
+      document.getElementById('instructions').innerHTML='【PC】WASD:移動 / マウス:視点＆撃つ / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ】左半分:移動 / 右半分:視点＆射撃';
+
+      document.getElementById('respawn-overlay').style.display='none';
+      document.getElementById('result-screen').style.display='none';
+      document.getElementById('customize-screen').style.display='none';
+
+      prevTime=performance.now();
+      ++gameLoopToken;
+      animate3D(gameLoopToken);
+
+      // Optional cursor/map systems are invoked only after the range phase is live.
+      try{window.__V10?.showMaps?.(true);}catch(e){}
+      try{window.__V10?.requestLock?.();}catch(e){}
+      showToast('試し撃ち場に入りました');
+      console.log('[PRACTICE] direct entry success');
+      return true;
+    }catch(err){
+      console.error('[PRACTICE] direct entry failed',err);
+      try{showToast('試し撃ち場の開始に失敗：'+(err?.message||err));}catch(e){}
+      return false;
+    }
+  };
+
+  // Make the existing action route use the same single entry point.
+  const __oldPracticeAction=action;
+  action=function(key){
+    if(key==='range'){
+      const p=lobby.player;
+      if(p){
+        rangeReturnLobby={x:p.pos.x,z:p.pos.z,yaw:lobbyYaw,pitch:lobbyPitch,valid:true};
+      }
+      return window.__forcePractice();
+    }
+    return __oldPracticeAction(key);
+  };
+
+  // Keyboard fallback: [1] always uses the same direct entry.
+  window.addEventListener('keydown',(e)=>{
+    if(e.code==='Digit1' && currentPhase===1.25){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.__forcePractice();
+    }
+  },true);
 
   window.__V15={startLobbyPhase,leaveLobby,action,returnToLobbyFromRange};
 })();
