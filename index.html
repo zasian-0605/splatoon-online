@@ -5265,24 +5265,46 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     log('テスト開始');
 
     // HTTP health check
-    add('2. Render HTTP /health', 'wait', 'サーバーの生存確認中…');
-    try{
-      const ctl=new AbortController();
-      const timer=setTimeout(()=>ctl.abort(),7000);
-      const r=await fetch(o+'/health',{cache:'no-store',signal:ctl.signal});
-      clearTimeout(timer);
-      const txt=await r.text();
-      if(r.ok){
-        add('2. Render HTTP /health', 'ok', 'HTTP '+r.status+' / '+txt.slice(0,220));
-        log('HTTP health OK');
-      }else{
-        add('2. Render HTTP /health','fail','HTTP '+r.status+' / '+txt.slice(0,220));
-        log('HTTP health FAILED');
-        return;
+    add('2. Render HTTP /health', 'wait', 'サーバーの生存確認中…（Chromeでは起動直後に少し時間がかかる場合があります）');
+    let healthOK=false;
+    let lastHealthError='';
+    for(let attempt=1; attempt<=2 && !healthOK; attempt++){
+      try{
+        const ctl=new AbortController();
+        const timer=setTimeout(()=>ctl.abort(),15000);
+        let r;
+        try{
+          r=await fetch(o+'/health',{
+            cache:'no-store',
+            mode:'cors',
+            credentials:'omit',
+            signal:ctl.signal,
+            headers:{'Accept':'application/json'}
+          });
+        }finally{
+          clearTimeout(timer);
+        }
+        const txt=await r.text();
+        if(r.ok){
+          healthOK=true;
+          add('2. Render HTTP /health', 'ok', 'HTTP '+r.status+' / '+txt.slice(0,220));
+          log('HTTP health OK'+(attempt>1?'（2回目で成功）':''));
+        }else{
+          lastHealthError='HTTP '+r.status+' / '+txt.slice(0,220);
+          log('HTTP health FAILED attempt='+attempt+': '+lastHealthError);
+        }
+      }catch(err){
+        lastHealthError=String(err&&err.message||err);
+        log('HTTP health ERROR attempt='+attempt+': '+lastHealthError);
+        if(attempt===1){
+          add('2. Render HTTP /health', 'wait', '1回目に失敗。もう一度確認しています…');
+          await new Promise(resolve=>setTimeout(resolve,800));
+        }
       }
-    }catch(err){
-      add('2. Render HTTP /health','fail',String(err&&err.message||err));
-      log('HTTP health ERROR: '+(err&&err.message||err));
+    }
+    if(!healthOK){
+      add('2. Render HTTP /health','fail',lastHealthError||'Render /health に接続できませんでした。');
+      log('HTTP health FINAL FAILED');
       return;
     }
 
