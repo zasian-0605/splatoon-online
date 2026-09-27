@@ -3277,7 +3277,18 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           onlineRoomId=m.roomId;setOnlineStatus(`部屋 ${m.roomId} に参加しました`);return;
         }
         if(m.type==='room'){
-          onlineRoomId=m.roomId;setOnlineStatus(`部屋待機中　${m.players.length}/8人`);renderOnlineRoom(m.players||[]);return;
+          onlineRoomId=m.roomId;
+          renderOnlineRoom(m.players||[]);
+          // 3キーのオンライン入口は「部屋に入る」まで自動で進める。
+          // 2台目が入ったら両方とも準備OKになり、手動操作なしで開始する。
+          if(!onlineStarted && onlineSocket && onlineSocket.readyState===1 && !onlineReady){
+            onlineReady=true;
+            onlineSocket.send(JSON.stringify({type:'ready',ready:true,weaponId:playerConfig.weapon}));
+            setOnlineStatus(`Render接続OK。準備完了、対戦相手を待っています… ${m.players.length}/8人`);
+          }else{
+            setOnlineStatus(`部屋待機中　${m.players.length}/8人`);
+          }
+          return;
         }
         if(m.type==='matchFound'){
           onlineActive=true;onlineStarted=true;onlineRoomId=m.roomId;onlinePlayerId=m.selfId;onlineTeam=m.team;onlineResultSent=false;
@@ -4834,51 +4845,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   window.__startOnlineDirect=startOnlineDirect;
 
-  // Make every successful connection immediately join the Render room.
-  // Once at least one other player is present, automatically mark ready.
-  const oldOpen=window.openOnlinePanel;
-  window.openOnlinePanel=function(){
-    oldOpen();
-  };
-
-  // Intercept the online room status without replacing the core WebSocket handler.
-  const NativeWS=window.WebSocket;
-  if(!window.__v39WrappedWS){
-    window.__v39WrappedWS=true;
-    window.WebSocket=function(url,protocols){
-      const ws=protocols?new NativeWS(url,protocols):new NativeWS(url);
-      const nativeAdd=ws.addEventListener.bind(ws);
-      ws.addEventListener=function(type,listener,opts){
-        if(type==='message'){
-          const wrapped=function(ev){
-            try{
-              const m=JSON.parse(ev.data);
-              if(m.type==='room' && onlineSocket===ws){
-                // One player is already ready; prepare this client too.
-                if(onlineSocket.readyState===1 && onlineRoomId===m.roomId && !onlineStarted && !onlineReady){
-                  onlineReady=true;
-                  onlineSocket.send(JSON.stringify({type:'ready',ready:true,weaponId:playerConfig.weapon}));
-                  setOnlineStatus('Render接続OK。準備完了、対戦相手を待っています…');
-                }
-              }
-            }catch(err){}
-            listener.call(ws,ev);
-          };
-          return nativeAdd(type,wrapped,opts);
-        }
-        return nativeAdd(type,listener,opts);
-      };
-      return ws;
-    };
-    window.WebSocket.CONNECTING=NativeWS.CONNECTING;
-    window.WebSocket.OPEN=NativeWS.OPEN;
-    window.WebSocket.CLOSING=NativeWS.CLOSING;
-    window.WebSocket.CLOSED=NativeWS.CLOSED;
-  }
+  // openOnlinePanel itself now auto-joins and auto-readies through its room handler.
 
   window.addEventListener('keydown',e=>{
     // Number 3 is now the real online shortcut; the lobby no longer exists.
-    if(e.code==='Digit3' && (currentPhase===1.5 || currentPhase===2)){
+    if(e.code==='Digit3' && currentPhase!==3 && currentPhase!==0){
       e.preventDefault();
       e.stopImmediatePropagation();
       startOnlineDirect();
