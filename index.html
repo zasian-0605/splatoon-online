@@ -9045,11 +9045,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     f.human.rotation.y=Math.atan2(dir.x,dir.z);
     f.root.rotation.y=f.human.rotation.y;
 
-    if(w.category==='roller'){
-      performRollerSwing(f,now);
+    if(w.brush||w.name==='パブロ(筆)'||w.name==='パブロ'||w.name==='ホクサイ'||w.name==='フィンセント'){
+      if(typeof doBrushAction==='function')doBrushAction(f,now,!!f._moving);
+      else performRollerSwing(f,now);
       return;
     }
-    if(w.brush||w.name==='パブロ(筆)'||w.name==='パブロ'||w.name==='ホクサイ'||w.name==='フィンセント'){
+    if(w.category==='roller'){
       performRollerSwing(f,now);
       return;
     }
@@ -9263,10 +9264,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     /* Keep random variety, but make sure the AI pool is drawn from actual named weapons. */
     const valid=choices.map(n=>weaponList.findIndex(w=>w.name===n)).filter(i=>i>=0);
     cfg.weapon=valid[Math.floor(Math.random()*valid.length)] ?? cfg.weapon;
+    const headPool=GEAR_CATALOG.filter(g=>g.slot==='head');
+    const bodyPool=GEAR_CATALOG.filter(g=>g.slot==='body');
+    const shoePool=GEAR_CATALOG.filter(g=>g.slot==='shoes');
     cfg.gearLoadout={
-      head:GEAR_CATALOG[Math.floor(Math.random()*GEAR_CATALOG.length)].id,
-      body:GEAR_CATALOG.filter(g=>g.slot==='body')[Math.floor(Math.random()*6)].id,
-      shoes:GEAR_CATALOG.filter(g=>g.slot==='shoes')[Math.floor(Math.random()*6)].id
+      head:headPool[Math.floor(Math.random()*headPool.length)].id,
+      body:bodyPool[Math.floor(Math.random()*bodyPool.length)].id,
+      shoes:shoePool[Math.floor(Math.random()*shoePool.length)].id
     };
     return cfg;
   };
