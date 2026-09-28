@@ -10298,5 +10298,163 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 
+<script>
+/* V67 FINAL: safe unified shooting bridge
+   Older versions left several overlapping tryShoot/fireChargerShot implementations.
+   This final bridge keeps one stable path for player shooting and never lets a
+   shooting exception kill the main animation loop. */
+(function(){
+  'use strict';
+
+  function sendShot(f,dir,mode,charge){
+    try{
+      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+        const p={
+          type:'shot',
+          x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+          dx:dir.x,dy:dir.y,dz:dir.z,
+          weaponId:weaponList.indexOf(f.weapon)
+        };
+        if(mode)p.mode=mode;
+        if(Number.isFinite(charge))p.charge=charge;
+        onlineSocket.send(JSON.stringify(p));
+      }
+    }catch(_){}
+  }
+
+  function spawnSafe(f,dir,opts){
+    const fn=window.__spawnBulletV60;
+    if(typeof fn==='function')return fn(f,dir,opts);
+    if(typeof spawnBullet==='function'){
+      spawnBullet(f,dir,{
+        speed:opts.speed||30,damage:opts.damage||0,gravity:opts.gravity||0,
+        radius:opts.radius||.15,life:opts.life||1.5,
+        explosive:!!opts.explosive,explosionRadius:opts.explosionRadius||0,
+        splashDamage:opts.splashDamage||0,paintRadius:opts.paintRadius||.8
+      });
+      return bullets[bullets.length-1]||null;
+    }
+    return null;
+  }
+
+  function stableAim(dir,f){
+    const d=dir&&dir.clone?dir.clone():new THREE.Vector3();
+    if(d.lengthSq()<.0001)d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+    d.normalize();
+    return d;
+  }
+
+  function stableTryShoot(f,dir,now){
+    if(!f||!f.alive)return false;
+    const w=f.weapon||weaponList[0];
+    if(!w)return false;
+    if(w.category==='charger'||w.category==='roller'||w.category==='wiper'||w.category==='spinner')return false;
+    if(now-f.lastShot<(w.rate||100))return false;
+
+    const cost=inkCost(f,w.inkCost||1);
+    if(!consumeInk(f,cost))return false;
+
+    const d=stableAim(dir,f);
+    let b=null;
+
+    if(w.category==='blaster'){
+      b=spawnSafe(f,d,{
+        speed:w.speed||25,damage:w.damage||80,gravity:0,radius:.22,
+        life:2.5,paintRadius:(w.paintRadius||1.35)*.62,
+        trajectory:'flat-drop',straightDistance:w.range||24,maxRange:w.range||24,
+        dropSpeed:34,explosive:true,explosionRadius:w.explosionRadius||2.4,
+        splashDamage:w.splashDamage||35,kind:'blaster',paintTrail:true,paintEvery:.18
+      });
+      sendShot(f,d,'blaster');
+    }else if(w.category==='maneuver'){
+      [-1,1].forEach(side=>{
+        const dd=d.clone().applyAxisAngle(new THREE.Vector3(0,1,0),side*(w.spread||.05));
+        const x=spawnSafe(f,dd,{
+          speed:w.speed||35,damage:w.damage||20,gravity:18,radius:.14,
+          life:w.life||1.5,paintRadius:w.paintRadius||.8,
+          trajectory:'delayed-gravity',straightDistance:Math.min(7.5,(w.range||30)*.28),
+          maxRange:w.range||30,kind:'dualies'
+        });
+        if(x&&x.mesh){
+          x.mesh.position.x+=-d.z*.15*side;
+          x.mesh.position.z+=d.x*.15*side;
+        }
+      });
+      sendShot(f,d,'dualies');
+    }else if(w.category==='brella'){
+      const pellets=w.pellets||7;
+      for(let i=0;i<pellets;i++){
+        const dd=d.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(i-(pellets-1)/2)*.075);
+        spawnSafe(f,dd,{
+          speed:w.speed||30,damage:w.damage||18,gravity:18,radius:.14,
+          life:w.life||1.5,paintRadius:(w.paintRadius||.8)*.72,
+          trajectory:'delayed-gravity',straightDistance:Math.min(7.5,(w.range||30)*.28),
+          maxRange:w.range||30,kind:'brella'
+        });
+      }
+      sendShot(f,d,'brella');
+    }else if(w.category==='slosher'){
+      const count=w.name==='ヒッセン'?3:w.name==='オーバーフロッシャー'?4:1;
+      const aim=d.clone();aim.y=.02;aim.normalize();
+      for(let i=0;i<count;i++){
+        const dd=count>1
+          ? aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(i-(count-1)/2)*.12)
+          : aim.clone();
+        const b2=spawnSafe(f,dd,{
+          speed:w.speed||18,damage:w.damage||60,gravity:22,radius:.28,
+          paintRadius:w.paintRadius||1.4,life:w.life||1.3,kind:'slosher'
+        });
+        if(b2)b2.velocity.y=7.5+(w.arc||0)*4;
+      }
+      sendShot(f,aim,'slosher');
+    }else{
+      /* Shooter: straight first, then gravity. */
+      b=spawnSafe(f,d,{
+        speed:w.speed||35,damage:w.damage||30,gravity:18,radius:.14,
+        paintRadius:w.paintRadius||.8,life:w.life||1.5,
+        trajectory:'delayed-gravity',
+        straightDistance:Math.min(7.5,(w.range||30)*.28),
+        maxRange:w.range||30,kind:'shooter'
+      });
+      sendShot(f,d,'shooter');
+    }
+
+    f.lastShot=now;
+    f.specialGauge=Math.min(100,f.specialGauge+1.0*(f.gearProfile?.specialGain||1));
+    try{sfx('shoot');}catch(_){}
+    return !!b || (w.category==='maneuver'||w.category==='brella'||w.category==='slosher');
+  }
+
+  function stableCharger(f,dir,frac){
+    if(!f||!f.alive)return false;
+    const w=f.weapon||weaponList[0];
+    if(!w||w.category!=='charger')return false;
+    const q=Math.max(0,Math.min(1,Number(frac)||0));
+    const cost=(w.inkCost||7)*(.55+.9*q);
+    if(!consumeInk(f,inkCost(f,cost)))return false;
+    const d=stableAim(dir,f);
+    const b=spawnSafe(f,d,{
+      speed:w.speedShot||85,
+      damage:Math.round((w.tapDamage||30)+((w.fullDamage||120)-(w.tapDamage||30))*q),
+      gravity:0,radius:.12,
+      paintRadius:(w.paintRadius||.9)*(.70+.35*q),life:2.6,
+      trajectory:'flat-drop',straightDistance:w.range||55,maxRange:w.range||55,
+      dropSpeed:46,kind:'charger',paintTrail:true,paintEvery:.16
+    });
+    sendShot(f,d,'charger',q);
+    f.specialGauge=Math.min(100,f.specialGauge+7+7*q);
+    try{sfx('shoot');}catch(_){}
+    return !!b;
+  }
+
+  /* Replace the global shooting entry point used by the final movement layer. */
+  tryShoot=stableTryShoot;
+  window.tryShoot=stableTryShoot;
+  fireChargerShot=stableCharger;
+  window.fireChargerShot=stableCharger;
+
+  window.__V67_FINAL_SHOOT='UNIFIED-SAFE-SHOOT-2026-09-28';
+})();
+</script>
 </body>
 </html>
