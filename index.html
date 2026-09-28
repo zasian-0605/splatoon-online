@@ -3770,16 +3770,20 @@ function updateBullets(delta){
         const t=move/speed;
         b.mesh.position.addScaledVector(b.velocity,t);
         b.travelled=(b.travelled||0)+move;
+        b.pathTravel=(b.pathTravel||0)+move;
         remain-=t;
         if(remain>0){
+          const beforeGravitySpeed=b.velocity.length();
           b.velocity.y-=b.gravity*remain;
           b.mesh.position.addScaledVector(b.velocity,remain);
+          b.pathTravel=(b.pathTravel||0)+Math.max(.001,b.velocity.length())*remain;
           b.phase='gravity';
         }
       }else{
         b.phase='gravity';
         b.velocity.y-=b.gravity*remain;
         b.mesh.position.addScaledVector(b.velocity,remain);
+        b.pathTravel=(b.pathTravel||0)+Math.max(.001,b.velocity.length())*remain;
       }
       return before;
     }
@@ -3837,6 +3841,11 @@ function updateBullets(delta){
     const prev=advanceBullet(b,delta);
     b.age+=delta;
 
+    // シューター系は最大射程に到達したらそこで弾を終わらせる。
+    // ブラスター/チャージャーは最大射程で垂直落下フェーズへ移るため除外。
+    const reachedMaxRange=b.trajectory==='delayed-gravity' &&
+      Number.isFinite(b.maxRange) && b.maxRange>0 && (b.pathTravel||0)>=b.maxRange;
+
     let hitFighter=null,hitPoint=null,hitScore=Infinity;
     for(let k=0;k<fighters.length;k++){
       const fi=fighters[k];
@@ -3875,7 +3884,7 @@ function updateBullets(delta){
       scene.remove(b.mesh);bullets.splice(i,1);continue;
     }
 
-    if(crossedGround || b.mesh.position.y<=groundH || b.age>b.life){
+    if(crossedGround || b.mesh.position.y<=groundH || b.age>b.life || reachedMaxRange){
       if(b.explosive){
         const impactY=Math.max(groundH+.1,b.mesh.position.y);
         explodeAt(new THREE.Vector3(b.mesh.position.x,b.mesh.position.y<=groundH?groundH+.1:impactY,b.mesh.position.z),
@@ -7716,7 +7725,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     )||0);
     const b={
       mesh:mesh,velocity,
-      startPos:start.clone(),lastPos:start.clone(),travelled:0,phase:'straight',
+      startPos:start.clone(),lastPos:start.clone(),travelled:0,pathTravel:0,phase:'straight',
       trajectory,straightDistance,
       dropSpeed:Math.max(1,Number(opts.dropSpeed)||34),
       maxRange:Math.max(straightDistance,Number(opts.maxRange)||straightDistance),
@@ -8616,7 +8625,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         const dist=b.lastPaintPos.distanceTo(nowPos);
         b.trailAccum+=dist;
         if(dist>.18){
-          paintSegment(b.lastPaintPos,nowPos,Math.max(.45,b.paintRadius*.52),b.colorHex,false);
+          const trailRadius=Math.max(.45,b.paintRadius*.52);
+          paintSegment(b.lastPaintPos,nowPos,trailRadius,b.colorHex,false);
+          if(b.sourceFighter?.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+            if(!b.netPaintAt||now-b.netPaintAt>=50){
+              b.netPaintAt=now;
+              sendPaintSegment(b.lastPaintPos,nowPos,trailRadius,b.colorHex);
+            }
+          }
           b.lastPaintPos.copy(nowPos);b.trailAccum=0;
         }
       }
@@ -9905,7 +9921,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   },350);
 
   window.__V65_AI_BUILD='TACTICAL-CPU-2026-09-28';
-  window.__V67_PROJECTILE_BUILD='DELAYED-GRAVITY-FLAT-DROP-2026-09-28';
+  window.__V67_PROJECTILE_BUILD='DELAYED-GRAVITY-FLAT-DROP-NETSYNC-2026-09-28';
   window.__V65_GEAR_CATALOG=GEAR_CATALOG;
 })();
 </script>
