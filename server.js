@@ -147,6 +147,73 @@ function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   const qx=ax+abx*t,qy=ay+aby*t,qz=az+abz*t;
   return {distance:Math.hypot(px-qx,py-qy,pz-qz),t,x:qx,y:qy,z:qz};
 }
+function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
+  const range=Math.max(1,Number(w.range)||35);
+  const candidates=[];
+  const addSegment=(a,b,order)=>{
+    for(const target of room.players.values()){
+      if(!target.serverAlive||target.team===null)continue;
+      const p=target.serverPos||target.spawn;
+      const hit=serverDistanceToSegment(
+        p.x,p.y+.9,p.z,
+        a.x,a.y,a.z,b.x,b.y,b.z
+      );
+      if(hit.distance<hitRadius){
+        candidates.push({target,hit,order:order+hit.t});
+      }
+    }
+  };
+
+  const straightEnd={
+    x:origin.x+dir.x*range,
+    y:origin.y+dir.y*range,
+    z:origin.z+dir.z*range
+  };
+
+  if(w.cat==='blaster'||w.cat==='charger'){
+    addSegment(origin,straightEnd,0);
+    addSegment(straightEnd,{x:straightEnd.x,y:-8,z:straightEnd.z},1);
+    candidates.sort((a,b)=>a.order-b.order);
+    return {
+      hit:candidates[0]||null,
+      straightEnd,
+      dropEnd:{x:straightEnd.x,y:-8,z:straightEnd.z}
+    };
+  }
+
+  if(w.cat==='shooter'||w.cat==='maneuver'||w.cat==='spinner'){
+    const straightDist=Math.min(7.5,range*.28);
+    const straight={
+      x:origin.x+dir.x*straightDist,
+      y:origin.y+dir.y*straightDist,
+      z:origin.z+dir.z*straightDist
+    };
+    addSegment(origin,straight,0);
+
+    const speed=w.speed||35;
+    const remainDist=Math.max(0,range-straightDist);
+    const totalTime=remainDist/Math.max(1,speed);
+    const steps=Math.max(12,Math.min(36,Math.ceil(totalTime*40)));
+    let prev=straight;
+    for(let i=1;i<=steps;i++){
+      const t=totalTime*i/steps;
+      const cur={
+        x:straight.x+dir.x*speed*t,
+        y:straight.y+dir.y*speed*t-0.5*18*t*t,
+        z:straight.z+dir.z*speed*t
+      };
+      addSegment(prev,cur,i/steps);
+      prev=cur;
+    }
+    candidates.sort((a,b)=>a.order-b.order);
+    return {hit:candidates[0]||null,straightEnd:straight,dropEnd:prev};
+  }
+
+  addSegment(origin,straightEnd,0);
+  candidates.sort((a,b)=>a.order-b.order);
+  return {hit:candidates[0]||null,straightEnd,dropEnd:straightEnd};
+}
+
 function broadcastDamage(room,target,damage,attacker,reason,killed){
   broadcast(room,{type:'damage',targetId:target.id,attackerId:attacker?attacker.id:null,damage:Math.max(0,Math.round(damage)),
     hp:Math.max(0,Math.round(target.serverHp)),killed:!!killed,reason:reason||'weapon'});
@@ -198,17 +265,22 @@ function serverResolveShot(room,player,m){
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
   const mode=String(m.mode||'');
   const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
-  let nearest=null;
-  for(const target of room.players.values()){
-    if(!target.serverAlive||target.team===player.team)continue;
-    const p=target.serverPos||target.spawn;
-    const hit=serverDistanceToSegment(p.x,p.y+.9,p.z,origin.x,origin.y,origin.z,
-      origin.x+dir.x*range,origin.y+dir.y*range,origin.z+dir.z*range);
-    if(hit.distance<hitRadius&&(!nearest||hit.t<nearest.hit.t))nearest={target,hit};
+  const trajectory=serverFindTrajectoryHit(room,origin,dir,w,hitRadius);
+  const nearest=trajectory.hit;
+
+  if(w.cat==='blaster'){
+    const end=trajectory.straightEnd;
+    const center=nearest
+      ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
+      : {x:end.x,y:Math.max(0,end.y),z:end.z};
+    serverApplyAoE(room,center,w.explosion||2.4,w.splash||w.damage||0,player.team,player,'blaster');
+    return;
   }
-  if(w.cat==='blaster'||w.cat==='slosher'){
-    const center=nearest?{x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}:{x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
-    serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,w.cat);
+  if(w.cat==='slosher'){
+    const center=nearest
+      ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
+      : {x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
+    serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,'slosher');
     return;
   }
   if(w.cat==='charger'){
