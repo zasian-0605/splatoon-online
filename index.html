@@ -3599,7 +3599,7 @@ function tryMoveWithCollision(f, vel, delta, isSquid){
       return false;
     }
   }
-  const p=clampStageXY(rawNx,rawNz), nx=p.x, nz=p.z;  const p=clampStageXY(rawNx,rawNz), nx=p.x, nz=p.z;
+  const p=clampStageXY(rawNx,rawNz), nx=p.x, nz=p.z;
   const wall=getBlockingWall(nx,nz,f.pos.y);
   if(!wall){ f.pos.x=nx; f.pos.z=nz; return false; }
   const mine=wall.paintTeam===f.team && wall.paintLevel>=20 && wall.climbable;
