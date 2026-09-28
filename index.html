@@ -1738,16 +1738,16 @@ function addBlock(x,y,z,w,h,d,color,opts={}){
    外周はユーザー提供AAの輪郭から抽出したポリゴンを基準にする。
    ========================================================= */
 const MARKET_STAGE_POLYGON = [[48,-30.4],[14,-72],[0.5,-38.4],[-3.5,-44.8],[-19,-20.8],[-20.5,-33.6],[-20.5,-17.6],[-14,-3.2],[-36.5,3.2],[-47.5,20.8],[-48,35.2],[-14,72],[-4,46.4],[4,48],[20.5,24],[20,8],[19,20.8],[13.5,9.6],[36,0],[48,-17.6]];
+const PLAYABLE_HALF_X=52;
+const PLAYABLE_HALF_Z=76;
 
+/* V67: the playable area is now the full rectangular platform.
+   The old AA polygon remains as a reference for obstacle placement, but
+   players must never fall through its concave corners. */
 function marketPointInPolygon(x,z){
-  let inside=false;
-  for(let i=0,j=MARKET_STAGE_POLYGON.length-1;i<MARKET_STAGE_POLYGON.length;j=i++){
-    const xi=MARKET_STAGE_POLYGON[i][0], zi=MARKET_STAGE_POLYGON[i][1];
-    const xj=MARKET_STAGE_POLYGON[j][0], zj=MARKET_STAGE_POLYGON[j][1];
-    const hit=((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/(zj-zi)+xi);
-    if(hit) inside=!inside;
-  }
-  return inside;
+  return Number.isFinite(x)&&Number.isFinite(z)
+    && x>=-PLAYABLE_HALF_X && x<=PLAYABLE_HALF_X
+    && z>=-PLAYABLE_HALF_Z && z<=PLAYABLE_HALF_Z;
 }
 
 function buildMarketFloorShape(){
@@ -1777,15 +1777,20 @@ function buildStage(){
 
   const STAGE_W=96, STAGE_D=144;
 
-  /* V67: rectangular foundation under the AA stage.
-     The AA outline is intentionally irregular, but the playable floor needs
-     a solid rectangular base so the spawn points never begin over empty space.
-     The polygon floor and obstacles sit slightly above this slab. */
-  const baseMat=new THREE.MeshLambertMaterial({color:0x4b535d});
-  const baseGeo=new THREE.BoxGeometry(STAGE_W+8,0.56,STAGE_D+8);
-  const baseMesh=new THREE.Mesh(baseGeo,baseMat);
-  baseMesh.position.set(0,-0.34,0);
-  stageGroup.add(baseMesh);
+  /* V67: large rectangular playable platform floating above the water.
+     IMPORTANT: this is a real collision block, not just a decorative mesh. */
+  const baseFloor=addBlock(0,-0.04,0,PLAYABLE_HALF_X*2,0.08,PLAYABLE_HALF_Z*2,0x4b535d,{climbable:false});
+  baseFloor.stageBase=true;
+
+  /* Full rectangular paintable surface. The AA polygon is used only as the
+     obstacle/layout reference now; the player always has solid ground below. */
+  const baseTop=new THREE.Mesh(
+    new THREE.PlaneGeometry(PLAYABLE_HALF_X*2,PLAYABLE_HALF_Z*2),
+    new THREE.MeshLambertMaterial({map:paintTexture})
+  );
+  baseTop.rotation.x=-Math.PI/2;
+  baseTop.position.y=0.045;
+  stageGroup.add(baseTop);
 
   const waterMat=new THREE.MeshLambertMaterial({color:0x176b83});
   const water=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+20,STAGE_D+20),waterMat);
@@ -1793,8 +1798,7 @@ function buildStage(){
   water.position.y=-0.5;
   stageGroup.add(water);
 
-  /* AAの不規則な輪郭そのものを床にする */
-  buildMarketFloorShape();
+  /* The rectangular base is the actual floor; AA shape is obstacle reference only. */
 
   /* 塗りテクスチャは矩形Canvasのまま、床ポリゴン部分だけが見える */
   paintCtx.fillStyle='#555566';
@@ -3598,9 +3602,16 @@ function updatePlayerMovement(delta){
     f.pos.y += playerVelocity.y*delta;
   }
 
-  const floorY = getSupportHeight(f.pos.x, f.pos.z, f.pos.y);
+  const floorY = Math.max(0.045,getSupportHeight(f.pos.x, f.pos.z, f.pos.y));
   let restY = (isSquid && wallOnInk) ? floorY-0.35 : floorY;
   if(!isJetpack && f.pos.y <= restY){ f.pos.y = restY; playerVelocity.y=0; canJump=true; }
+
+  /* Never allow the player to sink below the water line. */
+  if(!isJetpack && f.pos.y < 0.045){
+    f.pos.y=0.045;
+    playerVelocity.y=0;
+    canJump=true;
+  }
 
   updateFighterAnimation(f, moving, isSquid);
   f.root.rotation.y = isSquid ? yaw : f.human.rotation.y;
@@ -3609,18 +3620,10 @@ function updatePlayerMovement(delta){
 }
 
 function clampStageXY(x,z){
-  /* AA由来の不規則な外周を優先する */
-  if(marketPointInPolygon(x,z)) return {x,z};
-  let bestX=x,bestZ=z,bestD=Infinity;
-  for(let i=0;i<MARKET_STAGE_POLYGON.length;i++){
-    const a=MARKET_STAGE_POLYGON[i],b=MARKET_STAGE_POLYGON[(i+1)%MARKET_STAGE_POLYGON.length];
-    const vx=b[0]-a[0],vz=b[1]-a[1];
-    const len2=vx*vx+vz*vz||1;
-    const t=Math.max(0,Math.min(1,((x-a[0])*vx+(z-a[1])*vz)/len2));
-    const px=a[0]+vx*t,pz=a[1]+vz*t,d=(x-px)*(x-px)+(z-pz)*(z-pz);
-    if(d<bestD){bestD=d;bestX=px;bestZ=pz;}
-  }
-  return {x:bestX,z:bestZ};
+  return {
+    x:Math.max(-PLAYABLE_HALF_X+0.6,Math.min(PLAYABLE_HALF_X-0.6,Number(x)||0)),
+    z:Math.max(-PLAYABLE_HALF_Z+0.6,Math.min(PLAYABLE_HALF_Z-0.6,Number(z)||0))
+  };
 }
 
 function tryMoveWithCollision(f, vel, delta, isSquid){
