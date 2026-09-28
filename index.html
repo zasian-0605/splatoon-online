@@ -1725,68 +1725,265 @@ function buildStage(){
   waypoints = [];
   decals.forEach(d=>scene.remove(d.mesh));
   decals = [];
+  window.__marketStageGimmicks = [];
 
-  // v37: large flat rectangular arena, simple box walls only.
+  /* =========================================================
+     MARKET STAGE V1
+     AAの輪郭を「外周のくびれ / 左右の裏道 / 中央の大区画 /
+     複数の高台 / 奥側の複雑な通路」に読み替えた立体ステージ。
+     床そのものは既存のインクCanvasを使うので、武器・AI・集計を共通化できる。
+     ========================================================= */
   const STAGE_W = 96;
   const STAGE_D = 160;
   const halfW = STAGE_W/2;
   const halfD = STAGE_D/2;
 
-  // Water surrounds the arena. The play surface itself is fully paintable.
   const waterMat = new THREE.MeshLambertMaterial({color:0x176b83});
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+18, STAGE_D+18, 1, 1), waterMat);
-  water.rotation.x = -Math.PI/2;
-  water.position.y = -0.36;
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+22, STAGE_D+22), waterMat);
+  water.rotation.x=-Math.PI/2;
+  water.position.y=-0.42;
   stageGroup.add(water);
 
-  const groundGeo = new THREE.PlaneGeometry(STAGE_W, STAGE_D, 1, 1);
-  const groundMat = new THREE.MeshLambertMaterial({map: paintTexture});
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI/2;
+  const groundGeo = new THREE.PlaneGeometry(STAGE_W,STAGE_D,1,1);
+  const groundMat = new THREE.MeshLambertMaterial({map:paintTexture});
+  const ground = new THREE.Mesh(groundGeo,groundMat);
+  ground.rotation.x=-Math.PI/2;
   stageGroup.add(ground);
 
-  // Reset paint and give separated starting areas.
-  paintCtx.fillStyle = '#555566';
+  paintCtx.fillStyle='#555566';
   paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+
   function paintRectWorld(x0,z0,x1,z1,colorHex){
-    const a=worldToCanvas(x0,z0), b=worldToCanvas(x1,z1);
-    const x=Math.min(a.cx,b.cx), y=Math.min(a.cy,b.cy);
-    const w=Math.abs(b.cx-a.cx), h=Math.abs(b.cy-a.cy);
+    const a=worldToCanvas(x0,z0),b=worldToCanvas(x1,z1);
     paintCtx.fillStyle=hexToCss(colorHex);
-    paintCtx.fillRect(x,y,w,h);
+    paintCtx.fillRect(Math.min(a.cx,b.cx),Math.min(a.cy,b.cy),Math.abs(b.cx-a.cx),Math.abs(b.cy-a.cy));
   }
-  paintRectWorld(-44,-78,44,-58,teamAHex);
-  paintRectWorld(-44,58,44,78,teamBHex);
-  paintTexture.needsUpdate = true;
+  /* スタート地点は広め。ただし中央へ行くほど塗り合いになる。 */
+  paintRectWorld(-43,-78,43,-62,teamAHex);
+  paintRectWorld(-43,62,43,78,teamBHex);
+  paintTexture.needsUpdate=true;
 
-  spawnPointA = new THREE.Vector3(0,0,-68);
-  spawnPointB = new THREE.Vector3(0,0, 68);
+  spawnPointA=new THREE.Vector3(0,0,-69);
+  spawnPointB=new THREE.Vector3(0,0,69);
 
-  // Only a few large box walls. These use the normal wall-paint system.
-  const walls = [
-    {x:-24,z:-30,w:20,h:3.0,d:2.5},
-    {x: 24,z:-18,w:18,h:3.2,d:2.5},
-    {x:-18,z:  0,w:24,h:2.7,d:2.5},
-    {x: 20,z: 10,w:20,h:3.0,d:2.5},
-    {x:-25,z: 32,w:18,h:2.8,d:2.5},
-    {x: 24,z: 36,w:18,h:2.8,d:2.5}
-  ];
-  const wallColors=[0x596775,0x48596c,0x647386];
-  walls.forEach((w,i)=>{
-    addBlock(w.x,0,w.z,w.w,w.h,w.d,wallColors[i%wallColors.length],{climbable:true});
+  const matConcrete=0x5b6570;
+  const matDark=0x38434e;
+  const matMetal=0x7d8790;
+  const matBright=0x8e9aa5;
+  const matAccent=0x303944;
+  const matGlass=0x3f7182;
+
+  /* 小さな装飾箱。衝突もあるので、単なる背景ではない。 */
+  function shelf(x,z,w,d,h,color=matDark,climbable=true){
+    return addBlock(x,0,z,w,h,d,color,{climbable});
+  }
+  function platform(x,z,w,d,y,h,color=matConcrete,climbable=true){
+    const b=addBlock(x,y,z,w,h,d,color,{climbable});
+    b.stagePlatform=true;
+    return b;
+  }
+  function marketSign(x,y,z,w,h,color){
+    const geo=new THREE.BoxGeometry(w,h,.16);
+    const m=new THREE.MeshLambertMaterial({color});
+    const mesh=new THREE.Mesh(geo,m);
+    mesh.position.set(x,y,z);
+    stageGroup.add(mesh);
+    return mesh;
+  }
+
+  /* ===== AAの外周を意識した「くびれた」安全壁 ===== */
+  [
+    {x:-45,z:-50,w:4,d:22,h:2.8},
+    {x:45,z:-50,w:4,d:22,h:2.8},
+    {x:-45,z:50,w:4,d:22,h:2.8},
+    {x:45,z:50,w:4,d:22,h:2.8},
+    {x:-43,z:-18,w:5,d:16,h:2.8},
+    {x:43,z:-18,w:5,d:16,h:2.8},
+    {x:-43,z:18,w:5,d:16,h:2.8},
+    {x:43,z:18,w:5,d:16,h:2.8}
+  ].forEach(v=>addBlock(v.x,0,v.z,v.w,v.h,v.d,matDark,{climbable:false}));
+
+  /* ===== 自陣側：左右に開く棚通路 ===== */
+  [
+    [-31,-49,18,3,2.4],[-9,-49,12,3,2.2],[14,-49,14,3,2.5],[34,-49,13,3,2.2],
+    [-35,-38,3,18,2.6],[35,-38,3,18,2.6],
+    [-28,-28,14,3,2.2],[28,-28,14,3,2.2]
+  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4]));
+
+  /* ===== 中央へ向かう左右の細道 ===== */
+  [
+    [-35,-16,16,3,2.5],[-35,5,16,3,2.5],[-35,27,16,3,2.5],
+    [35,-10,16,3,2.5],[35,12,16,3,2.5],[35,34,16,3,2.5]
+  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4]));
+
+  /* ===== 中央市場：大きな四角い島＋中央交差点 ===== */
+  platform(0,0,28,20,2.6,2.4,matConcrete,true);
+  platform(-20,0,8,13,1.0,1.4,matBright,true);
+  platform(20,0,8,13,1.0,1.4,matBright,true);
+
+  /* 中央島の「切れ目」。正面・左右・裏の4方向から侵入できる。 */
+  shelf(-10,0,3,10,2.0,matAccent,true);
+  shelf(10,0,3,10,2.0,matAccent,true);
+  shelf(0,-7,10,3,1.8,matAccent,true);
+  shelf(0,7,10,3,1.8,matAccent,true);
+
+  /* ===== 中央の縦長商品棚。射線を細かく切る。 ===== */
+  [
+    [-24,-7,5,9,2.8],[-24,8,5,9,2.8],
+    [24,-7,5,9,2.8],[24,8,5,9,2.8],
+    [-14,-18,10,3,2.1],[14,-18,10,3,2.1],
+    [-14,18,10,3,2.1],[14,18,10,3,2.1]
+  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4],matMetal,true));
+
+  /* ===== 奥側：AAの複雑な塊を「二段高台＋左右迂回路」に変換 ===== */
+  platform(-18,31,18,12,2.0,2.6,matConcrete,true);
+  platform(18,31,18,12,2.0,2.6,matConcrete,true);
+  platform(0,42,14,10,4.2,3.0,matDark,true);
+
+  /* 高台の上へ行くための「塗れる壁」 */
+  shelf(-27,31,2,8,5.0,matDark,true);
+  shelf(27,31,2,8,5.0,matDark,true);
+  shelf(0,36,3,5,6.0,matDark,true);
+
+  /* ===== 敵陣側：左右の棚と中央の防衛ライン ===== */
+  [
+    [-31,49,18,3,2.4],[-9,49,12,3,2.2],[14,49,14,3,2.5],[34,49,13,3,2.2],
+    [-35,38,3,18,2.6],[35,38,3,18,2.6],
+    [-28,28,14,3,2.2],[28,28,14,3,2.2]
+  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4]));
+
+  /* ===== 市場らしい「柱・看板・透明ケース」 ===== */
+  [-30,-15,15,30].forEach(x=>{
+    [-22,22].forEach(z=>shelf(x,z,2,2,3.8,matGlass,true));
+  });
+  marketSign(0,8,0,20,1.4,0xe3ff00);
+  marketSign(-34,4,0,8,1.0,0x00d4ff);
+  marketSign(34,4,0,8,1.0,0xff2255);
+
+  /* ===== 破壊可能な中央ゲート =====
+     インクを何度も当てると壊れて、中央裏道が開く。 */
+  const gate=addBlock(0,0,13,9,3.2,1.2,0x6b727c,{climbable:false});
+  gate.breakable=true;
+  gate.breakThreshold=100;
+  gate.paintTeam=null;
+  gate.paintLevel=0;
+  gate.stageGimmick='breakGate';
+  window.__marketStageGimmicks.push({type:'breakGate',block:gate});
+
+  /* ===== 左右のインク・コンベア =====
+     床の色は既存インクCanvas、移動だけを押す。 */
+  function conveyor(x,z,w,d,dir){
+    const g=new THREE.BoxGeometry(w,.06,d);
+    const m=new THREE.MeshLambertMaterial({color:0x30353c});
+    const mesh=new THREE.Mesh(g,m);
+    mesh.position.set(x,.04,z);
+    stageGroup.add(mesh);
+    window.__marketStageGimmicks.push({type:'conveyor',mesh,x,z,w,d,dir,speed:2.4});
+  }
+  conveyor(-38,0,5,22,1);
+  conveyor(38,0,5,22,-1);
+
+  /* ===== 一定周期で上下する中央リフト ===== */
+  const lift=platform(0,25,8,7,0.5,1.0,matMetal,true);
+  window.__marketStageGimmicks.push({
+    type:'lift',block:lift,baseY:.5,amplitude:2.2,period:4.8,phase:0
   });
 
-  // Simple AI navigation points on the ground.
-  const pts=[
-    [-36,-54],[-12,-54],[12,-54],[36,-54],
-    [-36,-26],[0,-18],[36,-26],
-    [-36,  0],[0,  8],[36,  0],
-    [-36, 28],[0, 34],[36, 28],
-    [-36, 54],[12, 54],[36, 54]
-  ];
-  waypoints = pts.map(([x,z])=>({x,z}));
+  /* ===== ジャンプパッド：乗ると中央高台へ一気に跳ぶ ===== */
+  function jumpPad(x,z,targetX,targetZ){
+    const geo=new THREE.CylinderGeometry(1.5,1.5,.18,24);
+    const mat=new THREE.MeshLambertMaterial({color:0x00d4ff});
+    const mesh=new THREE.Mesh(geo,mat);
+    mesh.position.set(x,.12,z);
+    stageGroup.add(mesh);
+    window.__marketStageGimmicks.push({type:'jumpPad',mesh,x,z,targetX,targetZ,cooldown:new WeakMap()});
+  }
+  jumpPad(-34,-4,-18,0);
+  jumpPad(34,4,18,0);
 
-  stageBuilt = true;
+  /* ===== 便利な「安全な退避棚」 ===== */
+  [
+    [-39,-24,5,6,2.0],[-39,24,5,6,2.0],
+    [39,-24,5,6,2.0],[39,24,5,6,2.0]
+  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4],matBright,true));
+
+  /* ===== AIナビゲーション =====
+     4vs4で「正面」「左右裏取り」「高台」「退避」を使い分ける。 */
+  waypoints = [
+    /* A spawn */
+    {x:-32,z:-69},{x:-10,z:-69},{x:10,z:-69},{x:32,z:-69},
+    /* A side routes */
+    {x:-37,z:-48},{x:-37,z:-28},{x:-37,z:-8},{x:-37,z:12},{x:-37,z:32},
+    {x:37,z:-48},{x:37,z:-28},{x:37,z:-8},{x:37,z:12},{x:37,z:32},
+    /* center */
+    {x:-24,z:-18},{x:0,z:-20},{x:24,z:-18},
+    {x:-24,z:0},{x:0,z:0},{x:24,z:0},
+    {x:-24,z:18},{x:0,z:18},{x:24,z:18},
+    /* high ground */
+    {x:-18,z:31},{x:18,z:31},{x:0,z:42},
+    /* B side */
+    {x:-37,z:48},{x:0,z:55},{x:37,z:48},
+    {x:-32,z:69},{x:0,z:69},{x:32,z:69}
+  ];
+
+  stageBuilt=true;
+}
+
+/* =========================================================
+   MARKET STAGE GIMMICKS UPDATE
+   ========================================================= */
+function updateMarketStageGimmicks(time,delta){
+  const list=window.__marketStageGimmicks||[];
+  for(const g of list){
+    if(g.type==='lift' && g.block){
+      const y=g.baseY+Math.sin(time/1000*(Math.PI*2/g.period)+g.phase)*g.amplitude;
+      const b=g.block;
+      b.minY=y;
+      b.maxY=y+b.h;
+      b.mesh.position.y=y+b.h/2;
+    }
+    if(g.type==='conveyor'){
+      /* 見た目の方向をゆっくり動かす */
+      if(g.mesh) g.mesh.rotation.y=Math.sin(time*.001)*.02;
+      fighters.forEach(f=>{
+        if(!f.alive) return;
+        if(Math.abs(f.pos.x-g.x)<=g.w/2 && Math.abs(f.pos.z-g.z)<=g.d/2){
+          const push=g.dir*g.speed*delta;
+          const nx=f.pos.x+(g.dir===0?push:0);
+          const nz=f.pos.z+(g.dir===0?0:push);
+          const p=clampStageXY(nx,nz);
+          if(!getBlockingWall(p.x,p.z,f.pos.y)){
+            if(g.dir===1)f.pos.x=p.x;
+            else if(g.dir===-1)f.pos.x=p.x;
+          }
+        }
+      });
+    }
+    if(g.type==='jumpPad' && g.mesh){
+      g.mesh.rotation.y += delta*2.4;
+      g.mesh.position.y=.12+Math.sin(time*.005)*.04;
+      fighters.forEach(f=>{
+        if(!f.alive) return;
+        if(Math.hypot(f.pos.x-g.x,f.pos.z-g.z)>1.8) return;
+        const last=g.cooldown.get(f)||0;
+        if(time-last<1400)return;
+        g.cooldown.set(f,time);
+        f.pos.x=g.targetX+(Math.random()-.5)*1.2;
+        f.pos.z=g.targetZ+(Math.random()-.5)*1.2;
+        f.pos.y=Math.max(0,getSupportHeight(f.pos.x,f.pos.z,10));
+        f.invulnUntil=Math.max(f.invulnUntil||0,time+180);
+        if(f.isPlayer)showToast('🌀 ジャンプパッド！');
+      });
+    }
+    if(g.type==='breakGate' && g.block && g.block.paintLevel>=g.block.breakThreshold){
+      const b=g.block;
+      const idx=collidableBlocks.indexOf(b);
+      if(idx>=0)collidableBlocks.splice(idx,1);
+      if(b.mesh)b.mesh.visible=false;
+      g.block=null;
+      if(typeof showToast==='function')showToast('💥 中央ゲートが破壊された！');
+    }
+  }
 }
 
 /* =========================================================
@@ -3641,6 +3838,8 @@ function animate3D(token){
       updateAI(f, delta, time);
     });
   }
+
+  updateMarketStageGimmicks(time,delta);
 
   updateBullets(delta);
   updateSubs(delta);
