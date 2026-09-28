@@ -5246,8 +5246,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   });
 
-  // One click/tap in the game area re-locks the mouse. It does NOT require dragging.
-  document.addEventListener('mousedown',(e)=>{
+  // Re-lock on click, not mousedown.
+  // This keeps the actual shooting mouse-down event free from pointer-lock handling.
+  document.addEventListener('click',(e)=>{
     if(!battleScreen()) return;
     if(e.target.closest?.('#minimap,#fullmap,.mobile-btn,#online-panel,#result-screen')) return;
     requestLock();
@@ -10454,6 +10455,117 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.fireChargerShot=stableCharger;
 
   window.__V67_FINAL_SHOOT='UNIFIED-SAFE-SHOOT-2026-09-28';
+})();
+</script>
+<script>
+/* V67 HOTFIX: shooting must never depend on movement-frame execution.
+   A left click creates the local projectile immediately. Holding the button
+   still uses the normal continuous-fire path, but a single click is enough
+   to guarantee one visible shot and one paint action. */
+(function(){
+  'use strict';
+
+  let lastDirectShot=0;
+  let lastShootError='';
+  let errorShownAt=0;
+
+  function showShootError(e){
+    const msg=String(e?.message||e||'射撃エラー');
+    lastShootError=msg;
+    window.__V67_LAST_SHOOT_ERROR=msg;
+    try{console.error('[V67 SHOOT]',e);}catch(_){}
+    const now=performance.now();
+    if(now-errorShownAt>1200){
+      errorShownAt=now;
+      try{showToast('射撃エラー: '+msg.slice(0,80));}catch(_){}
+    }
+  }
+
+  function directPlayerShot(){
+    const f=playerFighter;
+    if(!f||!f.alive)return false;
+    if(currentPhase!==1.5&&currentPhase!==2)return false;
+
+    const w=f.weapon||weaponList[0];
+    if(!w)return false;
+
+    // Charged/melee weapons have their own mouse handlers.
+    if(w.category==='charger'||w.category==='roller'||w.category==='spinner'||w.category==='wiper'||w.brush)return false;
+
+    const now=performance.now();
+    if(now-lastDirectShot<Math.max(45,(w.rate||100)*.72))return false;
+
+    let dir=new THREE.Vector3();
+    try{camera.getWorldDirection(dir);}catch(_){}
+    dir.y=0;
+    if(dir.lengthSq()<.0001)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+    dir.normalize();
+
+    try{
+      const ok=stableTryShoot(f,dir,now);
+      if(ok)lastDirectShot=now;
+      return !!ok;
+    }catch(e){
+      showShootError(e);
+      return false;
+    }
+  }
+
+  // Direct local shot at input time.
+  document.addEventListener('mousedown',function(e){
+    if(e.button!==0)return;
+    if(currentPhase!==1.5&&currentPhase!==2)return;
+    const t=e.target;
+    if(t?.closest?.('#minimap,#fullmap,.mobile-btn,#online-panel,#result-screen,#v65-gear-panel'))return;
+
+    const f=playerFighter;
+    const w=f?.weapon;
+    if(!f||!w||!f.alive)return;
+
+    // Heavy/charged weapons remain on their existing press/release system.
+    if(w.category==='charger'||w.category==='roller'||w.category==='spinner'||w.category==='wiper'||w.brush)return;
+
+    directPlayerShot();
+    isShooting=true;
+  },true);
+
+  // Make the animation loop resilient to a bad weapon/frame-specific callback.
+  const previousMovement=updatePlayerMovement;
+  updatePlayerMovement=function(delta){
+    try{
+      previousMovement(delta);
+    }catch(e){
+      isShooting=false;
+      try{
+        if(playerFighter){
+          playerFighter.isCharging=false;
+          playerFighter.wiperChargeStart=0;
+        }
+      }catch(_){}
+      showShootError(e);
+    }
+  };
+
+  const previousBullets=updateBullets;
+  updateBullets=function(delta){
+    try{
+      previousBullets(delta);
+    }catch(e){
+      // Remove only malformed projectiles rather than killing the whole render loop.
+      try{
+        for(let i=bullets.length-1;i>=0;i--){
+          const b=bullets[i];
+          if(!b||!b.mesh||!Number.isFinite(b.mesh.position.x)||!Number.isFinite(b.mesh.position.y)||!Number.isFinite(b.mesh.position.z)){
+            if(b?.mesh)scene.remove(b.mesh);
+            bullets.splice(i,1);
+          }
+        }
+      }catch(_){}
+      showShootError(e);
+    }
+  };
+
+  window.__V67_DIRECT_SHOOT=directPlayerShot;
 })();
 </script>
 </body>
