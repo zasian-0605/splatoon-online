@@ -10503,7 +10503,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     try{
       const ok=stableTryShoot(f,dir,now);
-      if(ok)lastDirectShot=now;
+      if(ok){
+        lastDirectShot=now;
+        try{
+          const c=getFighterInkHex(f);
+          const paintDist=f.weapon?.category==='blaster'?3.4:f.weapon?.category==='slosher'?2.8:4.0;
+          paintGround(f.pos.x+dir.x*paintDist,f.pos.z+dir.z*paintDist,
+            Math.max(.55,(f.weapon?.paintRadius||.9)*.72),c,{noNetwork:false});
+        }catch(e){showShootError(e);}
+      }
       return !!ok;
     }catch(e){
       showShootError(e);
