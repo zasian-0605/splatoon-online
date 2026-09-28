@@ -1554,6 +1554,22 @@ function worldToCanvas(x,z){
   return { cx: u*paintCanvas.width, cy: v*paintCanvas.height };
 }
 
+/* Stage bootstrap helper: paint a rectangular world-space turf area.
+   buildStage() uses this for the two spawn zones. */
+function paintRectWorld(x1,z1,x2,z2,colorHex){
+  const a=worldToCanvas(Math.min(x1,x2),Math.min(z1,z2));
+  const b=worldToCanvas(Math.max(x1,x2),Math.max(z1,z2));
+  const left=Math.max(0,Math.min(a.cx,b.cx));
+  const top=Math.max(0,Math.min(a.cy,b.cy));
+  const right=Math.min(paintCanvas.width,Math.max(a.cx,b.cx));
+  const bottom=Math.min(paintCanvas.height,Math.max(a.cy,b.cy));
+  if(right<=left||bottom<=top)return;
+  paintCtx.save();
+  paintCtx.fillStyle=hexToCss(Number(colorHex)||0);
+  paintCtx.fillRect(left,top,right-left,bottom-top);
+  paintCtx.restore();
+}
+
 function hexToCss(hex){ return '#' + hex.toString(16).padStart(6,'0'); }
 
 function paintGround(x,z,radius,colorHex,opts={}){
@@ -9922,6 +9938,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__V65_AI_BUILD='TACTICAL-CPU-2026-09-28';
   window.__V67_PROJECTILE_BUILD='DELAYED-GRAVITY-FLAT-DROP-NETSYNC-2026-09-28';
+  window.__V67_STAGE_BOOTSTRAP_FIX='PAINT-RECT-WORLD-2026-09-28';
   window.__V65_GEAR_CATALOG=GEAR_CATALOG;
 })();
 </script>
