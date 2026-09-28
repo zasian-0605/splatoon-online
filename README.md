@@ -51,3 +51,9 @@ v38: v25ベースの動作系を維持しつつ、平面大型ステージ、相
 - ローラーのオンライン攻撃モード名を正規化。
 - 床・高台・壁の見た目の塗りを `paintInk()` に集約。
 - HTML構文検証スクリプトを修正し、`npm run validate` を追加。
+
+
+## v80（ChatGPT検証版）
+- Three.js r128を `three@0.128.0` としてnpm依存に追加。
+- ブラウザは同一Renderサービスの `/node_modules/three/build/three.min.js` を使用し、cdnjsへの依存を削減。
+- `npm run validate` によるHTML/JavaScript検証を確認。
