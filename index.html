@@ -295,7 +295,7 @@ html.cursor-force-visible canvas{
 #online-ready.ready{background:#e3ff00;color:#2f059c;}
 #online-profile{margin:8px 0;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid #555;border-radius:10px;font:800 13px/1.4 Arial,sans-serif;}
 </style>
-<meta name="game-version" content="v66-3d-ink-height-ai-enemy-ink-server-authority"></head>
+<meta name="game-version" content="v68-straight-shots-ai-respawn-facing"></head>
 <body>
 
 <div id="loading-screen">
@@ -3791,51 +3791,22 @@ function updateBullets(delta){
   function advanceBullet(b,dt){
     const before=b.mesh.position.clone();
 
-    if(b.trajectory==='delayed-gravity'){
-      let remain=dt;
-      const speed=Math.max(.001,b.velocity.length());
-      const need=Math.max(0,(b.straightDistance||0)-(b.travelled||0));
-      if(need>0 && remain>0){
-        const move=Math.min(need,speed*remain);
-        const t=move/speed;
-        b.mesh.position.addScaledVector(b.velocity,t);
-        b.travelled=(b.travelled||0)+move;
-        b.pathTravel=(b.pathTravel||0)+move;
-        remain-=t;
-        if(remain>0){
-          const beforeGravitySpeed=b.velocity.length();
-          b.velocity.y-=b.gravity*remain;
-          b.mesh.position.addScaledVector(b.velocity,remain);
-          b.pathTravel=(b.pathTravel||0)+Math.max(.001,b.velocity.length())*remain;
-          b.phase='gravity';
-        }
-      }else{
-        b.phase='gravity';
-        b.velocity.y-=b.gravity*remain;
-        b.mesh.position.addScaledVector(b.velocity,remain);
-        b.pathTravel=(b.pathTravel||0)+Math.max(.001,b.velocity.length())*remain;
-      }
-      return before;
-    }
-
-    if(b.trajectory==='flat-drop'){
-      let remain=dt;
-      const speed=Math.max(.001,b.velocity.length());
-      const need=Math.max(0,(b.straightDistance||0)-(b.travelled||0));
-      if(b.phase!=='drop' && need>0 && remain>0){
-        const move=Math.min(need,speed*remain);
-        const t=move/speed;
-        b.mesh.position.addScaledVector(b.velocity,t);
-        b.travelled=(b.travelled||0)+move;
-        remain-=t;
-        if(remain<=0)return before;
-        b.phase='drop';
-        b.velocity.set(0,-Math.max(1,b.dropSpeed||34),0);
-      }else if(b.phase!=='drop'){
-        b.phase='drop';
-        b.velocity.set(0,-Math.max(1,b.dropSpeed||34),0);
-      }
-      if(remain>0)b.mesh.position.addScaledVector(b.velocity,remain);
+    if(b.trajectory==='delayed-gravity' || b.trajectory==='flat-drop'){
+      // V68: Shooter / dualies / blaster / charger projectiles stay horizontal.
+      // They travel a finite distance and then disappear/impact instead of
+      // turning into a long vertical falling line.
+      const speed=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
+      const maxRange=Number.isFinite(b.maxRange)&&b.maxRange>0 ? b.maxRange : 32;
+      const remainRange=Math.max(0,maxRange-(b.pathTravel||0));
+      if(remainRange<=0)return before;
+      const move=Math.min(speed*dt,remainRange);
+      const t=move/Math.max(.001,speed);
+      const vx=b.velocity.x, vz=b.velocity.z;
+      b.mesh.position.x += vx*t;
+      b.mesh.position.z += vz*t;
+      b.pathTravel=(b.pathTravel||0)+move;
+      b.travelled=(b.travelled||0)+move;
+      b.mesh.position.y=b.startPos.y;
       return before;
     }
 
@@ -3873,7 +3844,7 @@ function updateBullets(delta){
 
     // シューター系は最大射程に到達したらそこで弾を終わらせる。
     // ブラスター/チャージャーは最大射程で垂直落下フェーズへ移るため除外。
-    const reachedMaxRange=b.trajectory==='delayed-gravity' &&
+    const reachedMaxRange=(b.trajectory==='delayed-gravity'||b.trajectory==='flat-drop') &&
       Number.isFinite(b.maxRange) && b.maxRange>0 && (b.pathTravel||0)>=b.maxRange;
 
     let hitFighter=null,hitPoint=null,hitScore=Infinity;
@@ -3962,8 +3933,41 @@ function animate3D(token){
   if(currentPhase===2){
     fighters.forEach(f=>{
       if(f.isPlayer) return;
-      if(!f.alive){ if(time>f.respawnAt) respawnFighter(f); return; }
-      updateAI(f, delta, time);
+      try{
+        if(!f.alive){
+          if(time>f.respawnAt){
+            respawnFighter(f);
+            if(f.ai){
+              f.ai.state='patrol';
+              f.ai.path=[];
+              f.ai.pathIndex=0;
+              f.ai.stuckFor=0;
+              f.ai.lastPos=f.pos.clone();
+              f.ai.lastPosAt=time;
+            }
+            f.human.visible=true;
+            f.squid.visible=false;
+          }
+          return;
+        }
+        updateAI(f, delta, time);
+      }catch(err){
+        // One CPU error must never stop the others.
+        try{
+          if(f.ai){
+            f.ai.state='patrol';
+            f.ai.path=[];
+            f.ai.pathIndex=0;
+            f.ai.nextThink=time+250;
+            f.ai.stuckFor=0;
+            f.ai.lastPos=f.pos.clone();
+            f.ai.lastPosAt=time;
+          }
+          f.squid_mode=false;
+          f.human.visible=true;
+          f.squid.visible=false;
+        }catch(_){}
+      }
     });
   }
 
@@ -10520,8 +10524,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const c=Number((typeof getFighterInkHex==='function')
         ? getFighterInkHex(f)
         : (f.team==='B'?teamBHex:teamAHex));
-      const p=worldToCanvas(f.pos.x+dir.x*4.0,f.pos.z+dir.z*4.0);
-      const rr=Math.max(10,((f.weapon?.paintRadius||.9)/(STAGE_HALF_Z*2))*paintCanvas.height*.72);
+      // Paint only a compact patch a little ahead of the player.
+      // The projectile itself handles the actual finite flight/impact.
+      const p=worldToCanvas(f.pos.x+dir.x*2.0,f.pos.z+dir.z*2.0);
+      const rr=Math.max(7,((f.weapon?.paintRadius||.9)*.62/(STAGE_HALF_Z*2))*paintCanvas.height*.72);
       const css='#'+Math.max(0,Math.min(0xffffff,Math.floor(c))).toString(16).padStart(6,'0');
       paintCtx.save();
       paintCtx.fillStyle=css;
@@ -10742,6 +10748,146 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
 
   window.__V67_DIRECT_SHOOT=directPlayerShot;
+})();
+</script>
+<script>
+/* V68 FINAL FIX
+   - Projectiles: finite horizontal flight; no artificial vertical drop.
+   - AI: respawn/recovery watchdog; a single CPU error never freezes the roster.
+   - Player character: always faces camera/aim direction.
+   - AI characters: always face their actual movement/attack direction.
+*/
+(function(){
+  'use strict';
+
+  // Player: model front follows the camera's actual horizontal aim.
+  const oldPlayerMove=updatePlayerMovement;
+  updatePlayerMovement=function(delta){
+    oldPlayerMove(delta);
+    const f=playerFighter;
+    if(!f||!f.alive||!camera)return;
+    try{
+      const d=new THREE.Vector3();
+      camera.getWorldDirection(d);
+      d.y=0;
+      if(d.lengthSq()>.0001){
+        d.normalize();
+        const yawFace=Math.atan2(d.x,d.z);
+        f.human.rotation.y=yawFace;
+        f.root.rotation.y=yawFace;
+      }
+    }catch(_){}
+  };
+
+  // AI safety net and orientation correction.
+  const oldAI=updateAI;
+  const aiWatch=new WeakMap();
+
+  function chooseEscape(f){
+    const candidates=[];
+    for(let i=0;i<8;i++){
+      const a=(Math.PI*2*i)/8;
+      candidates.push(new THREE.Vector3(Math.sin(a),0,Math.cos(a)));
+    }
+    for(let i=candidates.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
+    }
+    for(const d of candidates){
+      const test=clampStageXY(f.pos.x+d.x*1.8,f.pos.z+d.z*1.8);
+      if(!getBlockingWall(test.x,test.z,f.pos.y)){
+        tryMoveWithCollision(f,d.clone().multiplyScalar(4.8),.16,false);
+        if(Math.hypot(d.x,d.z)>.01)return d;
+      }
+    }
+    return null;
+  }
+
+  updateAI=function(f,delta,now){
+    if(!f||f.isPlayer||f.remote)return;
+    if(!f.alive)return;
+
+    let state=aiWatch.get(f);
+    if(!state){
+      state={lastPos:f.pos.clone(),lastMoved:now,respawnToken:f.respawnAt};
+      aiWatch.set(f,state);
+    }
+
+    // A respawn gets a completely fresh watchdog state.
+    if(state.respawnToken!==f.respawnAt){
+      state.respawnToken=f.respawnAt;
+      state.lastPos=f.pos.clone();
+      state.lastMoved=now;
+      try{
+        if(f.ai){
+          f.ai.state='patrol';
+          f.ai.target=null;
+          f.ai.path=[];
+          f.ai.pathIndex=0;
+          f.ai.stuckFor=0;
+          f.ai.nextThink=now+250;
+          f.ai.lastPos=f.pos.clone();
+          f.ai.lastPosAt=now;
+        }
+        f.squid_mode=false;
+        f.human.visible=true;
+        f.squid.visible=false;
+      }catch(_){}
+    }
+
+    try{
+      oldAI(f,delta,now);
+    }catch(err){
+      // Recover instead of leaving the CPU frozen.
+      try{
+        f.alive=true;
+        f.squid_mode=false;
+        f.human.visible=true;
+        f.squid.visible=false;
+        if(f.ai){
+          f.ai.state='patrol';
+          f.ai.path=[];
+          f.ai.pathIndex=0;
+          f.ai.stuckFor=0;
+          f.ai.nextThink=now+300;
+          f.ai.lastPos=f.pos.clone();
+          f.ai.lastPosAt=now;
+        }
+      }catch(_){}
+    }
+
+    // If the CPU has genuinely not moved for a while, steer it out of a corner.
+    const moved=f.pos.distanceTo(state.lastPos);
+    if(moved>.12){
+      state.lastPos.copy(f.pos);
+      state.lastMoved=now;
+    }else if(now-state.lastMoved>1.05){
+      const d=chooseEscape(f);
+      state.lastPos.copy(f.pos);
+      state.lastMoved=now;
+      if(d){
+        f.human.rotation.y=Math.atan2(d.x,d.z);
+        f.root.rotation.y=f.human.rotation.y;
+      }
+    }
+
+    // Always orient the character to its actual recent movement.
+    const dx=f.pos.x-state.lastPos.x, dz=f.pos.z-state.lastPos.z;
+    if(Math.hypot(dx,dz)>.02){
+      const face=Math.atan2(dx,dz);
+      f.human.rotation.y=face;
+      f.root.rotation.y=face;
+    }else if(f.ai?.target?.alive){
+      const tx=f.ai.target.pos.x-f.pos.x, tz=f.ai.target.pos.z-f.pos.z;
+      if(Math.hypot(tx,tz)>.02){
+        const face=Math.atan2(tx,tz);
+        f.human.rotation.y=face;
+        f.root.rotation.y=face;
+      }
+    }
+  };
+
+  window.__V68_BUILD='STRAIGHT-FINITE-SHOOTS-AI-RESPAWN-WATCHDOG-FACING-2026-09-28';
 })();
 </script>
 </body>
