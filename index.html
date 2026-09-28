@@ -3754,60 +3754,137 @@ function updateAI(f, delta, now){
 }
 
 function updateBullets(delta){
-  for(let i=bullets.length-1;i>=0;i--){
-    const b = bullets[i];
-    b.velocity.y -= b.gravity*delta;
-    b.mesh.position.addScaledVector(b.velocity, delta);
-    b.age += delta;
+  // 3種類の弾道を明確に分離する。
+  // 1) delayed-gravity : 最初だけ完全直進 → その後に重力で落下（シューター系）
+  // 2) flat-drop       : 最大射程まで完全直進 → X/Z停止 → 真下へ垂直落下（ブラスター/チャージャー）
+  // 3) normal          : 従来どおりの通常物理弾
+  function advanceBullet(b,dt){
+    const before=b.mesh.position.clone();
 
-    let hitFighter = null;
-    for(let k=0;k<fighters.length;k++){
-      const fi = fighters[k];
-      if(!fi.alive || fi.team===b.team || fi.id===b.fromId) continue;
-      const dy = b.mesh.position.y - (fi.pos.y+0.9);
-      if(Math.abs(dy)<1.3){
-        const dx = b.mesh.position.x-fi.pos.x, dz = b.mesh.position.z-fi.pos.z;
-        if(dx*dx+dz*dz < 0.7*0.7){ hitFighter = fi; break; }
+    if(b.trajectory==='delayed-gravity'){
+      let remain=dt;
+      const speed=Math.max(.001,b.velocity.length());
+      const need=Math.max(0,(b.straightDistance||0)-(b.travelled||0));
+      if(need>0 && remain>0){
+        const move=Math.min(need,speed*remain);
+        const t=move/speed;
+        b.mesh.position.addScaledVector(b.velocity,t);
+        b.travelled=(b.travelled||0)+move;
+        remain-=t;
+        if(remain>0){
+          b.velocity.y-=b.gravity*remain;
+          b.mesh.position.addScaledVector(b.velocity,remain);
+          b.phase='gravity';
+        }
+      }else{
+        b.phase='gravity';
+        b.velocity.y-=b.gravity*remain;
+        b.mesh.position.addScaledVector(b.velocity,remain);
       }
+      return before;
     }
 
-    const wall = getBlockingWall(b.mesh.position.x, b.mesh.position.z, b.mesh.position.y);
-    const groundH = getSupportHeight(b.mesh.position.x, b.mesh.position.z, b.mesh.position.y);
-    const col = b.colorHex ?? (b.team==='A'?teamAHex:teamBHex);
+    if(b.trajectory==='flat-drop'){
+      let remain=dt;
+      const speed=Math.max(.001,b.velocity.length());
+      const need=Math.max(0,(b.straightDistance||0)-(b.travelled||0));
+      if(b.phase!=='drop' && need>0 && remain>0){
+        const move=Math.min(need,speed*remain);
+        const t=move/speed;
+        b.mesh.position.addScaledVector(b.velocity,t);
+        b.travelled=(b.travelled||0)+move;
+        remain-=t;
+        if(remain<=0)return before;
+        b.phase='drop';
+        b.velocity.set(0,-Math.max(1,b.dropSpeed||34),0);
+      }else if(b.phase!=='drop'){
+        b.phase='drop';
+        b.velocity.set(0,-Math.max(1,b.dropSpeed||34),0);
+      }
+      if(remain>0)b.mesh.position.addScaledVector(b.velocity,remain);
+      return before;
+    }
+
+    b.velocity.y-=b.gravity*dt;
+    b.mesh.position.addScaledVector(b.velocity,dt);
+    return before;
+  }
+
+  function pointSegmentInfo(point,a,b){
+    const ab=b.clone().sub(a);
+    const lenSq=ab.lengthSq()||1;
+    const t=Math.max(0,Math.min(1,point.clone().sub(a).dot(ab)/lenSq));
+    const q=a.clone().addScaledVector(ab,t);
+    return {distance:point.distanceTo(q),t,point:q};
+  }
+
+  function sweepWall(a,b){
+    const dist=a.distanceTo(b);
+    const steps=Math.max(1,Math.ceil(dist/.55));
+    let prev=a.clone();
+    for(let n=1;n<=steps;n++){
+      const t=n/steps;
+      const p=a.clone().lerp(b,t);
+      const w=getBlockingWall(p.x,p.z,p.y);
+      if(w)return {wall:w,point:p};
+      prev=p;
+    }
+    return null;
+  }
+
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    const prev=advanceBullet(b,delta);
+    b.age+=delta;
+
+    let hitFighter=null,hitPoint=null,hitScore=Infinity;
+    for(let k=0;k<fighters.length;k++){
+      const fi=fighters[k];
+      if(!fi.alive||fi.team===b.team||fi.id===b.fromId)continue;
+      const target=new THREE.Vector3(fi.pos.x,fi.pos.y+.9,fi.pos.z);
+      const info=pointSegmentInfo(target,prev,b.mesh.position);
+      if(info.distance<(b.radius+.52) && info.t<hitScore){
+        hitFighter=fi;hitPoint=info.point;hitScore=info.t;
+      }
+    }
+    if(hitFighter)b.mesh.position.copy(hitPoint);
+
+    const swept=sweepWall(prev,b.mesh.position);
+    const wall=swept?.wall||null;
+    if(swept?.point && !hitFighter)b.mesh.position.copy(swept.point);
+
+    const groundH=getSupportHeight(b.mesh.position.x,b.mesh.position.z,b.mesh.position.y);
+    const crossedGround=(prev.y>groundH+.01 && b.mesh.position.y<=groundH+.01);
+    const col=b.colorHex??(b.team==='A'?teamAHex:teamBHex);
 
     if(hitFighter){
       if(b.explosive){
-        explodeAt(b.mesh.position.clone(), b.explosionRadius, b.splashDamage, b.team, {paintRadius:b.paintRadius});
-        applyDamage(hitFighter, b.damage - b.splashDamage, null); // 直撃分は追加
-      } else {
-        applyDamage(hitFighter, b.damage, null);
+        explodeAt(b.mesh.position.clone(),b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
+        applyDamage(hitFighter,Math.max(0,b.damage-b.splashDamage),null);
+      }else{
+        applyDamage(hitFighter,b.damage,null);
       }
-      for(let p=0;p<4;p++) spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
-      scene.remove(b.mesh);
-      bullets.splice(i,1);
-      continue;
+      for(let p=0;p<4;p++)spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
+      scene.remove(b.mesh);bullets.splice(i,1);continue;
     }
 
     if(wall){
-      if(b.explosive){
-        explodeAt(b.mesh.position.clone(), b.explosionRadius, b.splashDamage, b.team, {paintRadius:b.paintRadius});
-      }
-      paintWallSurface(wall, b.mesh.position.clone(), col, b.team, b.paintRadius);
-      for(let p=0;p<5;p++) spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
-      scene.remove(b.mesh);
-      bullets.splice(i,1);
-      continue;
+      if(b.explosive)explodeAt(b.mesh.position.clone(),b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
+      paintWallSurface(wall,b.mesh.position.clone(),col,b.team,b.paintRadius);
+      for(let p=0;p<5;p++)spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
+      scene.remove(b.mesh);bullets.splice(i,1);continue;
     }
 
-    if(b.mesh.position.y <= groundH || b.age>b.life){
+    if(crossedGround || b.mesh.position.y<=groundH || b.age>b.life){
       if(b.explosive){
-        explodeAt(new THREE.Vector3(b.mesh.position.x,groundH+0.1,b.mesh.position.z), b.explosionRadius, b.splashDamage, b.team, {paintRadius:b.paintRadius});
-      } else {
-        paintGround(b.mesh.position.x, b.mesh.position.z, b.paintRadius, col);
+        const impactY=Math.max(groundH+.1,b.mesh.position.y);
+        explodeAt(new THREE.Vector3(b.mesh.position.x,b.mesh.position.y<=groundH?groundH+.1:impactY,b.mesh.position.z),
+          b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
+      }else{
+        paintGround(b.mesh.position.x,b.mesh.position.z,b.paintRadius,col);
       }
-      for(let p=0;p<5;p++) spawnParticle(b.mesh.position.x, groundH+0.1, b.mesh.position.z, col);
-      scene.remove(b.mesh);
-      bullets.splice(i,1);
+      for(let p=0;p<5;p++)spawnParticle(b.mesh.position.x,groundH+.1,b.mesh.position.z,col);
+      scene.remove(b.mesh);bullets.splice(i,1);
     }
   }
 
@@ -7631,9 +7708,19 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     start.y+=opts.yOffset===undefined?1.2:opts.yOffset;
     mesh.position.copy(start);
     scene.add(mesh);
+
+    const velocity=dir.clone().normalize().multiplyScalar(opts.speed||30);
+    const trajectory=opts.trajectory||'normal';
+    const straightDistance=Math.max(0,Number(
+      opts.straightDistance===undefined?0:opts.straightDistance
+    )||0);
     const b={
-      mesh:mesh,velocity:dir.clone().multiplyScalar(opts.speed||30),
-      age:0,gravity:opts.gravity||0,radius:opts.radius||.15,team:fighter.team,
+      mesh:mesh,velocity,
+      startPos:start.clone(),lastPos:start.clone(),travelled:0,phase:'straight',
+      trajectory,straightDistance,
+      dropSpeed:Math.max(1,Number(opts.dropSpeed)||34),
+      maxRange:Math.max(straightDistance,Number(opts.maxRange)||straightDistance),
+      age:0,gravity:Number(opts.gravity)||0,radius:opts.radius||.15,team:fighter.team,
       colorHex:color,damage:opts.damage||0,fromId:fighter.id,
       explosive:!!opts.explosive,explosionRadius:opts.explosionRadius||0,splashDamage:opts.splashDamage||0,
       paintRadius:opts.paintRadius||.8,life:opts.life||1.2,
@@ -7687,36 +7774,37 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const frac=Math.max(0,Math.min(1,Number(chargeFrac)||0));
     const cost=(w.inkCost||7)*(0.55+0.9*frac);
     if(!consumeInk(f,inkCost(f,cost)))return false;
+
     const color=getFighterInkHex(f);
     const origin=f.pos.clone();origin.y+=1.2;
     const d=aimDir.clone();
     if(d.lengthSq()<.001)d.set(0,0,1);
     d.normalize();
-    const end=traceForward(origin,d,w.range||55,.45);
-    // Charger paints the entire line immediately, not just the impact point.
-    trailPath(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color, false);
-    if(f.isPlayer) sendPaintSegment(origin,end,(w.paintRadius||.9)*(.62+.45*frac),color);
-    const hitStep=.45;
-    let hit=null;
-    for(let t=.5;t<=origin.distanceTo(end);t+=hitStep){
-      const p=origin.clone().addScaledVector(d,t);
-      for(const o of fighters){
-        if(!o.alive||o.team===f.team)continue;
-        const dx=p.x-o.pos.x,dz=p.z-o.pos.z,dy=p.y-(o.pos.y+.9);
-        if(dx*dx+dz*dz<.72*.72&&Math.abs(dy)<1.3){hit=o;break;}
-      }
-      if(hit)break;
-    }
-    if(hit){
-      applyDamage(hit,Math.round((w.tapDamage||30)+((w.fullDamage||120)-(w.tapDamage||30))*frac),f);
-      for(let i=0;i<8;i++)spawnParticle(hit.pos.x,hit.pos.y+1,hit.pos.z,color);
-    }else{
-      const wall=getBlockingWall(end.x,end.z,end.y);
-      if(wall)paintWallSurface(wall,end,color,f.team,(w.paintRadius||.9)*(.7+.3*frac));
-      else paintGround(end.x,end.z,(w.paintRadius||.9)*(.75+.3*frac),color,{noNetwork:true});
-    }
-    if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:origin.x,y:origin.y,z:origin.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,charge:frac,mode:'charger'}));}catch{}
+
+    // チャージャー：弾は最大射程まで重力を完全に無視して直進。
+    // 最大射程に到達した瞬間、X/Zの速度を0にして真下へ垂直落下する。
+    // これで「途中から下へ曲がる」のではなく、最後まで一直線→最後に落下になる。
+    const b=spawnBulletV60(f,d,{
+      speed:w.speedShot||85,
+      damage:Math.round((w.tapDamage||30)+((w.fullDamage||120)-(w.tapDamage||30))*frac),
+      gravity:0,
+      radius:.12,
+      paintRadius:(w.paintRadius||.9)*(.70+.35*frac),
+      life:2.6,
+      trajectory:'flat-drop',
+      straightDistance:w.range||55,
+      maxRange:w.range||55,
+      dropSpeed:46,
+      kind:'charger',
+      paintTrail:true,
+      paintEvery:.16
+    });
+
+    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{onlineSocket.send(JSON.stringify({
+        type:'shot',x:origin.x,y:origin.y,z:origin.z,
+        dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,charge:frac,mode:'charger'
+      }));}catch{}
     }
     f.specialGauge=Math.min(100,f.specialGauge+7+7*frac);
     sfx('shoot');
@@ -7728,17 +7816,38 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function fireLineShot(f,dir,w,opts){
     const color=getFighterInkHex(f);
     const origin=f.pos.clone();origin.y+=1.2;
-    const end=traceForward(origin,dir,w.range||30,.45);
     const radius=(w.paintRadius||.8)*(opts.paintMult||1);
-    trailPath(origin,end,radius,color,1);
-    if(!opts.noNetwork && f.isPlayer) sendPaintSegment(origin,end,radius,color);
+    const kind=opts.kind||'line';
+    const delayedKinds=new Set(['shooter','dualies','splatling','brella','crab']);
+    const trajectory=opts.trajectory||(
+      delayedKinds.has(kind)?'delayed-gravity':'normal'
+    );
+    const straightDistance=opts.straightDistance===undefined
+      ? (trajectory==='delayed-gravity'?Math.min(7.5,(w.range||30)*.28):0)
+      : Number(opts.straightDistance)||0;
+    const gravity=opts.gravity===undefined
+      ? (trajectory==='delayed-gravity'?18:0)
+      : Number(opts.gravity)||0;
+
     const b=spawnBulletV60(f,dir,{
-      speed:w.speed||35,damage:opts.damage===undefined?w.damage:opts.damage,
-      gravity:opts.gravity||0,radius:opts.radius||.14,paintRadius:radius,life:w.life||1.1,
-      explosive:!!opts.explosive,explosionRadius:opts.explosionRadius||0,splashDamage:opts.splashDamage||0,
-      kind:opts.kind||'line'
+      speed:w.speed||35,
+      damage:opts.damage===undefined?w.damage:opts.damage,
+      gravity,
+      radius:opts.radius||.14,
+      paintRadius:radius,
+      life:w.life||1.5,
+      explosive:!!opts.explosive,
+      explosionRadius:opts.explosionRadius||0,
+      splashDamage:opts.splashDamage||0,
+      trajectory,
+      straightDistance,
+      maxRange:w.range||30,
+      kind
     });
     b.mesh.position.y=origin.y;
+    if(!opts.noNetwork && f.isPlayer) {
+      // 実際の弾が進むにつれて塗るので、射線の先を一瞬で全部塗らない。
+    }
     return b;
   }
 
@@ -7770,19 +7879,32 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   function fireBlasterV60(f,dir){
     const w=f.weapon;
-    const color=getFighterInkHex(f);
-    const b=spawnBulletV60(f,dir,{
-      speed:w.speed||25,damage:w.damage||80,gravity:1.5,radius:.22,
-      paintRadius:(w.paintRadius||1.35)*.55,life:w.life||1.25,
-      explosive:true,explosionRadius:w.explosionRadius||2.4,splashDamage:w.splashDamage||35,
-      kind:'blaster',paintTrail:true
-    });
-    // A blaster leaves only a light projectile trail; the large ink comes from the impact explosion.
     const origin=f.pos.clone();origin.y+=1.2;
-    const end=traceForward(origin,dir,w.range||24,.5);
-    trailPath(origin,end,(w.paintRadius||1.35)*.28,color,false);
+    // ブラスターも最大射程までは重力を完全無視。
+    // 射程端でX/Zを停止し、その地点から弾が真下へ落ちて爆発する。
+    spawnBulletV60(f,dir,{
+      speed:w.speed||25,
+      damage:w.damage||80,
+      gravity:0,
+      radius:.22,
+      paintRadius:(w.paintRadius||1.35)*.62,
+      life:2.5,
+      trajectory:'flat-drop',
+      straightDistance:w.range||24,
+      maxRange:w.range||24,
+      dropSpeed:34,
+      explosive:true,
+      explosionRadius:w.explosionRadius||2.4,
+      splashDamage:w.splashDamage||35,
+      kind:'blaster',
+      paintTrail:true,
+      paintEvery:.18
+    });
     if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:origin.x,y:origin.y,z:origin.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id}));}catch{}
+      try{onlineSocket.send(JSON.stringify({
+        type:'shot',x:origin.x,y:origin.y,z:origin.z,
+        dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'blaster'
+      }));}catch{}
     }
   }
 
@@ -9783,6 +9905,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   },350);
 
   window.__V65_AI_BUILD='TACTICAL-CPU-2026-09-28';
+  window.__V67_PROJECTILE_BUILD='DELAYED-GRAVITY-FLAT-DROP-2026-09-28';
   window.__V65_GEAR_CATALOG=GEAR_CATALOG;
 })();
 </script>
