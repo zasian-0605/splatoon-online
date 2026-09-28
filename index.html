@@ -1701,9 +1701,7 @@ function getFaceHitPoint(block, pos){
 
 function paintWallSurface(block, hitPos, colorHex, team, size){
   const {point, normal} = getFaceHitPoint(block, hitPos);
-  // V74: each shot covers a larger wall area without changing the face logic.
-  const wallSize=Math.min(3.2,Math.max(1.0,(Number(size)||1.2)*1.6));
-  spawnDecal(point, normal, colorHex, wallSize);
+  spawnDecal(point, normal, colorHex, size || 1.2);
   // 塗り進捗の管理（登れる判定などのゲームロジック用。見た目はデカールが担当）
   if(block.paintTeam === team){
     block.paintLevel = Math.min(100, block.paintLevel + 20);
@@ -3895,9 +3893,9 @@ function updateBullets(delta){
       if(b.explosive){
         const impactY=Math.max(groundH+.1,b.mesh.position.y);
         explodeAt(new THREE.Vector3(b.mesh.position.x,b.mesh.position.y<=groundH?groundH+.1:impactY,b.mesh.position.z),
-          b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius,sourceFighter:b.sourceFighter});
+          b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
       }else{
-        paintGround(b.mesh.position.x,b.mesh.position.z,b.paintRadius,col,{sourceFighter:b.sourceFighter});
+        paintGround(b.mesh.position.x,b.mesh.position.z,b.paintRadius,col);
       }
       for(let p=0;p<5;p++)spawnParticle(b.mesh.position.x,groundH+.1,b.mesh.position.z,col);
       scene.remove(b.mesh);bullets.splice(i,1);
@@ -10097,10 +10095,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!(surfaceY>.22) || !marketPointInPolygon(x,z))return;
     ensureRaisedInkGroup();
     if(!raisedInkGroup)return;
-
-    /* V74: elevated surfaces use the same flat-ink idea as the floor.
-       No sphere, no thickness, and no transform growth over time. */
-    const rr=Math.max(.30,Math.min(1.35,Number(r)||.6));
+    const rr=Math.max(.35,Math.min(3.8,Number(r)||1));
     const col=Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0)));
     const owner=team||inferPaintTeam(col,x,z);
 
@@ -10108,19 +10103,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       if(p.team!==owner)continue;
       if(Math.abs(p.y-surfaceY)>.55)continue;
       const d=Math.hypot(p.x-x,p.z-z);
-      if(d<Math.max(.8,p.r*.72,rr*.72)) return;
+      if(d<Math.max(.8,p.r*.70,rr*.70)){
+        p.r=Math.min(4.4,Math.sqrt(p.r*p.r+rr*rr*.32));
+        p.mesh.scale.set(p.r,0.055+Math.min(.055,p.r*.012),p.r);
+        p.mesh.position.x=(p.mesh.position.x+x)*.5;
+        p.mesh.position.z=(p.mesh.position.z+z)*.5;
+        p.x=p.mesh.position.x;p.z=p.mesh.position.z;
+        return;
+      }
     }
 
-      /* V75: use the same flat surface-stamp primitive as floor paint. */
     const mesh=new THREE.Mesh(
-      new THREE.CircleGeometry(rr,28),
-      new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.93,depthWrite:false})
+      new THREE.SphereGeometry(1,12,6),
+      new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:.93})
     );
-    mesh.position.set(x,surfaceY+.045,z);
-    mesh.rotation.x=-Math.PI/2;
-    mesh.userData={v75:true,team:owner,fixedRadius:rr};
-    ensureUnifiedPaintGroup();
-    unifiedPaintGroup.add(mesh);
+    mesh.position.set(x,surfaceY+.035,z);
+    mesh.rotation.y=Math.random()*Math.PI*2;
+    mesh.scale.set(rr,0.07+Math.min(.05,rr*.014),rr);
+    mesh.userData={v66:true,team:owner};
+    raisedInkGroup.add(mesh);
     raisedInkPatches.push({x,z,r:rr,y:surfaceY,color:col,team:owner,mesh});
 
     if(raisedInkPatches.length>MAX_RAISED_PATCHES){
@@ -10223,32 +10224,29 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       Number.isFinite(Number(opts.surfaceY))?Number(opts.surfaceY):undefined);
     const elevated=surfaceY>.22;
 
-    /* V75: ALL surfaces use the same floor-style 2D paint stamp.
-       Elevated tops are no longer a separate 3D paint system. */
+    if(elevated){
+      if(hasTo){
+        if(marketPointInPolygon(toX,toZ)){
+          addRaisedLine(px,pz,toX,toZ,safeR,col,surfaceY,opts.team||inferPaintTeam(col,toX,toZ));
+        }
+      }else{
+        addRaisedPatch(px,pz,safeR,col,surfaceY,opts.team||inferPaintTeam(col,px,pz));
+      }
+      sendV66Paint(px,pz,safeR,col,surfaceY,Object.assign({},opts,{to:hasTo?{x:toX,z:toZ}:undefined}));
+      return;
+    }
+
     const baseOpts=Object.assign({},opts,{noNetwork:true});
     _v66BasePaint(px,pz,safeR,col,baseOpts);
 
-    const paintSurface = hasTo ? {x:(px+toX)*.5,z:(pz+toZ)*.5} : {x:px,z:pz};
-    const stampY = elevated ? surfaceY : 0.05;
-    const stampNormal = new THREE.Vector3(0,1,0);
-    const stampRadius = Math.max(.25,Math.min(1.35,safeR));
-
-    ensureUnifiedPaintGroup();
-    if(hasTo && Math.hypot(toX-px,toZ-pz)>.8 && !elevated){
-      addUnifiedSurfaceStroke(px,pz,toX,toZ,stampRadius,col,stampY,stampNormal);
-    }else{
-      addUnifiedSurfaceStamp(paintSurface.x,stampY,paintSurface.z,stampNormal,stampRadius,col);
-    }
-
-    if(elevated) {
-      addRaisedPatch(paintSurface.x,paintSurface.z,stampRadius,col,stampY,opts.team||inferPaintTeam(col,paintSurface.x,paintSurface.z));
-    }
-
     if(hasTo){
       const toSurface=actualSurfaceY(toX,toZ,Number.isFinite(Number(opts.toY))?opts.toY:surfaceY);
+      if(toSurface>.22 && marketPointInPolygon(toX,toZ)){
+        addRaisedLine(px,pz,toX,toZ,safeR,col,toSurface,opts.team||inferPaintTeam(col,toX,toZ));
+      }
       sendV66Paint(px,pz,safeR,col,toSurface,Object.assign({},opts,{to:{x:toX,z:toZ}}));
     }else if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&!opts.remote&&!opts.noNetwork){
-      sendV66Paint(px,pz,safeR,col,elevated?surfaceY:0,opts);
+      sendV66Paint(px,pz,safeR,col,0,opts);
     }
   };
   window.paintGround=paintGround;
@@ -10983,196 +10981,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__V69_BUILD='FIXED-45-DEGREE-SHOTS-ANTI-GROUND-CAMERA-2026-09-28';
 })();
-</script>
-<script>
-/* V72: shooter paint / trajectory calibration; V73 fixed raised-ink growth */
-(function(){
-  'use strict';
-  const ANGLE=Math.PI/180*15,S=Math.sin(ANGLE),C=Math.cos(ANGLE);
-
-  function tune(b){
-    if(!b||!b.velocity)return b;
-    const kind=String(b.kind||'');
-    const cat=b.sourceFighter?.weapon?.category;
-    if(kind==='charger'||kind==='flick'||kind==='rollerFlick'||kind==='wiperSlash'||kind==='wiperChargedSlash'||kind==='stringer')return b;
-    const ok=kind==='shooter'||kind==='dualies'||kind==='splatling'||kind==='brella'||kind==='blaster'||cat==='shooter'||cat==='maneuver'||cat==='brella'||cat==='blaster';
-    if(!ok)return b;
-    const speed=Math.max(.001,b.velocity.length());
-    const h=new THREE.Vector3(b.velocity.x,0,b.velocity.z);
-    if(h.lengthSq()<.0001){
-      const yaw=b.sourceFighter?.root?.rotation?.y||0;
-      h.set(Math.sin(yaw),0,Math.cos(yaw));
-    }else h.normalize();
-    b.velocity.set(h.x*speed*C,S*speed,h.z*speed*C);
-    if(b.trajectory==='delayed-gravity'||b.trajectory==='flat-drop'){
-      const range=Math.max(6,Number(b.maxRange)||22);
-      const hs=Math.max(.001,speed*C);
-      const t=range/hs;
-      const y=Math.max(.8,Number(b.startPos?.y)||1.2);
-      b.gravity=Math.max(12,2*(y+speed*S*t)/(t*t));
-    }
-    return b;
-  }
-
-  if(typeof window.__spawnBulletV60==='function'&&!window.__V72_PUBLIC_WRAP){
-    const base=window.__spawnBulletV60;
-    window.__spawnBulletV60=function(f,d,o){return tune(base(f,d,o));};
-    window.__V72_PUBLIC_WRAP=true;
-  }
-  if(typeof spawnBulletV60==='function'&&!window.__V72_LEXICAL_WRAP){
-    const base=spawnBulletV60;
-    spawnBulletV60=function(f,d,o){return tune(base(f,d,o));};
-    window.__V72_LEXICAL_WRAP=true;
-  }
-
-  for(const w of weaponList||[]){
-    if(!w)continue;
-    if(w.category==='shooter'){
-      w.paintRadius=Math.min(Number(w.paintRadius)||.8,.58);
-      w.range=Math.min(Number(w.range)||16,16);
-      w.life=Math.min(Number(w.life)||1,.75);
-      w.speed=Math.min(Number(w.speed)||28,28);
-    }else if(w.category==='maneuver'){
-      w.paintRadius=Math.min(Number(w.paintRadius)||.7,.52);
-      w.range=Math.min(Number(w.range)||15,15);
-      w.life=Math.min(Number(w.life)||1,.75);
-    }else if(w.category==='blaster'){
-      w.paintRadius=Math.min(Number(w.paintRadius)||1,.82);
-      w.range=Math.min(Number(w.range)||14,14);
-      w.life=Math.min(Number(w.life)||1,.8);
-    }else if(w.category==='brella'){
-      w.paintRadius=Math.min(Number(w.paintRadius)||.7,.55);
-      w.range=Math.min(Number(w.range)||15,15);
-      w.life=Math.min(Number(w.life)||1,.8);
-    }
-  }
-
-  if(typeof addRaisedPatch==='function'&&!window.__V72_RAISED_FIXED){
-    addRaisedPatch=function(x,z,r,colorHex,surfaceY,team){
-      if(!(Number(surfaceY)>.22)||!marketPointInPolygon(x,z))return;
-      const rr=Math.max(.30,Math.min(1.35,Number(r)||.6));
-      const col=Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0)));
-      const owner=team||null;
-      window.__V72_RAISED_LIST ||= [];
-      for(const p of window.__V72_RAISED_LIST){
-        if(p.team===owner&&Math.abs(p.y-surfaceY)<=.55&&Math.hypot(p.x-x,p.z-z)<Math.max(.8,rr*.75))return;
-      }
-      ensureRaisedInkGroup();
-      if(!raisedInkGroup)return;
-      const mesh=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.12,28),
-        new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:.93}));
-      mesh.position.set(x,Number(surfaceY)+.04,z);
-      mesh.rotation.y=Math.random()*Math.PI*2;
-      mesh.scale.set(rr,1,rr);
-      mesh.userData={v72:true,team:owner,fixedRadius:rr};
-      raisedInkGroup.add(mesh);
-      window.__V72_RAISED_LIST.push({x,z,y:Number(surfaceY),team:owner,r:rr,mesh});
-    };
-    window.__V72_RAISED_FIXED=true;
-  }
-
-  if(typeof paintGround==='function'&&!window.__V72_PAINT_FIXED){
-    const basePaint=paintGround;
-    paintGround=function(x,z,r,colorHex,opts={}){
-      let radius=Number(r);
-      if(!Number.isFinite(radius))return;
-      const cat=opts?.sourceFighter?.weapon?.category;
-      if(cat==='shooter')radius=Math.min(radius,.58);
-      else if(cat==='maneuver')radius=Math.min(radius,.52);
-      else if(cat==='blaster')radius=Math.min(radius,.82);
-      else if(cat==='brella')radius=Math.min(radius,.55);
-      return basePaint(x,z,radius,colorHex,opts);
-    };
-    window.paintGround=paintGround;
-    window.__V72_PAINT_FIXED=true;
-  }
-
-  /* V75 unified paint layer: floor, elevated tops, and walls share one flat stamp system. */
-  let unifiedPaintGroup=null;
-  const unifiedPaintEntries=[];
-  function ensureUnifiedPaintGroup(){
-    if(unifiedPaintGroup || !stageGroup)return;
-    unifiedPaintGroup=new THREE.Group();
-    unifiedPaintGroup.name='UnifiedPaintLayer';
-    stageGroup.add(unifiedPaintGroup);
-  }
-  function addUnifiedSurfaceStamp(x,y,z,normal,radius,colorHex){
-    ensureUnifiedPaintGroup();
-    if(!unifiedPaintGroup)return;
-    const rr=Math.max(.22,Math.min(3.2,Number(radius)||.6));
-    const n=(normal&&normal.clone)?normal.clone():new THREE.Vector3(0,1,0);
-    if(n.lengthSq()<.0001)n.set(0,1,0);else n.normalize();
-    const mesh=new THREE.Mesh(
-      new THREE.CircleGeometry(rr,28),
-      new THREE.MeshBasicMaterial({color:Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0))),transparent:true,opacity:.93,depthWrite:false})
-    );
-    mesh.position.set(x,y+0.026,z);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),n);
-    mesh.userData={v75Unified:true};
-    unifiedPaintGroup.add(mesh);
-    unifiedPaintEntries.push({x,y,z,r:rr,normal:n,mesh,colorHex:Number(colorHex)||0});
-    if(unifiedPaintEntries.length>520){
-      const old=unifiedPaintEntries.shift();
-      if(old?.mesh&&unifiedPaintGroup)unifiedPaintGroup.remove(old.mesh);
-    }
-    return mesh;
-  }
-  function addUnifiedSurfaceStroke(x1,z1,x2,z2,radius,colorHex,y,normal){
-    const len=Math.hypot(x2-x1,z2-z1);
-    if(len<.8)return addUnifiedSurfaceStamp((x1+x2)/2,y,(z1+z2)/2,normal,radius,colorHex);
-    ensureUnifiedPaintGroup();
-    if(!unifiedPaintGroup)return;
-    const rr=Math.max(.22,Math.min(2.2,Number(radius)||.6));
-    const geo=new THREE.PlaneGeometry(1,1);
-    const mat=new THREE.MeshBasicMaterial({
-      color:Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0))),
-      transparent:true,opacity:.93,depthWrite:false
-    });
-    const mesh=new THREE.Mesh(geo,mat);
-    mesh.position.set((x1+x2)/2,y+0.026,(z1+z2)/2);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal?.clone().normalize()||new THREE.Vector3(0,1,0));
-    mesh.scale.set(rr*2,len,1);
-    mesh.rotation.z += Math.atan2(x2-x1,z2-z1);
-    unifiedPaintGroup.add(mesh);
-    unifiedPaintEntries.push({x:(x1+x2)/2,y,z:(z1+z2)/2,r:rr,normal:normal?.clone()||new THREE.Vector3(0,1,0),mesh,colorHex:Number(colorHex)||0});
-    if(unifiedPaintEntries.length>520){
-      const old=unifiedPaintEntries.shift();
-      if(old?.mesh&&unifiedPaintGroup)unifiedPaintGroup.remove(old.mesh);
-    }
-    return mesh;
-  }
-  window.__V75_UNIFIED_PAINT={stamp:addUnifiedSurfaceStamp,stroke:addUnifiedSurfaceStroke};
-
-  /* Redirect wall decals into the same unified paint layer. */
-  spawnDecal=function(pos,normal,colorHex,size){
-    addUnifiedSurfaceStamp(pos.x,pos.y,pos.z,normal,Math.min(3.6,Math.max(.9,Number(size)||1.2)),colorHex);
-  };
-
-  /* Wall size: deliberately larger per shot, but still bounded. */
-  paintWallSurface=function(block,hitPos,colorHex,team,size){
-    const hit=getFaceHitPoint(block,hitPos);
-    const wallSize=Math.min(3.8,Math.max(1.1,(Number(size)||1.2)*2.0));
-    addUnifiedSurfaceStamp(hit.point.x,hit.point.y,hit.point.z,hit.normal,wallSize,colorHex);
-    if(block.paintTeam===team){
-      block.paintLevel=Math.min(100,block.paintLevel+20);
-    }else{
-      block.paintLevel-=20;
-      if(block.paintLevel<=0){
-        block.paintTeam=team;
-        block.paintLevel=20;
-      }
-    }
-  };
-
-  window.__V72_BUILD='SHOOTER-PAINT-RANGE-FIXED-15-DEGREE-2026-09-28';
-  window.__V73_BUILD='FIXED-PLATFORM-INK-NO-GROWTH-2026-09-28';
-})();
-</script>
-<script>
-/* V74 FINAL
-   Elevated ink is flat 2D surface paint; wall hit area is larger.
-*/
-(function(){ 'use strict'; window.__V74_BUILD='FLAT-ELEVATED-PAINT-WIDER-WALL-2026-09-28'; })();
 </script>
 </body>
 </html>
