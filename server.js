@@ -209,7 +209,6 @@ function serverResolveShot(room,player,m){
   if(w.cat==='blaster'||w.cat==='slosher'){
     const center=nearest?{x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}:{x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
     serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,w.cat);
-    if(nearest&&w.damage)serverApplyDamage(room,nearest.target,w.damage,player,w.cat+' direct');
     return;
   }
   if(w.cat==='charger'){
@@ -693,60 +692,41 @@ wss.on('connection', ws => {
       return;
     }
     if (m.type === 'state') {
-      const now=Date.now();
-      if(now-player.lastStateAt<28)return;
+      const now=Date.now(); if(now-player.lastStateAt<28)return;
       const x=Number(m.x),y=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
       if(!saneWorldPosition(x,y,z)||!Number.isFinite(yaw)){securityStrike(player,'invalid-position');return;}
-
-      if(player.serverHp==null)player.serverHp=100;
-      if(player.serverAlive==null)player.serverAlive=true;
-
+      if(y<-1||y>14){securityStrike(player,'invalid-height');return;}
+      if(!serverPointInStage(x,z)){securityStrike(player,'outside-stage');return;}
+      if(player.serverHp==null)player.serverHp=100; if(player.serverAlive==null)player.serverAlive=true; if(player.serverInk==null)player.serverInk=100;
       if(player.serverAlive){
         if(player.serverPos){
-          const dt=Math.max(.028,(now-player.lastStateAt)/1000);
-          const d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z);
-          const maxStep=Math.min(2.15,.75+dt*34);
+          const dt=Math.max(.028,(now-player.lastStateAt)/1000),d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z),maxStep=Math.min(2.35,.82+dt*36);
           if(d>maxStep){securityStrike(player,'server-speed='+d.toFixed(2)+' max='+maxStep.toFixed(2));return;}
         }
-        player.serverPos={x,y,z};
-        player.lastStatePos={x,z,y};
-        player.lastStateAt=now;
+        if(serverSolidBlocked(x,z,y)){securityStrike(player,'solid-collision');return;}
+        player.serverPos={x,y,z}; player.lastStatePos={x,z,y}; player.lastStateAt=now;
       }
-
       if(room.started&&player.serverAlive&&player.team&&now-(player.lastHazardAt||0)>=350){
-        player.lastHazardAt=now;
-        const inkTeam=serverInkTeamAt(room,player.serverPos||player.spawn);
-        if(inkTeam&&inkTeam!==player.team){
-          const damage=Math.max(0,Math.min(4,Math.max(0,player.serverHp-1)));
-          if(damage>0)serverApplyDamage(room,player,damage,null,'enemy-ink');
-        }
+        player.lastHazardAt=now; const inkTeam=serverInkTeamAt(room,player.serverPos||player.spawn);
+        if(inkTeam&&inkTeam!==player.team){const damage=Math.max(0,Math.min(4,Math.max(0,player.serverHp-1)));if(damage>0)serverApplyDamage(room,player,damage,null,'enemy-ink');}
       }
-
-      const serverPos=player.serverPos||player.spawn;
-      const enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
-      broadcast(room,{
-        type:'state',id:player.id,name:player.accountName||player.id,team:player.team,
-        x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
-        hp:Math.max(0,Math.min(100,player.serverHp||0)),
-        ink:Math.max(0,Math.min(100,Number.isFinite(Number(m.ink))?Number(m.ink):100)),
-        alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId
-      },player.id);
-      return;
+      const serverPos=player.serverPos||player.spawn,enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
+      const packet={type:'state',id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
+        hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId};
+      broadcast(room,packet,player.id); send(player.ws,packet); return;
     }
 
     if (m.type === 'paint') {
-      if(!room.started||!player.team)return;
+      if(!room.started||!player.team||!player.serverAlive)return;
       const x=Number(m.x),z=Number(m.z),radius=Number(m.radius);
       if(![x,z,radius].every(Number.isFinite)||radius<.2||radius>8||!serverPointInStage(x,z))return;
-      const y=Number.isFinite(Number(m.y))?Number(m.y):0;
-      const colorHex=Number.isFinite(Number(player.config?.inkColorHex))
-        ? Number(player.config.inkColorHex):(player.team==='A'?0xe3ff00:0xff2255);
+      const serverPos=player.serverPos||player.spawn,y=Number(serverPos.y)||0,cost=Math.max(.35,Math.min(8,.42+radius*.72));
+      if(player.serverInk<=.01)return; player.serverInk=Math.max(0,player.serverInk-cost);
+      const colorHex=Number.isFinite(Number(player.config?.inkColorHex))?Number(player.config.inkColorHex):(player.team==='A'?0xe3ff00:0xff2255);
       markServerPaint(room,x,z,radius,player.team,y);
-      const x2=Number(m.x2),z2=Number(m.z2);
-      if(Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2))markServerPaint(room,x2,z2,radius,player.team,y);
-      broadcast(room,{type:'paint',id:player.id,team:player.team,x,z,radius,colorHex,y,mult:1,
-        ...(Number.isFinite(x2)&&Number.isFinite(z2)?{x2,z2}:{})},player.id);
-      return;
+      const x2=Number(m.x2),z2=Number(m.z2); if(Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2))markServerPaint(room,x2,z2,radius,player.team,y);
+      broadcast(room,{type:'paint',id:player.id,team:player.team,x,z,radius,colorHex,y,mult:1,...(Number.isFinite(x2)&&Number.isFinite(z2)?{x2,z2}:{})},player.id);
+      send(player.ws,{type:'serverInk',ink:player.serverInk}); return;
     }
 
     if (m.type === 'matchResult') {
