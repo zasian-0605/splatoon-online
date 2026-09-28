@@ -1,9 +1,3 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>スプラ3風 Webオンライン v37 - v25基準・ルーム制・平面ステージ・安全イカ・ロビー安定</title>
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
@@ -22,467 +16,7 @@
     readyState:document.readyState
   });
 })();
-</script>
-<script src="https://cdn.tailwindcss.com"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<style>
-body{margin:0;overflow:hidden;background-color:#e3ff00;font-family:"Impact","Arial Black",sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;}
-#loading-screen{position:absolute;top:0;left:0;width:100vw;height:100vh;z-index:30;transition:opacity .8s ease;}
-.bg-pattern{position:absolute;top:0;left:0;width:200vw;height:200vh;background:repeating-linear-gradient(-45deg,transparent,transparent 15px,rgba(0,0,0,.04) 15px,rgba(0,0,0,.04) 30px);animation:bgScroll 4s linear infinite;z-index:0;}
-@keyframes bgScroll{0%{transform:translate(0,0)}100%{transform:translate(-42.4px,42.4px)}}
-#gooey-container{position:absolute;top:0;left:0;width:100vw;height:100vh;filter:url("#goo");z-index:1;}
-canvas{display:block;width:100%;height:100%;}
-#loading-text{position:absolute;bottom:30px;right:40px;font-size:32px;font-weight:900;color:#fff;-webkit-text-stroke:2px #2f059c;letter-spacing:2px;z-index:10;animation:blink 1.5s ease-in-out infinite alternate;cursor:pointer;}
-@keyframes blink{0%{opacity:1}100%{opacity:.3}}
-#news-screen{position:absolute;top:0;left:0;width:100vw;height:100vh;z-index:20;background-color:#111;display:none;opacity:0;transition:opacity 1s ease;background-image:repeating-linear-gradient(45deg,#1a1a1a 0px,#1a1a1a 20px,#222 20px,#222 40px);}
-#news-title{position:absolute;top:20px;left:-20px;background:#ff0055;color:#fff;padding:10px 40px 10px 50px;font-size:clamp(24px,5vw,40px);transform:skewX(-15deg);border:4px solid #fff;box-shadow:5px 5px 0 #000;}
-#news-title span{display:inline-block;transform:skewX(15deg);}
-#news-image-area{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);width:80%;height:40%;background:#333;border:8px solid #e3ff00;border-radius:20px;box-shadow:10px 10px 0px rgba(0,0,0,.5);display:flex;justify-content:center;align-items:center;color:#777;font-size:24px;overflow:hidden;position:relative;}
-#news-image-area::after{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 4px,rgba(0,0,0,.2) 4px,rgba(0,0,0,.2) 8px);}
-#dialogue-box{position:absolute;bottom:20px;left:5%;width:90%;height:auto;min-height:120px;background:#fff;border:6px solid #2f059c;border-radius:10px;box-shadow:8px 8px 0px rgba(0,0,0,.8);clip-path:polygon(0 0,100% 5px,98% 100%,2% 95%);padding:30px 20px 20px 20px;box-sizing:border-box;display:flex;align-items:center;cursor:pointer;}
-#char-name{position:absolute;top:-25px;left:20px;background:#2f059c;color:#fff;padding:5px 20px;font-size:clamp(16px,4vw,24px);border-radius:5px;transform:rotate(-3deg);}
-#dialogue-text{font-size:clamp(18px,4vw,28px);color:#111;font-family:"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;font-weight:900;line-height:1.3;}
-#next-prompt{position:absolute;bottom:10px;right:20px;font-size:16px;color:#ff0055;animation:blink 1s ease-in-out infinite alternate;}
-#customize-screen{position:absolute;top:0;left:0;width:100vw;height:100vh;z-index:25;background:radial-gradient(circle at center,#2f059c 0%,#110238 100%);display:none;opacity:0;transition:opacity .5s ease;font-family:"Impact","Arial Black",sans-serif;}
-#customize-preview{position:absolute;top:0;left:0;width:100vw;height:100vh;z-index:1;pointer-events:none;}
-.custom-panel{position:absolute;right:20px;top:20px;bottom:20px;width:340px;background:rgba(0,0,0,.75);border:4px solid #e3ff00;border-radius:15px;padding:15px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;overflow-y:auto;color:#fff;box-shadow:0 0 20px rgba(227,255,0,.4);z-index:10;}
-.custom-title{font-size:24px;text-shadow:2px 2px #ff0055;text-align:center;margin-bottom:5px;}
-.custom-group{background:rgba(255,255,255,.1);border-radius:8px;padding:8px;}
-.custom-label{font-size:14px;color:#e3ff00;margin-bottom:6px;display:block;}
-.opt-btns{display:flex;gap:6px;flex-wrap:wrap;}
-.opt-btn{flex:1;min-width:60px;padding:6px 4px;background:#222;border:2px solid #555;color:#fff;border-radius:6px;font-size:12px;cursor:pointer;text-align:center;transition:all .2s;}
-.opt-btn:hover{background:#444;}
-.opt-btn.active{background:#ff0055;border-color:#fff;transform:scale(1.05);font-weight:bold;}
-#btn-confirm{margin-top:auto;padding:12px;background:#e3ff00;color:#2f059c;border:none;border-radius:10px;font-size:20px;font-weight:900;cursor:pointer;box-shadow:0 4px 0 #b3cc00;transition:all .1s;}
-#btn-confirm:active{transform:translateY(4px);box-shadow:none;}
-#weapon-info{font-size:11px;color:#e3ff00;line-height:1.6;padding-top:4px;white-space:pre-line;}
-#battle-ui{position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;pointer-events:none;display:none;}
-#reticle{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;border:3px solid rgba(255,255,255,.8);border-radius:50%;pointer-events:none;}
-#reticle::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:6px;height:6px;background-color:#e3ff00;border-radius:50%;}
-#charge-gauge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:74px;height:74px;border-radius:50%;pointer-events:none;display:none;background:conic-gradient(#ff0055 calc(var(--pct,0)*1%), rgba(255,255,255,.15) 0);}
-#charge-gauge::after{content:"";position:absolute;top:5px;left:5px;right:5px;bottom:5px;border-radius:50%;background:rgba(20,0,50,.5);}
-#special-charge-panel{position:absolute;top:56%;left:50%;transform:translate(-50%,-50%);width:min(390px,72vw);z-index:22;display:none;pointer-events:none;text-align:center;font-family:Arial Black,Meiryo,sans-serif;}
-#special-charge-title{font-size:22px;color:#fff;text-shadow:3px 3px 0 #000;margin-bottom:7px;letter-spacing:1px;}
-#special-charge-track{height:18px;border:3px solid #fff;border-radius:12px;background:rgba(0,0,0,.58);overflow:hidden;box-shadow:0 0 16px rgba(227,255,0,.45);}
-#special-charge-fill{height:100%;width:0%;background:linear-gradient(90deg,#00d4ff,#ff0055,#e3ff00);transition:width .08s;}
-#special-charge-hint{margin-top:7px;font:800 12px/1.4 Arial,Meiryo,sans-serif;color:#eafcff;text-shadow:1px 1px 0 #000;}
-#special-charge-panel.ready #special-charge-fill{box-shadow:0 0 18px #e3ff00;}
-@media(max-width:800px){#special-charge-panel{top:55%;width:min(340px,82vw)}#special-charge-title{font-size:18px}}
-
-.mobile-btn{pointer-events:auto;position:absolute;background:rgba(47,5,156,.6);color:#fff;border:3px solid #e3ff00;border-radius:50%;display:flex;justify-content:center;align-items:center;font-size:20px;font-weight:bold;text-shadow:2px 2px 0 #000;user-select:none;-webkit-user-select:none;box-shadow:0 4px 6px rgba(0,0,0,.3);}
-.mobile-btn:active{transform:scale(.9);background:rgba(227,255,0,.8);color:#2f059c;}
-#btn-squid{bottom:20px;right:180px;width:64px;height:64px;}
-#btn-jump{bottom:110px;right:20px;width:64px;height:64px;}
-#btn-sub{bottom:20px;right:100px;width:64px;height:64px;font-size:14px;}
-#btn-special{bottom:190px;right:20px;width:70px;height:70px;font-size:12px;background:rgba(255,0,85,.5);}
-#btn-map{bottom:270px;right:20px;width:62px;height:62px;font-size:12px;}
-#btn-nice{bottom:350px;right:18px;width:68px;height:50px;border-radius:14px;font-size:14px;background:rgba(0,180,255,.72);}
-#btn-cmon{bottom:408px;right:18px;width:68px;height:50px;border-radius:14px;font-size:13px;background:rgba(255,110,0,.72);}
-#callout-feed{position:absolute;top:150px;left:50%;transform:translateX(-50%);z-index:24;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;font-family:Arial Black,Meiryo,sans-serif;}
-.callout-pop{padding:7px 15px;border:3px solid #fff;border-radius:14px;background:rgba(18,12,40,.92);color:#fff;font-size:18px;text-shadow:2px 2px 0 #000;box-shadow:4px 4px 0 rgba(0,0,0,.4);animation:calloutPop .16s ease-out;}
-.callout-pop.nice{border-color:#4ddcff;}
-.callout-pop.cmon{border-color:#ff9a4d;}
-@keyframes calloutPop{from{transform:scale(.75);opacity:0}to{transform:scale(1);opacity:1}}
-#result-screen{gap:12px;padding:24px;box-sizing:border-box;overflow:auto;}
-#result-feedback{width:min(720px,92vw);background:rgba(0,0,0,.35);border:3px solid #00d4ff;border-radius:14px;padding:14px;box-sizing:border-box;font-family:Arial,Meiryo,sans-serif;}
-#result-feedback h3,#github-changes h3{margin:0 0 8px;color:#e3ff00;font-size:18px;}
-#feedback-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
-.feedback-chip{padding:9px 7px;border:2px solid #555;background:#1a1a29;color:#fff;border-radius:9px;cursor:pointer;font-weight:800;}
-.feedback-chip.active{border-color:#e3ff00;background:#35215b;}
-#feedback-text{width:100%;min-height:72px;margin-top:9px;resize:vertical;background:#08080f;color:#fff;border:2px solid #555;border-radius:9px;padding:8px;box-sizing:border-box;font:14px/1.45 Arial,Meiryo,sans-serif;}
-#feedback-send{margin-top:8px;padding:9px 16px;border:0;border-radius:9px;background:#e3ff00;color:#2f059c;font-weight:900;cursor:pointer;}
-#feedback-status{display:inline-block;margin-left:8px;font:12px Arial,Meiryo,sans-serif;color:#cfcfd8;}
-#github-changes{width:min(720px,92vw);background:rgba(0,0,0,.28);border:2px solid #555;border-radius:14px;padding:12px;box-sizing:border-box;font:13px/1.55 Arial,Meiryo,sans-serif;}
-#github-changes ul{margin:6px 0 0 20px;padding:0;}
-#github-build{margin-top:7px;color:#bbb;font-size:11px;font-family:monospace;}
-@media(max-width:800px){
-  #btn-nice{bottom:350px;right:12px;}
-  #btn-cmon{bottom:408px;right:12px;}
-  #feedback-grid{grid-template-columns:1fr;}
-}
-#joystick-area{position:absolute;bottom:20px;left:20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.1);border:2px dashed rgba(255,255,255,.3);pointer-events:none;}
-#joystick-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:rgba(227,255,0,.5);pointer-events:none;display:none;}
-#instructions{position:absolute;top:10px;left:10px;color:#fff;font-family:sans-serif;text-shadow:1px 1px 2px black;font-size:12px;pointer-events:none;line-height:1.6;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px;}
-#hud{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:min(600px,90vw);pointer-events:none;z-index:11;}
-#turf-bar{width:100%;height:22px;border-radius:11px;overflow:hidden;display:flex;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);}
-#turf-a{height:100%;background:#e3ff00;transition:width .5s;}
-#turf-b{height:100%;background:#ff0055;transition:width .5s;}
-#timer{text-align:center;color:#fff;font-size:26px;text-shadow:2px 2px 0 #000;margin-top:4px;}
-#bottom-hud{position:absolute;bottom:0;left:0;width:100%;padding:10px 20px;box-sizing:border-box;z-index:11;pointer-events:none;display:flex;justify-content:space-between;align-items:flex-end;}
-#hp-wrap{width:230px;}
-#hp-label{color:#fff;font-size:13px;text-shadow:1px 1px 0 #000;}
-#hp-bar-bg{width:100%;height:16px;background:rgba(0,0,0,.5);border:2px solid #fff;border-radius:8px;overflow:hidden;}
-#hp-bar{height:100%;width:100%;background:#4caf50;transition:width .2s;}
-#special-wrap{width:180px;}
-#special-bar-bg{width:100%;height:14px;background:rgba(0,0,0,.5);border:2px solid #e3ff00;border-radius:7px;overflow:hidden;}
-#special-bar{height:100%;width:0%;background:linear-gradient(90deg,#ff0055,#e3ff00);transition:width .2s;}
-#weapon-hud{color:#fff;font-size:11px;text-shadow:1px 1px 0 #000;margin-top:5px;line-height:1.5;}
-#alive-count{color:#fff;font-size:13px;text-align:right;text-shadow:1px 1px 0 #000;}
-#range-hint{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(47,5,156,.8);padding:10px 18px;border-radius:10px;font-size:15px;text-shadow:1px 1px 0 #000;z-index:11;pointer-events:none;border:2px solid #e3ff00;text-align:center;line-height:1.7;}
-#toast{position:absolute;top:80px;left:50%;transform:translateX(-50%);background:rgba(255,0,85,.9);color:#fff;padding:12px 24px;border-radius:10px;font-size:16px;z-index:40;opacity:0;transition:opacity .3s;pointer-events:none;border:2px solid #fff;}
-#respawn-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:15;display:none;flex-direction:column;justify-content:center;align-items:center;color:#fff;}
-#respawn-overlay .msg{font-size:40px;color:#ff0055;text-shadow:3px 3px 0 #000;}
-#respawn-overlay .sub{font-size:18px;margin-top:10px;}
-#spectate-label{min-height:20px;text-shadow:1px 1px 0 #000;}
-#result-screen{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(10,0,40,.92);z-index:35;display:none;flex-direction:column;justify-content:center;align-items:center;color:#fff;}
-#result-title{font-size:56px;text-shadow:4px 4px 0 #000;margin-bottom:20px;}
-#result-detail{font-size:20px;margin-bottom:30px;text-align:center;line-height:1.8;}
-#btn-result-ok{padding:14px 40px;background:#e3ff00;color:#2f059c;border:none;border-radius:10px;font-size:22px;font-weight:900;cursor:pointer;box-shadow:0 4px 0 #b3cc00;pointer-events:auto;}
-.sensor-mark{position:absolute;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #ff2222;pointer-events:none;z-index:12;}
-
-/* === Online / Splatoon-like HUD extensions === */
-#ink-wrap{width:230px;margin-top:6px;}
-#ink-label{color:#fff;font-size:13px;text-shadow:1px 1px 0 #000;display:flex;justify-content:space-between;}
-#ink-bar-bg{width:100%;height:13px;background:rgba(0,0,0,.55);border:2px solid #fff;border-radius:8px;overflow:hidden;}
-#ink-bar{height:100%;width:100%;background:linear-gradient(90deg,#fff,#e3ff00);transition:width .08s;}
-#gear-effects{font-size:11px;color:#fff;line-height:1.45;margin-top:6px;opacity:.9;}
-#online-panel{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(4,0,20,.88);}
-#online-card{width:min(620px,92vw);background:linear-gradient(145deg,#18004e,#071a35);border:4px solid #e3ff00;border-radius:20px;box-shadow:12px 12px 0 #000;padding:24px;color:#fff;font-family:"Impact","Arial Black",sans-serif;}
-#online-card h2{margin:0 0 8px;text-align:center;font-size:36px;color:#e3ff00;text-shadow:3px 3px 0 #ff0055;}
-#online-status{text-align:center;font-family:sans-serif;font-weight:800;font-size:18px;min-height:52px;padding:10px;}
-#online-progress{margin:8px 0 12px;padding:16px 18px;background:rgba(0,0,0,.28);border:3px solid #00d4ff;border-radius:14px;text-align:center;}
-#online-progress-label{font:900 13px/1.2 Arial,sans-serif;color:#c9f6ff;letter-spacing:1px;}
-#online-count{font:900 clamp(42px,8vw,68px)/1 Impact,"Arial Black",sans-serif;color:#e3ff00;text-shadow:4px 4px 0 #ff0055;margin:4px 0;}
-#online-room{font-family:monospace;background:#05050a;border:2px solid #555;border-radius:10px;padding:10px;max-height:180px;overflow:auto;white-space:pre-wrap;}
-#online-dots{display:inline-block;min-width:24px;text-align:left;}
-
-#online-actions{display:flex;gap:10px;margin-top:14px;}
-#online-actions button{flex:1;padding:12px;border:0;border-radius:10px;font-size:18px;font-weight:900;cursor:pointer;}
-#online-start{background:#e3ff00;color:#2f059c;}
-#online-cancel{background:#ff0055;color:#fff;}
-#online-note{font:12px/1.5 sans-serif;color:#c8c8d8;margin-top:12px;text-align:center;}
-#online-match-note{margin:8px 0 12px;text-align:center;font:800 14px/1.5 Arial,sans-serif;color:#fff;}
-#online-cancel{width:100%;background:#ff0055;color:#fff;}
-.online-team-badge{display:inline-block;padding:4px 10px;border-radius:999px;margin:3px;background:#222;border:1px solid #777;font:800 12px sans-serif;}
-
-/* v8: force browser cursor hidden during gameplay */
-html.battle-cursor-hidden,
-html.battle-cursor-hidden body,
-html.battle-cursor-hidden body *,
-html.battle-cursor-hidden canvas { cursor: none !important; }
-
-/* v10: minimap / full map */
-#minimap{position:absolute;top:76px;right:16px;width:190px;height:190px;z-index:13;background:rgba(5,5,12,.72);border:3px solid #fff;border-radius:12px;box-shadow:4px 4px 0 rgba(0,0,0,.55);overflow:hidden;pointer-events:none;display:none;}
-#minimap canvas{width:100%;height:100%;display:block;}
-#map-label{position:absolute;top:4px;left:7px;color:#fff;font:900 11px sans-serif;text-shadow:1px 1px 0 #000;pointer-events:none;}
-#fullmap{position:absolute;inset:0;z-index:70;background:rgba(5,0,20,.82);display:none;align-items:center;justify-content:center;pointer-events:auto;}
-#fullmap-card{width:min(760px,88vw);height:min(760px,88vw);position:relative;background:rgba(15,15,24,.94);border:5px solid #e3ff00;border-radius:18px;box-shadow:10px 10px 0 #000;overflow:hidden;}
-#fullmap canvas{width:100%;height:100%;display:block;}
-#fullmap-title{position:absolute;top:10px;left:16px;color:#fff;font:900 24px sans-serif;text-shadow:2px 2px 0 #000;pointer-events:none;}
-#fullmap-help{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(47,5,156,.9);padding:7px 15px;border-radius:9px;font:900 13px sans-serif;pointer-events:none;}
-html.battle-cursor-hidden,html.battle-cursor-hidden body,html.battle-cursor-hidden body *{cursor:none !important;}
-html.battle-cursor-hidden canvas{cursor:none !important;}
-body.pointer-lock-ready{cursor:none !important;}
-
-/* V48: 右上オンライン人数HUD */
-#global-online-hud{
-  position:fixed;
-  top:14px;
-  right:16px;
-  z-index:55;
-  display:none;
-  min-width:150px;
-  padding:8px 12px 9px;
-  box-sizing:border-box;
-  background:rgba(8,8,18,.88);
-  border:2px solid #e3ff00;
-  border-radius:11px;
-  box-shadow:4px 4px 0 rgba(0,0,0,.4),0 0 14px rgba(227,255,0,.22);
-  color:#fff;
-  pointer-events:none;
-  font-family:Arial Black,Meiryo,sans-serif;
-  text-align:right;
-}
-#global-online-hud .label{
-  display:block;
-  font-size:10px;
-  line-height:1.1;
-  letter-spacing:1px;
-  color:#e3ff00;
-  opacity:.95;
-}
-#global-online-hud .count{
-  display:block;
-  margin-top:2px;
-  font-size:25px;
-  line-height:1;
-  color:#fff;
-  text-shadow:2px 2px 0 #ff0055;
-}
-#global-online-hud .note{
-  display:block;
-  margin-top:3px;
-  font:700 10px/1.25 Arial,sans-serif;
-  color:#ddd;
-  max-width:220px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-@media(max-width:800px){
-  #global-online-hud{top:8px;right:8px;min-width:126px;padding:7px 9px;}
-  #global-online-hud .count{font-size:21px;}
-}
-
-/* V47: 明示的にマウス解除中なら、ゲームcanvas上でもカーソルを必ず表示する。 */
-html.cursor-force-visible,
-html.cursor-force-visible body,
-html.cursor-force-visible body *,
-html.cursor-force-visible canvas{
-  cursor:auto !important;
-}
-
-
-/* v14 Battle HUD */
-#top-battle-status{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:18;display:none;pointer-events:none;min-width:min(720px,88vw);text-align:center;}
-#team-life-strip{display:flex;justify-content:center;gap:12px;align-items:center;background:rgba(0,0,0,.58);padding:7px 12px;border-radius:12px;border:2px solid rgba(255,255,255,.65);box-shadow:0 4px 14px rgba(0,0,0,.35);}
-.life-team{display:flex;gap:5px;align-items:center;font-family:Arial Black,Meiryo,sans-serif;font-size:13px;color:#fff;}
-.life-team-label{font-size:11px;opacity:.8;margin-right:3px;}
-.life-dot{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;border:1px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);}
-.life-dot.dead{filter:grayscale(1);opacity:.55;background:#444!important;color:#ff4a70;}
-#kill-feed{position:absolute;top:74px;right:16px;z-index:18;width:min(340px,43vw);display:flex;flex-direction:column;gap:5px;align-items:flex-end;pointer-events:none;}
-.kill-entry{font-family:Arial Black,Meiryo,sans-serif;background:rgba(12,12,18,.80);color:#fff;border-left:5px solid #fff;padding:6px 10px;border-radius:7px;font-size:12px;box-shadow:3px 3px 0 rgba(0,0,0,.35);animation:feedIn .18s ease-out;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
-.kill-entry.dead{border-left-color:#ff3b6b;}.kill-entry.down{border-left-color:#66ddff;}
-@keyframes feedIn{from{transform:translateX(22px);opacity:0}to{transform:translateX(0);opacity:1}}
-#special-ready{position:absolute;right:18px;bottom:116px;z-index:19;display:none;padding:9px 14px;border:3px solid #e3ff00;border-radius:12px;background:rgba(45,0,70,.88);color:#fff;font-family:Arial Black,Meiryo,sans-serif;font-size:16px;letter-spacing:.5px;text-shadow:2px 2px #000;box-shadow:0 0 0 3px rgba(227,255,0,.20),0 0 24px rgba(227,255,0,.8);animation:readyPulse .9s ease-in-out infinite alternate;pointer-events:none;}
-@keyframes readyPulse{from{transform:scale(1)}to{transform:scale(1.06)}}
-#btn-special.sp-ready{box-shadow:0 0 0 3px #e3ff00,0 0 20px #e3ff00;transform:scale(1.06);}
-#death-location-marker{position:absolute;z-index:17;display:none;pointer-events:none;background:rgba(255,30,85,.92);color:#fff;padding:7px 10px;border-radius:10px;border:2px solid #fff;font-family:Arial Black,Meiryo,sans-serif;font-size:11px;transform:translate(-50%,-100%);white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.45);}
-#death-location-marker::after{content:"";position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);border:8px solid transparent;border-top-color:#ff1e55;border-bottom:0;}
-#weapon-hud{font-size:12px!important;}
-#weapon-hud .weapon-name{font-size:14px;font-weight:900;color:#fff;}
-#weapon-hud .weapon-kind{font-size:10px;opacity:.9;color:#e3ff00;}
-
-/* ===== v15 自作3Dロビー ===== */
-#lobby-ui{position:absolute;inset:0;z-index:18;display:none;pointer-events:none;font-family:"Impact","Arial Black",sans-serif;color:#fff;}
-#lobby-brand{position:absolute;top:18px;left:22px;padding:10px 18px;background:rgba(18,10,34,.82);border:3px solid #e3ff00;transform:skewX(-8deg);box-shadow:7px 7px 0 rgba(0,0,0,.45);pointer-events:none;}
-#lobby-brand .small{font:700 11px/1 sans-serif;letter-spacing:2px;color:#e3ff00;}
-#lobby-brand .big{font-size:28px;letter-spacing:1px;text-shadow:3px 3px #ff0055;}
-#lobby-menu{position:absolute;right:22px;top:18px;width:min(310px,44vw);background:rgba(12,12,20,.78);backdrop-filter:blur(6px);border:3px solid #fff;border-radius:14px;padding:12px;pointer-events:auto;box-shadow:8px 8px 0 rgba(0,0,0,.32);}
-#lobby-menu-title{font-size:22px;color:#e3ff00;text-shadow:2px 2px #ff0055;margin-bottom:7px;}
-#lobby-menu-note{font:12px/1.45 sans-serif;color:#ddd;margin-bottom:9px;}
-.lobby-btn{display:block;width:100%;margin:7px 0;padding:11px 12px;border:2px solid #777;border-radius:9px;background:#202026;color:#fff;font-size:15px;font-weight:900;text-align:left;cursor:pointer;transition:.12s;pointer-events:auto;}
-.lobby-btn:hover{transform:translateX(-4px);border-color:#e3ff00;background:#2b2b35;}
-.lobby-btn .k{float:right;color:#e3ff00;font-size:11px;margin-top:3px;}
-#lobby-prompt{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);padding:10px 18px;background:rgba(15,0,30,.84);border:3px solid #ff0055;border-radius:12px;font-size:16px;text-shadow:2px 2px #000;white-space:nowrap;pointer-events:none;}
-#lobby-location{position:absolute;left:20px;bottom:20px;padding:7px 12px;border-left:4px solid #e3ff00;background:rgba(0,0,0,.44);font:700 12px/1.3 sans-serif;pointer-events:none;}
-.lobby-hotspot{position:absolute;transform:translate(-50%,-100%);padding:5px 8px;border:2px solid #fff;border-radius:8px;background:rgba(47,5,156,.88);color:#fff;font:900 11px sans-serif;pointer-events:none;white-space:nowrap;display:none;}
-@media(max-width:800px){#lobby-menu{width:260px;right:8px;top:8px}.lobby-btn{padding:13px 10px}.lobby-brand{top:8px;left:8px}.lobby-brand .big{font-size:22px}.lobby-brand .small{font-size:9px}#lobby-prompt{bottom:185px;font-size:13px;max-width:90vw;white-space:normal;text-align:center}}
-</style>
-
-<style>
-#v6-gear-editor{position:absolute;left:20px;top:20px;bottom:20px;width:min(390px,42vw);z-index:12;background:rgba(0,0,0,.78);border:3px solid #e3ff00;border-radius:16px;padding:16px;box-sizing:border-box;color:#fff;overflow:auto;box-shadow:0 0 18px rgba(227,255,0,.25);font-family:"Impact","Arial Black",sans-serif;}
-.v6-gear-title{font-size:25px;color:#e3ff00;text-shadow:2px 2px #ff0055;margin-bottom:4px;}
-.v6-gear-note{font:12px/1.45 sans-serif;color:#ddd;margin-bottom:12px;}
-.v6-slot{background:rgba(255,255,255,.08);padding:10px;border-radius:10px;margin-bottom:10px;}
-.v6-slot-label{font-size:17px;margin-bottom:6px;color:#fff;}
-.v6-slot select{width:100%;margin:4px 0;padding:8px;background:#171717;color:#fff;border:1px solid #777;border-radius:7px;font-weight:bold;}
-.v6-gear-effects{font:12px/1.55 sans-serif;color:#e3ff00;margin-top:8px;}
-#customize-screen #v6-gear-editor{display:block;}
-@media(max-width:800px){#v6-gear-editor{left:8px;right:8px;width:auto;top:8px;bottom:8px}.custom-panel{width:300px;right:8px;opacity:.08}.custom-panel:hover{opacity:1}}
-
-#account-screen{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(76,0,120,.92),rgba(5,5,12,.98) 65%);color:#fff;font-family:Arial,sans-serif;}
-#account-card{width:min(440px,92vw);background:rgba(14,14,22,.96);border:3px solid #e3ff00;box-shadow:12px 12px 0 rgba(0,0,0,.45);border-radius:18px;padding:22px;}
-#account-card h2{margin:0 0 5px;font-size:30px;letter-spacing:2px;color:#e3ff00;text-shadow:3px 3px #ff0055;}
-#account-sub{color:#ddd;font-size:13px;line-height:1.5;margin-bottom:14px;}
-.account-field{margin:10px 0}.account-field label{display:block;font-weight:900;font-size:12px;margin-bottom:5px}.account-field input{width:100%;box-sizing:border-box;padding:12px;border-radius:9px;border:2px solid #555;background:#08080d;color:#fff;font-size:16px;outline:none}.account-field input:focus{border-color:#e3ff00;}
-.account-actions{display:flex;gap:9px;margin-top:14px}.account-actions button{flex:1;padding:12px;border:0;border-radius:10px;font-weight:900;cursor:pointer}.account-primary{background:#e3ff00;color:#2f059c}.account-secondary{background:#ff2255;color:#fff}.account-ghost{background:#333;color:#fff}
-#account-status{min-height:22px;margin-top:10px;font-size:13px;font-weight:900;color:#ffd166;white-space:pre-wrap}
-#account-profile{display:none;margin-top:14px;padding:12px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid #444}
-#account-profile strong{color:#e3ff00;font-size:22px}.rank-badge{display:inline-block;padding:3px 9px;border-radius:999px;background:#ff2255;color:#fff;font-weight:900;margin-left:6px}
-#online-ready{background:#00d4ff;color:#07101a;}
-#online-ready.ready{background:#e3ff00;color:#2f059c;}
-#online-profile{margin:8px 0;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid #555;border-radius:10px;font:800 13px/1.4 Arial,sans-serif;}
-</style>
-<meta name="game-version" content="v66-3d-ink-height-ai-enemy-ink-server-authority"></head>
-<body>
-
-<div id="loading-screen">
-<div class="bg-pattern"></div>
-<svg style="display:none;"><defs><filter id="goo"><feGaussianBlur in="SourceGraphic" stdDeviation="25" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 60 -30"/></filter></defs></svg>
-<div id="gooey-container"><canvas id="inkCanvas"></canvas></div>
-<div id="loading-text">LOADING...</div>
-</div>
-
-<div id="customize-screen">
-<div id="customize-preview"></div>
-<div class="custom-panel">
-<div class="custom-title">スタイル決定！</div>
-<div class="custom-group"><span class="custom-label">操作設定</span>
-<div class="opt-btns" id="grp-device">
-<button class="opt-btn active" data-val="pc">パソコン設定</button>
-<button class="opt-btn" data-val="mobile">携帯設定</button>
-</div>
-<div style="font:12px/1.5 Arial,sans-serif;color:#ccc;margin-top:6px;">ゲーム中の操作方法と画面ボタン表示を切り替えます。</div>
-</div>
-<div class="custom-group"><span class="custom-label">スタイル (性別)</span>
-<div class="opt-btns" id="grp-style">
-<button class="opt-btn active" data-val="girl">ガール</button>
-<button class="opt-btn" data-val="boy">ボーイ</button>
-</div></div>
-<div class="custom-group"><span class="custom-label">髪型 (ゲソスタイル)</span><div class="opt-btns" id="grp-hair"></div></div>
-<div class="custom-group"><span class="custom-label">インクカラー</span>
-<div class="opt-btns" id="grp-color">
-<button class="opt-btn active" data-val="0" style="border-bottom:3px solid #e3ff00;">ネオン黄</button>
-<button class="opt-btn" data-val="1" style="border-bottom:3px solid #ff0055;">ネオンピンク</button>
-<button class="opt-btn" data-val="2" style="border-bottom:3px solid #00d4ff;">ネオン青</button>
-<button class="opt-btn" data-val="3" style="border-bottom:3px solid #9900ff;">ネオン紫</button>
-</div></div>
-<div class="custom-group"><span class="custom-label">フク (全50種類)</span>
-<select id="select-outfit" style="width:100%;padding:8px;background:#222;color:#fff;border:2px solid #e3ff00;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;"></select></div>
-<div class="custom-group"><span class="custom-label">ブキ（カテゴリごとに個性あり）</span>
-<select id="select-weapon" style="width:100%;padding:8px;background:#222;color:#fff;border:2px solid #ff0055;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;"></select>
-<div id="weapon-info"></div></div>
-<div class="custom-group"><span class="custom-label">ギア設定</span>
-<div class="opt-btns" id="grp-gear">
-<button class="opt-btn active" data-val="0">標準</button>
-<button class="opt-btn" data-val="1">スピード</button>
-<button class="opt-btn" data-val="2">インク効率</button>
-<button class="opt-btn" data-val="3">タフネス</button>
-</div>
-<div id="gear-config-note" style="font:11px/1.45 Arial,Meiryo,sans-serif;color:#ccc;margin-top:6px;">標準：基本性能</div>
-</div>
-<button id="btn-confirm">これでバッチリ！ ►</button>
-</div>
-</div>
-
-<div id="account-screen">
-  <div id="account-card">
-    <h2>WEB ID</h2>
-    <div id="account-sub">名前とパスワードでアカウントに入れます。腕前・勝敗・レートを保存します。初めてなら「新規登録」。</div>
-    <div class="account-field"><label>名前（2〜16文字）</label><input id="account-name" autocomplete="username" maxlength="16"></div>
-    <div class="account-field"><label>パスワード（4文字以上）</label><input id="account-password" type="password" autocomplete="current-password" maxlength="72"></div>
-    <div class="account-actions">
-      <button id="account-login" class="account-primary">ログイン</button>
-      <button id="account-register" class="account-secondary">新規登録</button>
-    </div>
-    <div class="account-actions"><button id="account-guest" class="account-ghost" style="display:none" disabled>ゲストで続ける（オフライン）</button></div>
-    <div id="account-status"></div>
-    <div id="account-profile"></div>
-  </div>
-</div>
-
-<div id="news-screen">
-<div id="news-title"><span>バンカラジオ</span></div>
-<div id="news-image-area">NO SIGNAL...</div>
-<div id="dialogue-box"><div id="char-name"></div><div id="dialogue-text"></div><div id="next-prompt">▼ TAP or SPACE</div></div>
-</div>
-
-
-<div id="battle-ui">
-<div id="instructions"></div>
-<div id="top-battle-status"><div id="team-life-strip"><div class="life-team"><span class="life-team-label">A</span><span id="life-a"></span></div><div class="life-team"><span class="life-team-label">B</span><span id="life-b"></span></div></div></div>
-<div id="kill-feed"></div>
-<div id="hud">
-<div id="turf-bar"><div id="turf-a" style="width:50%;"></div><div id="turf-b" style="width:50%;"></div></div>
-<div id="timer">3:00</div>
-</div>
-<div id="bottom-hud">
-<div id="hp-wrap"><div id="hp-label">HP</div><div id="hp-bar-bg"><div id="hp-bar"></div></div>
-<div id="special-wrap" style="margin-top:6px;"><div id="hp-label">スペシャル</div><div id="special-bar-bg"><div id="special-bar"></div></div></div>
-<div id="ink-wrap"><div id="ink-label"><span>インク</span><span id="ink-text">100%</span></div><div id="ink-bar-bg"><div id="ink-bar"></div></div><div id="gear-effects"></div></div>
-<div id="weapon-hud"></div>
-</div>
-<div id="alive-count"></div>
-</div>
-<div id="reticle"></div>
-<div id="charge-gauge"></div>
-<div id="special-charge-panel">
-  <div id="special-charge-title">チャージボール</div>
-  <div id="special-charge-track"><div id="special-charge-fill"></div></div>
-  <div id="special-charge-hint">F / ナイス連打でチャージ　・　満タンでSPを押すと投げる</div>
-</div>
-<div id="sensor-layer"></div>
-<div id="joystick-area"><div id="joystick-knob"></div></div>
-<div id="btn-squid" class="mobile-btn">🦑</div>
-<div id="btn-jump" class="mobile-btn">UP</div>
-<div id="btn-sub" class="mobile-btn">ボム</div>
-<div id="btn-special" class="mobile-btn">SP</div>
-<div id="btn-map" class="mobile-btn">MAP</div>
-<div id="btn-nice" class="mobile-btn">ナイス</div>
-<div id="btn-cmon" class="mobile-btn">カモン</div>
-<div id="callout-feed"></div>
-</div>
-
-<div id="minimap"><canvas id="minimap-canvas" width="190" height="190"></canvas><div id="map-label">MAP · M</div></div>
-<div id="fullmap"><div id="fullmap-card"><canvas id="fullmap-canvas" width="760" height="760"></canvas><div id="fullmap-title">STAGE MAP</div><div id="fullmap-help">味方をタップ：スーパージャンプ / M・ESC：閉じる</div></div></div>
-<div id="range-hint"></div>
-<div id="toast"></div>
-<div id="respawn-overlay"><div class="msg">やられた！</div><div class="sub">まもなく復活...</div><div id="spectate-label" style="margin-top:12px;color:#8eeaff;font:700 14px/1.4 Arial,Meiryo,sans-serif;"></div></div>
-<div id="special-ready">SPECIAL READY!</div>
-<div id="death-location-marker">💀 ここでやられた</div>
-<div id="result-screen">
-  <div id="result-title"></div>
-  <div id="result-detail"></div>
-  <div id="result-feedback">
-    <h3>この試合のフィードバック</h3>
-    <div id="feedback-grid">
-      <button class="feedback-chip" data-feedback="バグ">バグがあった</button>
-      <button class="feedback-chip" data-feedback="ラグ">ラグ・通信</button>
-      <button class="feedback-chip" data-feedback="操作">操作しにくい</button>
-      <button class="feedback-chip" data-feedback="マッチング">マッチング</button>
-      <button class="feedback-chip" data-feedback="見た目">見た目</button>
-      <button class="feedback-chip" data-feedback="その他">その他</button>
-    </div>
-    <textarea id="feedback-text" maxlength="1000" placeholder="気になったことを1,000文字以内で書けます"></textarea>
-    <button id="feedback-send">フィードバックを送る</button><span id="feedback-status"></span>
-  </div>
-  <div id="github-changes">
-    <h3>今回のGitHub改造点</h3>
-    <ul>
-      <li>キャラクターの胴体・脚の接続と腰まわりを調整</li>
-      <li>復活処理に一時的な無敵時間を設定</li>
-      <li>オンライン通信の入力レート・位置・メッセージ量をサーバー側で監視</li>
-      <li>ナイス／カモンのオンライン同期と画面表示を追加</li>
-      <li>試合終了直後にフィードバックと更新内容を確認できる画面を追加</li>
-    </ul>
-    <div id="github-build">build: V49 / latest client commit: 896a4b24557f6caa0dc41a4672e05da031bc0687</div>
-  </div>
-  <button id="btn-result-ok">試し撃ち場へ</button>
-</div>
-
-
-<div id="online-test-panel" style="position:absolute;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(3,0,18,.94);font-family:Arial,Meiryo,sans-serif;color:#fff;">
-  <div style="width:min(720px,92vw);max-height:88vh;overflow:auto;background:#121225;border:4px solid #e3ff00;border-radius:18px;padding:22px;box-shadow:10px 10px 0 #000;">
-    <h2 style="margin:0 0 8px;text-align:center;color:#e3ff00;font-size:30px;">オンライン接続テスト</h2>
-    <div style="text-align:center;color:#ccc;font-size:13px;margin-bottom:12px;">Tキーで開く / ESCで閉じる</div>
-    <div id="online-test-server" style="background:#07070d;border:2px solid #444;border-radius:10px;padding:10px;margin-bottom:12px;font-family:monospace;word-break:break-all;"></div>
-    <div id="online-test-result" style="display:flex;flex-direction:column;gap:7px;font-size:15px;"></div>
-    <div id="online-test-log" style="margin-top:14px;background:#050509;border:2px solid #333;border-radius:10px;padding:10px;height:180px;overflow:auto;font:12px/1.5 monospace;white-space:pre-wrap;"></div>
-    <div style="display:flex;gap:10px;margin-top:14px;">
-      <button id="online-test-run" style="flex:1;padding:12px;border:0;border-radius:10px;background:#e3ff00;color:#2f059c;font-weight:900;font-size:16px;cursor:pointer;">もう一度テスト</button>
-      <button id="online-test-close" style="flex:1;padding:12px;border:0;border-radius:10px;background:#ff0055;color:#fff;font-weight:900;font-size:16px;cursor:pointer;">閉じる</button>
-    </div>
-  </div>
-</div>
-
-<div id="global-online-hud" aria-live="polite">
-  <span class="label">ONLINE PLAYERS</span>
-  <span id="global-online-count" class="count">0人</span>
-  <span id="global-online-note" class="note">現在オンラインの全プレイヤー</span>
-</div>
-<div id="online-panel">
-  <div id="online-card">
-    <h2>オンラインルーム</h2>
-    <div id="online-profile">プロフィール未読込</div>
-    <div id="online-status">オンライン接続中</div>
-    <div id="online-progress">
-      <div id="online-progress-label">オンライン接続 <span id="online-dots">...</span></div>
-      <div id="online-count">1 / 8</div>
-      <div id="online-progress-note" style="font:700 12px/1.4 Arial,sans-serif;color:#ddd;">自分が参加中。対戦相手を探しています</div>
-    </div>
-    <div id="online-match-note">部屋に入ると、参加者それぞれが「準備OK」を押します。</div>
-    <div id="online-room">マッチング待機中…</div>
-    <div id="online-actions">
-      <button id="online-ready" disabled>準備OK</button>
-      <button id="online-cancel">戻る</button>
-    </div>
-    <div id="online-note">2〜8人でマッチング。参加者全員が準備OKになると対戦開始します。</div>
-  </div>
-</div>
-
-<script>
+</script><script src="https://cdn.tailwindcss.com"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script>
 /* V46: 最優先のP/3オンライン入口。後続のゲーム処理に依存しない。 */
 (function(){
   window.addEventListener('keydown',function(e){
@@ -518,9 +52,7 @@ html.cursor-force-visible canvas{
     }
   },true);
 })();
-</script>
-
-<script>
+</script><script>
 /* =========================================================
    グローバル状態
    ========================================================= */
@@ -4052,8 +3584,7 @@ setTimeout(()=>{
 
 window.addEventListener('keydown', handleAdvanceEvent);
 window.addEventListener('pointerdown', handleAdvanceEvent);
-</script>
-<script>
+</script><script>
 /* =====================================================================
    ENHANCEMENT PACK v3
    - Ink tank consumption / squid regeneration (ink + HP)
@@ -5164,11 +4695,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 })();
 
-</script>
-
-
-
-<script>
+</script><script>
 /* =====================================================================
    FINAL v10 PATCH
    - Pointer Lock camera: mouse is fixed to the center after entering practice/battle.
@@ -5410,10 +4937,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__V10={requestLock,releaseLock,showMaps};
 })();
-</script>
-
-
-<script>
+</script><script>
 /* =====================================================================
    FINAL v11 PATCH
    - スーパージャンプ：フルマップで味方をタップして、その味方の位置へ移動。
@@ -5546,10 +5070,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__V11={startSuperJump,openFullMap,getJumpState:()=>jumpState};
 })();
-</script>
-
-
-<script>
+</script><script>
 /* =========================================================
    v36: account + rank + safe squid state
    Built on the working v25 code path. No page splitting.
@@ -6012,13 +5533,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   },250);
 })();
-</script>
-
-
-
-
-
-<script>
+</script><script>
 /* =====================================================================
    v15 ORIGINAL 3D LOBBY
    - Blender等の外部3Dモデルを一切使わず、Three.jsプリミティブだけで街を生成
@@ -6617,13 +6132,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__V15={startLobbyPhase,leaveLobby,action,returnToLobbyFromRange};
 })();
-</script>
-
-
-
-
-
-<script>
+</script><script>
 /* V38 result hotfix: stop battle first, then show result. */
 (function(){
   let busy=false;
@@ -6699,9 +6208,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   },250);
 })();
-</script>
-
-<script>
+</script><script>
 /* V39 direct online + no-lobby flow */
 (function(){
   let directOnlineBusy=false;
@@ -6815,8 +6322,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       playerFighter.specialGauge=Math.min(100,playerFighter.specialGauge+2.4);
   },100);
 })();
-</script>
-<script>
+</script><script>
 /* V41: temporarily release pointer lock for T/M overlays */
 (function(){
   function releaseForOverlay(){
@@ -7062,8 +6568,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   },true);
 })();
-</script>
-<script>
+</script><script>
 /* V42: final pointer-lock cleanup outside gameplay */
 (function(){
   function outsideBattle(){
@@ -7083,8 +6588,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.addEventListener('blur',unlock,true);
   setInterval(unlock,200);
 })();
-</script>
-<script>
+</script><script>
 /* V43: every load starts at the login gate; P always forces the online room */
 (function(){
   function requireLogin(){
@@ -7122,9 +6626,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   },true);
 })();
-</script>
-
-<script>
+</script><script>
 /* V44/V45 final online controls: P and 3 are exactly the same */
 (function(){
   function requireAccount(){
@@ -7176,9 +6678,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   },true);
 })();
-</script>
-
-<script>
+</script><script>
 /* V51: fixed original loadouts + 19 original special actions */
 (function(){
   const SPECIALS=[
@@ -7414,8 +6914,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     };
   }
 })();
-</script>
-<script>
+</script><script>
 /* V50: communication UI + result feedback */
 (function(){
   const BUILD='V50-CALLOUT-FEEDBACK-2026-09-27';
@@ -7501,9 +7000,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
   setInterval(applyCalloutVisibility,500);
 })();
-</script>
-
-<script>
+</script><script>
 /* V60: weapon/gameplay overhaul
    - continuous ink trails between muzzle and impact
    - distinctive weapon classes
@@ -7512,6 +7009,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
    - charger / splatling / wiper / splatana charging
 */
 (function(){
+  /* V67 scope bridge: V60 lives in its own IIFE, so it cannot see
+     inkCost/consumeInk declared in an earlier script's IIFE. */
+  const v60InkCost=(f,amount)=>{
+    let saver=1;
+    try{saver=Math.max(.1,Number(f?.gearProfile?.inkSaver)||1);}catch(_){}
+    return Math.max(0,Number(amount)||0)*saver;
+  };
+  const v60ConsumeInk=(f,amount)=>{
+    try{
+      const fn=window.__consumeInkForGame;
+      if(typeof fn==='function')return !!fn(f,amount);
+    }catch(_){}
+    const cost=Math.max(0,Number(amount)||0);
+    if(!f||Number(f.ink)<cost)return false;
+    f.ink=Math.max(0,Number(f.ink)-cost);
+    return true;
+  };
+  window.__V67_V60_INKCOST=v60InkCost;
+  window.__V67_V60_CONSUME=v60ConsumeInk;
   'use strict';
 
   const V60_BUILD='V60-WEAPON-GAMEPLAY-2026-09-27';
@@ -7745,7 +7261,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const geo=new THREE.SphereGeometry(opts.visRadius||opts.radiusVisual||.11,8,8);
     const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color}));
     const start=fighter.pos.clone();
-    start.y+=opts.yOffset===undefined?1.2:opts.yOffset;
+    const muzzleDir=dir&&dir.clone?dir.clone():new THREE.Vector3(0,0,1);
+    muzzleDir.y=0;
+    if(muzzleDir.lengthSq()<0.0001)muzzleDir.set(Math.sin(fighter.root.rotation.y),0,Math.cos(fighter.root.rotation.y));
+    muzzleDir.normalize();
+    start.addScaledVector(muzzleDir,Number(opts.muzzleForward===undefined?.72:opts.muzzleForward));
+    start.y+=opts.yOffset===undefined?1.20:opts.yOffset;
     mesh.position.copy(start);
     scene.add(mesh);
 
@@ -7777,7 +7298,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const w=f.weapon;
     const arrows=w.arrows||3;
     const baseCost=(w.inkCost||6)*(0.55+0.8*frac);
-    if(!consumeInk(f,inkCost(f,baseCost)))return false;
+    if(!v60ConsumeInk(f,v60InkCost(f,baseCost)))return false;
     const color=getFighterInkHex(f);
     const facing=aimDir.clone(); facing.y=0;
     if(facing.lengthSq()<.001)facing.set(0,0,1);
@@ -7813,7 +7334,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const w=f.weapon;
     const frac=Math.max(0,Math.min(1,Number(chargeFrac)||0));
     const cost=(w.inkCost||7)*(0.55+0.9*frac);
-    if(!consumeInk(f,inkCost(f,cost)))return false;
+    if(!v60ConsumeInk(f,v60InkCost(f,cost)))return false;
 
     const color=getFighterInkHex(f);
     const origin=f.pos.clone();origin.y+=1.2;
@@ -7904,7 +7425,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     for(let i=0;i<count;i++){
       setTimeout(()=>{
         if(!f.alive)return;
-        if(!consumeInk(f,inkCost(f,w.inkCost||1.3)))return;
+        if(!v60ConsumeInk(f,v60InkCost(f,w.inkCost||1.3)))return;
         const spread=(w.spread||.02)*(1.2+Math.random()*.8);
         const d=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(Math.random()-.5)*spread);
         fireLineShot(f,d,w,{kind:'splatling',paintMult:.82,noNetwork:true});
@@ -8022,7 +7543,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(now-f.lastShot<(w.rate||100))return;
 
     const specialMode=!!(f.v60Trizooka||f.v60CrabUntil&&now<f.v60CrabUntil||f.v60InkjetUntil&&now<f.v60InkjetUntil||f.v60UltraStampUntil&&now<f.v60UltraStampUntil||f.v60KrakenUntil&&now<f.v60KrakenUntil);
-    if(!specialMode && f.ink < inkCost(f,w.inkCost||1))return;
+    if(!specialMode && f.ink < v60InkCost(f,w.inkCost||1))return;
     f.lastShot=now;
 
     if(f.v60Trizooka && f.v60Trizooka.shots>0){
@@ -8083,7 +7604,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     else fireLineShot(f,aimDir,w,{kind:'shooter',paintMult:1.05});
 
     const cost=w.inkCost||1;
-    if(!consumeInk(f,inkCost(f,cost)))return;
+    if(!v60ConsumeInk(f,v60InkCost(f,cost)))return;
     f.specialGauge=Math.min(100,f.specialGauge+1.0*(f.gearProfile?.specialGain||1));
     sfx('shoot');
   }
@@ -8107,7 +7628,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const airborne=f.pos.y>floorY+.25;
     if(now-f.lastSwing<(moving?70:(w.swingRate||350)))return;
     const cost=moving?2.5:6.0;
-    if(!consumeInk(f,inkCost(f,cost)))return;
+    if(!v60ConsumeInk(f,v60InkCost(f,cost)))return;
     const color=getFighterInkHex(f);
     f.lastSwing=now;
     const facing=new THREE.Vector3(Math.sin(f.human.rotation.y),0,Math.cos(f.human.rotation.y));
@@ -8146,7 +7667,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function doBrushV60(f,now,moving){
     const w=f.weapon;
     if(now-f.lastSwing<(moving?55:(w.swingRate||110)))return;
-    if(!consumeInk(f,inkCost(f,moving?1.2:2.0)))return;
+    if(!v60ConsumeInk(f,v60InkCost(f,moving?1.2:2.0)))return;
     const color=getFighterInkHex(f);f.lastSwing=now;
     const facing=new THREE.Vector3(Math.sin(f.human.rotation.y),0,Math.cos(f.human.rotation.y));
     if(moving){
@@ -8172,7 +7693,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const color=getFighterInkHex(f);
     const charged=frac>=.72;
     const cost=(w.inkCost||7)*(.65+.55*frac);
-    if(!consumeInk(f,inkCost(f,cost)))return;
+    if(!v60ConsumeInk(f,v60InkCost(f,cost)))return;
     const facing=aimOverride?aimOverride.clone().setY(0):new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
     if(facing.lengthSq()<.001)facing.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
     facing.normalize();
@@ -8240,7 +7761,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const w=f.weapon,def=subDefs[w.sub];
     if(!def)return;
     if(now-f.lastSub<(def.cd||1000))return;
-    if(!consumeInk(f,inkCost(f,def.inkCost)))return;
+    if(!v60ConsumeInk(f,v60InkCost(f,def.inkCost)))return;
     f.lastSub=now;
     const color=getFighterInkHex(f);
     const d=aimDir.clone();d.normalize();
@@ -9073,10 +8594,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     return true;
   };
 })();
-</script>
-
-
-<script>
+</script><script>
 /* V61 balance pass: strong category identity without copying exact proprietary balance values. */
 (function(){
   const tune={
@@ -9137,10 +8655,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   setTimeout(window.updateWeaponInfoV61,0);
   document.getElementById('select-weapon')?.addEventListener('change',()=>setTimeout(window.updateWeaponInfoV61,0));
 })();
-</script>
-
-
-<script>
+</script><script>
 /* V62 input pass: charged Fizzy Bomb */
 (function(){
   let chargeStart=0;
@@ -9177,9 +8692,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   document.addEventListener('mousedown',begin,true);
   document.addEventListener('mouseup',finish,true);
 })();
-</script>
-
-<script>
+</script><script>
 /* V64: safe ink painting core
    Keep each paint call O(1). The previous painter generated many canvas
    paths/dabs per shot, which could stall the browser while holding fire.
@@ -9253,10 +8766,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   paintGround=paintGroundSafe;
   window.__PAINT_V64_BUILD='V64-SAFE-INK-2026-09-27';
 })();
-</script>
-
-
-<script>
+</script><script>
 /* V65: Tactical CPU Brain + E Gear Loadout
    - CPU uses state-based movement, A* navigation and local obstacle avoidance.
    - CPU enters squid mode on friendly ink, paints routes, retreats to refill, throws subs,
@@ -9956,9 +9466,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.__V67_STAGE_BOOTSTRAP_FIX='PAINT-RECT-WORLD-2026-09-28';
   window.__V65_GEAR_CATALOG=GEAR_CATALOG;
 })();
-</script>
-
-<script>
+</script><script>
 /* =====================================================================
    V66: 3D TERRAIN INK + ENEMY INK + SERVER AUTHORITY CLIENT
    - Elevated platforms are painted as actual 3D raised ink patches.
@@ -10297,9 +9805,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   setInterval(attachV66Socket,250);
   window.__V66_BUILD='V66-3D-INK-ENEMY-INK-SERVER-AUTH-2026-09-28';
 })();
-</script>
-
-<script>
+</script><script>
 /* V67 FINAL: safe unified shooting bridge
    Older versions left several overlapping tryShoot/fireChargerShot implementations.
    This final bridge keeps one stable path for player shooting and never lets a
@@ -10456,8 +9962,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__V67_FINAL_SHOOT='UNIFIED-SAFE-SHOOT-2026-09-28';
 })();
-</script>
-<script>
+</script><script>
 /* V67 HOTFIX: shooting must never depend on movement-frame execution.
    A left click creates the local projectile immediately. Holding the button
    still uses the normal continuous-fire path, but a single click is enough
@@ -10708,5 +10213,3 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.__V67_DIRECT_SHOOT=directPlayerShot;
 })();
 </script>
-</body>
-</html>
