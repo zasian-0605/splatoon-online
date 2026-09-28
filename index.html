@@ -295,7 +295,7 @@ html.cursor-force-visible canvas{
 #online-ready.ready{background:#e3ff00;color:#2f059c;}
 #online-profile{margin:8px 0;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid #555;border-radius:10px;font:800 13px/1.4 Arial,sans-serif;}
 </style>
-<meta name="game-version" content="v37-room-account-flat-stage-safe-squid-lobby-stable"></head>
+<meta name="game-version" content="v66-3d-ink-height-ai-enemy-ink-server-authority"></head>
 <body>
 
 <div id="loading-screen">
@@ -1778,6 +1778,18 @@ function buildStage(){
 
   spawnPointA=new THREE.Vector3(-4,-0.0,-60);
   spawnPointB=new THREE.Vector3(4,-0.0,60);
+
+  /* V66: small raised terrain so the stage has places you actually step onto,
+     instead of relying only on flat texture changes. */
+  function lowHump(x,z,w,d,y,h,color=0x68727d){
+    const b=addBlock(x,y,z,w,h,d,color,{climbable:true});
+    b.stageHump=true;
+    return b;
+  }
+  lowHump(-12,-37,12,7,.40,.85,matConcrete);
+  lowHump(12,-37,12,7,.40,.85,matConcrete);
+  lowHump(-12,37,12,7,.40,.85,matConcrete);
+  lowHump(12,37,12,7,.40,.85,matConcrete);
 
   const matConcrete=0x5b6570,matDark=0x38434e,matMetal=0x7d8790;
   const matBright=0x8e9aa5,matAccent=0x303944,matGlass=0x3f7182;
@@ -4436,7 +4448,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     const gp=f.gearProfile||gearProfile(f);
     const isJetpack=f.jetpackUntil && now<f.jetpackUntil;
-    let speedMult=isSquid?1.85:1;
+    let speedMult=isSquid?1.30:.90;
     if(!isSquid && isShooting && f.weapon.category!=="maneuver") speedMult*=.62;
     if(f.weapon.category==="maneuver"&&isShooting) speedMult*=1.12;
     if(f.weapon.category==="roller"&&isShooting) speedMult*=1.06;
@@ -4775,9 +4787,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(m.type==='paint'){
           const x2=Number(m.x2), z2=Number(m.z2);
           if(Number.isFinite(x2)&&Number.isFinite(z2)){
-            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,to:{x:x2,z:z2}});
+            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined,to:{x:x2,z:z2}});
           }else{
-            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true});
+            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined});
           }
           return;
         }
@@ -4880,7 +4892,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function reportOnlineResult(winnerTeam){
     if(onlineResultSent||!onlineSocket||onlineSocket.readyState!==1||!onlineStarted)return;
     onlineResultSent=true;
-    try{onlineSocket.send(JSON.stringify({type:'matchResult',winnerTeam}));}catch{}
+    /* V66: server decides the result from server-side ink coverage. */
+    try{onlineSocket.send(JSON.stringify({type:'matchResult',winnerTeam,clientHint:true}));}catch{}
   }
   document.getElementById('online-start')?.addEventListener('click',()=>{
     if(onlineSocket&&onlineSocket.readyState===1){
@@ -9320,6 +9333,20 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function navClear(a,b){
     const dist=Math.hypot(b.x-a.x,b.z-a.z);
     if(dist<.5)return true;
+    /* V66: 3D-aware navigation. Prefer intermediate platforms over
+       impossible vertical shortcuts. */
+    const surfaceY=(p)=>{
+      let best=0;
+      for(const block of collidableBlocks){
+        if(p.x>=block.minX && p.x<=block.maxX && p.z>=block.minZ && p.z<=block.maxZ &&
+           block.maxY<=Math.max(0,Number(p.y)||0)+.25 && block.maxY>best){
+          best=block.maxY;
+        }
+      }
+      return best;
+    };
+    const ay=surfaceY(a), by=surfaceY(b);
+    if(Math.abs(by-ay)>2.6 && dist>4.0)return false;
     const steps=Math.max(2,Math.ceil(dist/2.8));
     for(let i=1;i<steps;i++){
       const t=i/steps;
@@ -9436,7 +9463,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   function moveAIVel(f,dir,delta,isSquid){
-    const speed=(isSquid?15.5:5.8)*(f.gearProfile?.[isSquid?'swim':'move']||1);
+    const speed=(isSquid?11.5:5.2)*(f.gearProfile?.[isSquid?'swim':'move']||1);
     const vel=dir.clone().setY(0).normalize().multiplyScalar(speed);
     const before=f.pos.clone();
     tryMoveWithCollision(f,vel,delta,isSquid);
@@ -9757,5 +9784,347 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.__V65_GEAR_CATALOG=GEAR_CATALOG;
 })();
 </script>
+
+<script>
+/* =====================================================================
+   V66: 3D TERRAIN INK + ENEMY INK + SERVER AUTHORITY CLIENT
+   - Elevated platforms are painted as actual 3D raised ink patches.
+   - Paint outside the AA-derived stage is rejected.
+   - Enemy ink forces human form and deals non-lethal attrition offline.
+   - Online damage is applied only from server damage events.
+   - Server respawn events are synchronized.
+   ===================================================================== */
+(function(){
+  'use strict';
+
+  const _v66BasePaint = paintGround;
+  const _v66BaseOnInk = onFighterInk;
+  const _v66BaseApplyDamage = applyDamage;
+  const raisedInkPatches = [];
+  let raisedInkGroup = null;
+  let lastRaisedNetPaint = 0;
+  const MAX_RAISED_PATCHES = 260;
+
+  function ensureRaisedInkGroup(){
+    if(raisedInkGroup || !scene)return;
+    raisedInkGroup = new THREE.Group();
+    raisedInkGroup.name = 'V66_RaisedInk';
+    scene.add(raisedInkGroup);
+  }
+
+  function rgbDistance(a,b){
+    const ar=((a>>16)&255)/255, ag=((a>>8)&255)/255, ab=(a&255)/255;
+    const br=((b>>16)&255)/255, bg=((b>>8)&255)/255, bb=(b&255)/255;
+    return Math.sqrt((ar-br)**2+(ag-bg)**2+(ab-bb)**2);
+  }
+
+  function colorsForTeam(team){
+    const out=[];
+    if(team==='A' && Number.isFinite(Number(teamAHex)))out.push(Number(teamAHex));
+    if(team==='B' && Number.isFinite(Number(teamBHex)))out.push(Number(teamBHex));
+    try{
+      for(const f of fighters||[]){
+        if(f && f.team===team){
+          const c=Number(getFighterInkHex(f));
+          if(Number.isFinite(c) && !out.includes(c))out.push(c);
+        }
+      }
+    }catch(_){}
+    return out;
+  }
+
+  function inferPaintTeam(colorHex, x, z){
+    let best=null, bestD=Infinity;
+    try{
+      for(const f of fighters||[]){
+        if(!f)continue;
+        const c=Number(getFighterInkHex(f));
+        const d=rgbDistance(colorHex,c);
+        const near=Math.hypot(f.pos.x-x,f.pos.z-z);
+        const score=d + Math.min(0.12,near/50);
+        if(score<bestD){bestD=score;best=f;}
+      }
+    }catch(_){}
+    if(best && bestD<0.22)return best.team;
+    const aa=colorsForTeam('A').map(c=>rgbDistance(colorHex,c));
+    const bb=colorsForTeam('B').map(c=>rgbDistance(colorHex,c));
+    const da=aa.length?Math.min(...aa):Infinity;
+    const db=bb.length?Math.min(...bb):Infinity;
+    if(da<.18 || db<.18)return da<=db?'A':'B';
+    return null;
+  }
+
+  function actualSurfaceY(x,z, actorYHint){
+    let best=0;
+    const hint=Number(actorYHint);
+    const maxY=Number.isFinite(hint) ? hint+.28 : .28;
+    try{
+      for(const b of collidableBlocks||[]){
+        if(x>=b.minX && x<=b.maxX && z>=b.minZ && z<=b.maxZ &&
+           b.maxY<=maxY && b.maxY>best){
+          best=b.maxY;
+        }
+      }
+    }catch(_){}
+    return best;
+  }
+
+  function nearestActorSurfaceY(x,z,radius,explicitY){
+    if(Number.isFinite(Number(explicitY)))return Number(explicitY);
+    try{
+      let best=null,bestD=Infinity;
+      for(const f of fighters||[]){
+        if(!f || !f.alive)continue;
+        const d=Math.hypot(f.pos.x-x,f.pos.z-z);
+        if(d<=Math.max(2.5,radius*3) && d<bestD){best=f;bestD=d;}
+      }
+      if(best)return actualSurfaceY(x,z,best.pos.y);
+    }catch(_){}
+    return actualSurfaceY(x,z,0);
+  }
+
+  function addRaisedPatch(x,z,r,colorHex,surfaceY,team){
+    if(!(surfaceY>.22) || !marketPointInPolygon(x,z))return;
+    ensureRaisedInkGroup();
+    if(!raisedInkGroup)return;
+    const rr=Math.max(.35,Math.min(3.8,Number(r)||1));
+    const col=Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0)));
+    const owner=team||inferPaintTeam(col,x,z);
+
+    for(const p of raisedInkPatches){
+      if(p.team!==owner)continue;
+      if(Math.abs(p.y-surfaceY)>.55)continue;
+      const d=Math.hypot(p.x-x,p.z-z);
+      if(d<Math.max(.8,p.r*.70,rr*.70)){
+        p.r=Math.min(4.4,Math.sqrt(p.r*p.r+rr*rr*.32));
+        p.mesh.scale.set(p.r,0.055+Math.min(.055,p.r*.012),p.r);
+        p.mesh.position.x=(p.mesh.position.x+x)*.5;
+        p.mesh.position.z=(p.mesh.position.z+z)*.5;
+        p.x=p.mesh.position.x;p.z=p.mesh.position.z;
+        return;
+      }
+    }
+
+    const mesh=new THREE.Mesh(
+      new THREE.SphereGeometry(1,12,6),
+      new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:.93})
+    );
+    mesh.position.set(x,surfaceY+.035,z);
+    mesh.rotation.y=Math.random()*Math.PI*2;
+    mesh.scale.set(rr,0.07+Math.min(.05,rr*.014),rr);
+    mesh.userData={v66:true,team:owner};
+    raisedInkGroup.add(mesh);
+    raisedInkPatches.push({x,z,r:rr,y:surfaceY,color:col,team:owner,mesh});
+
+    if(raisedInkPatches.length>MAX_RAISED_PATCHES){
+      const old=raisedInkPatches.shift();
+      try{raisedInkGroup.remove(old.mesh);old.mesh.geometry.dispose();old.mesh.material.dispose();}catch(_){}
+    }
+  }
+
+  function addRaisedLine(x1,z1,x2,z2,r,colorHex,surfaceY,team){
+    const dist=Math.hypot(x2-x1,z2-z1);
+    const steps=Math.max(2,Math.min(7,Math.ceil(dist/1.35)));
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      const x=x1+(x2-x1)*t,z=z1+(z2-z1)*t;
+      if(marketPointInPolygon(x,z))addRaisedPatch(x,z,r*.82,colorHex,surfaceY,team);
+    }
+  }
+
+  function v66IsRaisedSurface(f){
+    if(!f||!f.pos)return false;
+    return actualSurfaceY(f.pos.x,f.pos.z,f.pos.y)>.22;
+  }
+
+  function raisedInkAt(f,wantTeam){
+    const sy=actualSurfaceY(f.pos.x,f.pos.z,f.pos.y);
+    for(const p of raisedInkPatches){
+      if(Math.abs(p.y-sy)>.60)continue;
+      if(wantTeam && p.team!==wantTeam)continue;
+      if(Math.hypot(p.x-f.pos.x,p.z-f.pos.z)<=p.r*.92)return true;
+    }
+    return false;
+  }
+
+  function groundInkTeamAt(f){
+    if(!paintCtx)return null;
+    const {cx,cy}=worldToCanvas(f.pos.x,f.pos.z);
+    if(cx<0||cy<0||cx>=paintCanvas.width||cy>=paintCanvas.height)return null;
+    const d=paintCtx.getImageData(Math.floor(cx),Math.floor(cy),1,1).data;
+    const hex=(d[0]<<16)|(d[1]<<8)|d[2];
+    let best=null,bestD=Infinity;
+    for(const team of ['A','B']){
+      for(const c of colorsForTeam(team)){
+        const q=rgbDistance(hex,c);
+        if(q<bestD){bestD=q;best=team;}
+      }
+    }
+    return bestD<.17 ? best : null;
+  }
+
+  function isEnemyInkAt(f){
+    if(!f||!f.team||!f.pos)return false;
+    if(v66IsRaisedSurface(f))return raisedInkAt(f,f.team==='A'?'B':'A');
+    return groundInkTeamAt(f)===(f.team==='A'?'B':'A');
+  }
+
+  function applyEnemyInkHazard(f,delta){
+    if(!f||!f.alive||!isEnemyInkAt(f))return false;
+    f.__v66EnemyInkTime=(f.__v66EnemyInkTime||0)+delta;
+    const tick=.35;
+    while(f.__v66EnemyInkTime>=tick){
+      f.__v66EnemyInkTime-=tick;
+      if(onlineActive && battleActive)break;
+      const damage=Math.max(0,Math.min(4,Math.max(0,f.hp-1)));
+      if(damage>0)_v66BaseApplyDamage(f,damage,null);
+    }
+    f._v66EnemyInkForcedHuman=true;
+    return true;
+  }
+
+  function forceHuman(f){
+    if(!f)return;
+    f.squid_mode=false;
+    try{
+      if(f.human)f.human.visible=true;
+      if(f.squid)f.squid.visible=false;
+    }catch(_){}
+  }
+
+  function sendV66Paint(x,z,r,colorHex,surfaceY,opts){
+    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1||opts?.remote||opts?.noNetwork)return;
+    const now=performance.now();
+    if(now-lastRaisedNetPaint<70)return;
+    lastRaisedNetPaint=now;
+    try{
+      const msg={type:'paint',roomId:onlineRoomId,x,z,radius:r,colorHex,y:surfaceY};
+      if(opts.to){msg.x2=Number(opts.to.x);msg.z2=Number(opts.to.z);}
+      onlineSocket.send(JSON.stringify(msg));
+    }catch(_){}
+  }
+
+  paintGround=function(x,z,radius,colorHex,opts={}){
+    const px=Number(x),pz=Number(z),rr=Number(radius),col=Number(colorHex);
+    if(!Number.isFinite(px)||!Number.isFinite(pz)||!Number.isFinite(rr)||!Number.isFinite(col))return;
+    if(typeof marketPointInPolygon==='function' && !marketPointInPolygon(px,pz))return;
+
+    const safeR=Math.max(.2,Math.min(5,rr));
+    const toX=opts.to && Number(opts.to.x),toZ=opts.to && Number(opts.to.z);
+    const hasTo=Number.isFinite(toX)&&Number.isFinite(toZ);
+    const surfaceY=nearestActorSurfaceY(hasTo?toX:px,hasTo?toZ:pz,safeR,
+      Number.isFinite(Number(opts.surfaceY))?Number(opts.surfaceY):undefined);
+    const elevated=surfaceY>.22;
+
+    if(elevated){
+      if(hasTo){
+        if(marketPointInPolygon(toX,toZ)){
+          addRaisedLine(px,pz,toX,toZ,safeR,col,surfaceY,opts.team||inferPaintTeam(col,toX,toZ));
+        }
+      }else{
+        addRaisedPatch(px,pz,safeR,col,surfaceY,opts.team||inferPaintTeam(col,px,pz));
+      }
+      sendV66Paint(px,pz,safeR,col,surfaceY,Object.assign({},opts,{to:hasTo?{x:toX,z:toZ}:undefined}));
+      return;
+    }
+
+    const baseOpts=Object.assign({},opts,{noNetwork:true});
+    _v66BasePaint(px,pz,safeR,col,baseOpts);
+
+    if(hasTo){
+      const toSurface=actualSurfaceY(toX,toZ,Number.isFinite(Number(opts.toY))?opts.toY:surfaceY);
+      if(toSurface>.22 && marketPointInPolygon(toX,toZ)){
+        addRaisedLine(px,pz,toX,toZ,safeR,col,toSurface,opts.team||inferPaintTeam(col,toX,toZ));
+      }
+      sendV66Paint(px,pz,safeR,col,toSurface,Object.assign({},opts,{to:{x:toX,z:toZ}}));
+    }else if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&!opts.remote&&!opts.noNetwork){
+      sendV66Paint(px,pz,safeR,col,0,opts);
+    }
+  };
+  window.paintGround=paintGround;
+
+  onFighterInk=function(f){
+    if(v66IsRaisedSurface(f))return raisedInkAt(f,f.team);
+    return _v66BaseOnInk(f);
+  };
+  window.__v66IsEnemyInkAt=isEnemyInkAt;
+
+  const _v66BaseMove=updatePlayerMovement;
+  updatePlayerMovement=function(delta){
+    const f=playerFighter;
+    const enemyBefore=isEnemyInkAt(f);
+    const oldShift=keys.shift;
+    if(enemyBefore)keys.shift=false;
+    try{_v66BaseMove(delta);}finally{keys.shift=oldShift;}
+    const enemyAfter=isEnemyInkAt(f);
+    if(enemyBefore||enemyAfter){
+      forceHuman(f);
+      applyEnemyInkHazard(f,delta);
+    }else{
+      f._v66EnemyInkForcedHuman=false;
+      f.__v66EnemyInkTime=0;
+    }
+  };
+
+  const _v66BaseAI=updateAI;
+  updateAI=function(f,delta,now){
+    _v66BaseAI(f,delta,now);
+    if(!f||!f.alive||f.remote)return;
+    if(isEnemyInkAt(f)){
+      forceHuman(f);
+      applyEnemyInkHazard(f,delta);
+    }else{
+      f._v66EnemyInkForcedHuman=false;
+      f.__v66EnemyInkTime=0;
+    }
+  };
+
+  applyDamage=function(target,dmg,fromFighter){
+    if(onlineActive && battleActive)return;
+    return _v66BaseApplyDamage(target,dmg,fromFighter);
+  };
+
+  function serverDamage(m){
+    if(!onlineActive||!battleActive)return;
+    const id=String(m.targetId||'');
+    const target=(playerFighter&&playerFighter.id===id)?playerFighter:(fighters||[]).find(f=>f.id===id);
+    if(!target)return;
+    const attackerId=m.attackerId?String(m.attackerId):null;
+    target.lastDamagedById=attackerId;
+    target.lastDamagedAt=performance.now();
+    const hp=Number(m.hp);
+    if(Number.isFinite(hp))target.hp=Math.max(0,Math.min(target.maxHp||100,hp));
+    else target.hp=Math.max(0,(target.hp||100)-Math.max(0,Number(m.damage)||0));
+    if(m.reason==='enemy-ink')forceHuman(target);
+    if(m.killed||target.hp<=0){
+      if(target.alive)killFighter(target);
+    }else{
+      target.alive=true;
+    }
+  }
+
+  function serverRespawn(m){
+    if(!onlineActive)return;
+    const id=String(m.id||'');
+    const target=(playerFighter&&playerFighter.id===id)?playerFighter:(fighters||[]).find(f=>f.id===id);
+    if(!target)return;
+    try{respawnFighter(target);}catch(_){}
+  }
+
+  function attachV66Socket(){
+    const ws=window.onlineSocket;
+    if(!ws||typeof ws.addEventListener!=='function'||ws.__v66Attached)return;
+    ws.__v66Attached=true;
+    ws.addEventListener('message',ev=>{
+      let m;try{m=JSON.parse(ev.data);}catch(_){return;}
+      if(m.type==='damage')serverDamage(m);
+      else if(m.type==='serverRespawn')serverRespawn(m);
+    });
+  }
+  setInterval(attachV66Socket,250);
+  window.__V66_BUILD='V66-3D-INK-ENEMY-INK-SERVER-AUTH-2026-09-28';
+})();
+</script>
+
 </body>
 </html>
