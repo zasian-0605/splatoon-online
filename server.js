@@ -703,7 +703,6 @@ wss.on('connection', ws => {
           const dt=Math.max(.028,(now-player.lastStateAt)/1000),d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z),maxStep=Math.min(2.35,.82+dt*36);
           if(d>maxStep){securityStrike(player,'server-speed='+d.toFixed(2)+' max='+maxStep.toFixed(2));return;}
         }
-        if(serverSolidBlocked(x,z,y)){securityStrike(player,'solid-collision');return;}
         player.serverPos={x,y,z}; player.lastStatePos={x,z,y}; player.lastStateAt=now;
       }
       if(room.started&&player.serverAlive&&player.team&&now-(player.lastHazardAt||0)>=350){

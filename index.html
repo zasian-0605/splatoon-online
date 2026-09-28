@@ -1779,10 +1779,20 @@ function buildStage(){
   spawnPointA=new THREE.Vector3(-4,-0.0,-60);
   spawnPointB=new THREE.Vector3(4,-0.0,60);
 
+  /* V66: small raised terrain so the stage has places you actually step onto,
+     instead of relying only on flat texture changes. */
+  function lowHump(x,z,w,d,y,h,color=0x68727d){
+    const b=addBlock(x,y,z,w,h,d,color,{climbable:true});
+    b.stageHump=true;
+    return b;
+  }
+  lowHump(-12,-37,12,7,.40,.85,matConcrete);
+  lowHump(12,-37,12,7,.40,.85,matConcrete);
+  lowHump(-12,37,12,7,.40,.85,matConcrete);
+  lowHump(12,37,12,7,.40,.85,matConcrete);
+
   const matConcrete=0x5b6570,matDark=0x38434e,matMetal=0x7d8790;
   const matBright=0x8e9aa5,matAccent=0x303944,matGlass=0x3f7182;
-  function lowHump(x,z,w,d,y,h,color=matConcrete){const q=addBlock(x,y,z,w,h,d,color,{climbable:true});q.stageHump=true;return q;}
-  lowHump(-12,-37,12,7,.40,.85); lowHump(12,-37,12,7,.40,.85); lowHump(-12,37,12,7,.40,.85); lowHump(12,37,12,7,.40,.85);
 
   function shelf(x,z,w,d,h,color=matDark,climbable=true){
     return addBlock(x,0,z,w,h,d,color,{climbable});
@@ -2044,8 +2054,7 @@ function rebuildFighterModel(f, cfg){
 function respawnFighter(f){
   const onlineSp=f.onlineSpawn;
   const sp = onlineSp ? new THREE.Vector3(onlineSp.x||0,onlineSp.y||0,onlineSp.z||0) : (f.team==='A' ? spawnPointA : spawnPointB);
-  const rx=sp.x+(Math.random()-.5)*6,rz=sp.z+(Math.random()-.5)*6;
-  f.pos.set(rx,Math.max(sp.y||0,getSupportHeight(rx,rz,12)),rz);
+  f.pos.set(sp.x + (Math.random()-0.5)*6, 0, sp.z + (Math.random()-0.5)*6);
   f.hp = f.maxHp;
   f.alive = true;
   f.root.visible = true;
@@ -3675,8 +3684,6 @@ function updateAI(f, delta, now){
 
   let moving=false;
   if(moveTarget){
-    const targetH=getSupportHeight(moveTarget.x,moveTarget.z,12),heightDelta=targetH-f.pos.y;
-    if(Math.abs(heightDelta)>.35&&Math.hypot(moveTarget.x-f.pos.x,moveTarget.z-f.pos.z)<6)f.pos.y+=Math.sign(heightDelta)*Math.min(Math.abs(heightDelta),8*delta);
     const dir = new THREE.Vector3(moveTarget.x-f.pos.x, 0, moveTarget.z-f.pos.z);
     if(dir.length()>0.3){
       dir.normalize();
@@ -4106,7 +4113,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         try{
           onlineSocket.send(JSON.stringify({
             type:'paint',roomId:onlineRoomId,
-            x,z,y:playerFighter?.pos?.y||0,x2:to?Number(to.x):undefined,z2:to?Number(to.z):undefined,
+            x,z,x2:to?Number(to.x):undefined,z2:to?Number(to.z):undefined,
             radius:baseR,colorHex,mult
           }));
         }catch{}
@@ -4872,8 +4879,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     remoteMap.set(p.id,rf);fighters.push(rf);return rf;
   }
   function applyRemoteState(m){
-    if(m.id===onlinePlayerId){if(playerFighter){const sx=Number(m.x),sy=Number(m.y)||0,sz=Number(m.z);if(Number.isFinite(sx)&&Number.isFinite(sz)){const dx=sx-playerFighter.pos.x,dy=sy-playerFighter.pos.y,dz=sz-playerFighter.pos.z,d=Math.hypot(dx,dz);if(d>1.35){playerFighter.pos.x=sx;playerFighter.pos.z=sz;}else{playerFighter.pos.x+=dx*.22;playerFighter.pos.z+=dz*.22;}if(Math.abs(dy)>1)playerFighter.pos.y=sy;else playerFighter.pos.y+=dy*.18;}const hp=Number(m.hp),ink=Number(m.ink);if(Number.isFinite(hp))playerFighter.hp=Math.max(0,Math.min(100,hp));if(Number.isFinite(ink))playerFighter.ink=Math.max(0,Math.min(100,ink));playerFighter.alive=m.alive!==false;if(!m.squid&&playerFighter.squid_mode&&typeof forceHuman==='function')forceHuman(playerFighter);}return;}
-    const p=ensureRemoteFighter(m);if(!p)return;const wasAlive=p.alive,target=new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0),d=p.pos.distanceTo(target);if(d>4)p.pos.copy(target);else p.pos.lerp(target,.32);p.root.rotation.y=m.yaw||0;p.root.visible=m.alive!==false;p.alive=m.alive!==false;p.hp=m.hp??p.hp;p.ink=m.ink??p.ink;p.squid_mode=!!m.squid;p.weapon=weaponList[m.weaponId]||p.weapon;updateFighterAnimation(p,!!m.moving,p.squid_mode);if(wasAlive&&!p.alive)addKillFeed((m.name||p.id)+' がやられた','dead');
+    if(m.id===onlinePlayerId)return;
+    const p=ensureRemoteFighter(m);if(!p)return;
+    const wasAlive=p.alive;p.pos.lerp(new THREE.Vector3(m.x,m.y||0,m.z),.55);p.root.rotation.y=m.yaw||0;p.root.visible=m.alive!==false;p.alive=m.alive!==false;p.hp=m.hp??p.hp;p.ink=m.ink??p.ink;p.squid_mode=!!m.squid;p.weapon=weaponList[m.weaponId]||p.weapon;
+    updateFighterAnimation(p,!!m.moving,p.squid_mode);
+    if(wasAlive&&!p.alive) addKillFeed(`${m.name||p.id} がやられた`,'dead');
   }
   function sendOnlineState(){
     if(!onlineSocket||onlineSocket.readyState!==1||!onlineStarted||!playerFighter)return;
@@ -10111,11 +10121,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       let m;try{m=JSON.parse(ev.data);}catch(_){return;}
       if(m.type==='damage')serverDamage(m);
       else if(m.type==='serverRespawn')serverRespawn(m);
-      else if(m.type==='serverInk'&&playerFighter){const ink=Number(m.ink);if(Number.isFinite(ink))playerFighter.ink=Math.max(0,Math.min(100,ink));}
     });
   }
   setInterval(attachV66Socket,250);
-  window.__V67_BUILD='V67-AUTH-SYNC-STAGE-HEIGHT-2026-09-28';
+  window.__V66_BUILD='V66-3D-INK-ENEMY-INK-SERVER-AUTH-2026-09-28';
 })();
 </script>
 
