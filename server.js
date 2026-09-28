@@ -753,6 +753,7 @@ wss.on('connection', ws => {
       console.log('[AUTH RESULT IGNORE] '+room.id+' '+player.id+' clientHint='+(m.winnerTeam||'-'));
       return;
     }
+  });
   ws.on('close', (code, reason) => {
     const beforeRoom = player.roomId || '-';
     const beforeAccount = player.accountName || '-';
