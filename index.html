@@ -10094,41 +10094,21 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   function addRaisedPatch(x,z,r,colorHex,surfaceY,team){
-    if(!(surfaceY>.22) || !marketPointInPolygon(x,z))return;
-    ensureRaisedInkGroup();
-    if(!raisedInkGroup)return;
-
-    /* V74: elevated surfaces use the same flat-ink idea as the floor.
-       No sphere, no thickness, and no transform growth over time. */
+    if(!(Number(surfaceY)>.22) || !marketPointInPolygon(x,z))return;
     const rr=Math.max(.30,Math.min(1.35,Number(r)||.6));
     const col=Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0)));
     const owner=team||inferPaintTeam(col,x,z);
 
+    /* V76: raisedInkPatches is gameplay state only.
+       The visual paint is created exclusively by UnifiedPaintLayer. */
     for(const p of raisedInkPatches){
       if(p.team!==owner)continue;
       if(Math.abs(p.y-surfaceY)>.55)continue;
-      const d=Math.hypot(p.x-x,p.z-z);
-      if(d<Math.max(.8,p.r*.72,rr*.72)) return;
+      if(Math.hypot(p.x-x,p.z-z)<Math.max(.8,p.r*.72,rr*.72))return;
     }
-
-      /* V75: use the same flat surface-stamp primitive as floor paint. */
-    const mesh=new THREE.Mesh(
-      new THREE.CircleGeometry(rr,28),
-      new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.93,depthWrite:false})
-    );
-    mesh.position.set(x,surfaceY+.045,z);
-    mesh.rotation.x=-Math.PI/2;
-    mesh.userData={v75:true,team:owner,fixedRadius:rr};
-    ensureUnifiedPaintGroup();
-    unifiedPaintGroup.add(mesh);
-    raisedInkPatches.push({x,z,r:rr,y:surfaceY,color:col,team:owner,mesh});
-
-    if(raisedInkPatches.length>MAX_RAISED_PATCHES){
-      const old=raisedInkPatches.shift();
-      try{raisedInkGroup.remove(old.mesh);old.mesh.geometry.dispose();old.mesh.material.dispose();}catch(_){}
-    }
+    raisedInkPatches.push({x,z,r:rr,y:Number(surfaceY),color:col,team:owner,mesh:null});
+    if(raisedInkPatches.length>MAX_RAISED_PATCHES)raisedInkPatches.shift();
   }
-
   function addRaisedLine(x1,z1,x2,z2,r,colorHex,surfaceY,team){
     const dist=Math.hypot(x2-x1,z2-z1);
     const steps=Math.max(2,Math.min(7,Math.ceil(dist/1.35)));
@@ -10526,25 +10506,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   function rawShotPaint(f,dir){
-    try{
-      const c=Number((typeof getFighterInkHex==='function')
-        ? getFighterInkHex(f)
-        : (f.team==='B'?teamBHex:teamAHex));
-      // Paint only a compact patch a little ahead of the player.
-      // The projectile itself handles the actual finite flight/impact.
-      const p=worldToCanvas(f.pos.x+dir.x*2.0,f.pos.z+dir.z*2.0);
-      const rr=Math.max(7,((f.weapon?.paintRadius||.9)*.62/(STAGE_HALF_Z*2))*paintCanvas.height*.72);
-      const css='#'+Math.max(0,Math.min(0xffffff,Math.floor(c))).toString(16).padStart(6,'0');
-      paintCtx.save();
-      paintCtx.fillStyle=css;
-      paintCtx.beginPath();
-      paintCtx.arc(p.cx,p.cy,rr,0,Math.PI*2);
-      paintCtx.fill();
-      paintCtx.restore();
-      paintTexture.needsUpdate=true;
-    }catch(_){}
+    /* V76: disabled. The projectile itself owns the actual paint hit. */
   }
-
   function rawSpawn(f,dir,opts){
     try{
       const fn=window.__spawnBulletV60;
@@ -11173,6 +11136,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
    Elevated ink is flat 2D surface paint; wall hit area is larger.
 */
 (function(){ 'use strict'; window.__V74_BUILD='FLAT-ELEVATED-PAINT-WIDER-WALL-2026-09-28'; })();
+</script>
+<script>
+(function(){
+  'use strict';
+  window.__V76_BUILD='UNIFIED-PAINT-SINGLE-SOURCE-NO-DUPLICATE-FLOOR-2026-09-28';
+})();
 </script>
 </body>
 </html>
