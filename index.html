@@ -9131,7 +9131,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     else if(w.category==='blaster')action='直撃＋爆風';
     else if(w.category==='maneuver')action='2丁連射＋スライド';
     else action='連射＋射線塗り';
-    e.textContent='【'+kind+'】 '+w.name+'\\n'+action+'\\nサブ: '+(subDefs[w.sub]?.name||w.sub||'なし')+' / SP: '+(w.special||'なし);
+    e.textContent=['【'+kind+'】 '+w.name,action,'サブ: '+(subDefs[w.sub]?.name||w.sub||'なし')+' / SP: '+(w.special||'なし')].join(String.fromCharCode(10));
   };
   setTimeout(window.updateWeaponInfoV61,0);
   document.getElementById('select-weapon')?.addEventListener('change',()=>setTimeout(window.updateWeaponInfoV61,0));
