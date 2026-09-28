@@ -152,7 +152,7 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
   const candidates=[];
   const addSegment=(a,b,order)=>{
     for(const target of room.players.values()){
-      if(!target.serverAlive||target.team===null)continue;
+      if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
       const p=target.serverPos||target.spawn;
       const hit=serverDistanceToSegment(
         p.x,p.y+.9,p.z,
@@ -265,6 +265,8 @@ function serverResolveShot(room,player,m){
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
   const mode=String(m.mode||'');
   const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
+  // Helper needs the firing team's identity so friendly players are never hit.
+  w._attackerTeam=player.team;
   const trajectory=serverFindTrajectoryHit(room,origin,dir,w,hitRadius);
   const nearest=trajectory.hit;
 
