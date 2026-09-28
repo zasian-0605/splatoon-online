@@ -10982,5 +10982,111 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.__V69_BUILD='FIXED-45-DEGREE-SHOTS-ANTI-GROUND-CAMERA-2026-09-28';
 })();
 </script>
+<script>
+/* V72: shooter paint / trajectory calibration */
+(function(){
+  'use strict';
+  const ANGLE=Math.PI/180*15,S=Math.sin(ANGLE),C=Math.cos(ANGLE);
+
+  function tune(b){
+    if(!b||!b.velocity)return b;
+    const kind=String(b.kind||'');
+    const cat=b.sourceFighter?.weapon?.category;
+    if(kind==='charger'||kind==='flick'||kind==='rollerFlick'||kind==='wiperSlash'||kind==='wiperChargedSlash'||kind==='stringer')return b;
+    const ok=kind==='shooter'||kind==='dualies'||kind==='splatling'||kind==='brella'||kind==='blaster'||cat==='shooter'||cat==='maneuver'||cat==='brella'||cat==='blaster';
+    if(!ok)return b;
+    const speed=Math.max(.001,b.velocity.length());
+    const h=new THREE.Vector3(b.velocity.x,0,b.velocity.z);
+    if(h.lengthSq()<.0001){
+      const yaw=b.sourceFighter?.root?.rotation?.y||0;
+      h.set(Math.sin(yaw),0,Math.cos(yaw));
+    }else h.normalize();
+    b.velocity.set(h.x*speed*C,S*speed,h.z*speed*C);
+    if(b.trajectory==='delayed-gravity'||b.trajectory==='flat-drop'){
+      const range=Math.max(6,Number(b.maxRange)||22);
+      const hs=Math.max(.001,speed*C);
+      const t=range/hs;
+      const y=Math.max(.8,Number(b.startPos?.y)||1.2);
+      b.gravity=Math.max(12,2*(y+speed*S*t)/(t*t));
+    }
+    return b;
+  }
+
+  if(typeof window.__spawnBulletV60==='function'&&!window.__V72_PUBLIC_WRAP){
+    const base=window.__spawnBulletV60;
+    window.__spawnBulletV60=function(f,d,o){return tune(base(f,d,o));};
+    window.__V72_PUBLIC_WRAP=true;
+  }
+  if(typeof spawnBulletV60==='function'&&!window.__V72_LEXICAL_WRAP){
+    const base=spawnBulletV60;
+    spawnBulletV60=function(f,d,o){return tune(base(f,d,o));};
+    window.__V72_LEXICAL_WRAP=true;
+  }
+
+  for(const w of weaponList||[]){
+    if(!w)continue;
+    if(w.category==='shooter'){
+      w.paintRadius=Math.min(Number(w.paintRadius)||.8,.58);
+      w.range=Math.min(Number(w.range)||22,22);
+      w.life=Math.min(Number(w.life)||1,.95);
+      w.speed=Math.min(Number(w.speed)||30,30);
+    }else if(w.category==='maneuver'){
+      w.paintRadius=Math.min(Number(w.paintRadius)||.7,.52);
+      w.range=Math.min(Number(w.range)||21,21);
+      w.life=Math.min(Number(w.life)||1,.95);
+    }else if(w.category==='blaster'){
+      w.paintRadius=Math.min(Number(w.paintRadius)||1,.82);
+      w.range=Math.min(Number(w.range)||18,18);
+      w.life=Math.min(Number(w.life)||1,.95);
+    }else if(w.category==='brella'){
+      w.paintRadius=Math.min(Number(w.paintRadius)||.7,.55);
+      w.range=Math.min(Number(w.range)||18,18);
+      w.life=Math.min(Number(w.life)||1,1);
+    }
+  }
+
+  if(typeof addRaisedPatch==='function'&&!window.__V72_RAISED_FIXED){
+    addRaisedPatch=function(x,z,r,colorHex,surfaceY,team){
+      if(!(Number(surfaceY)>.22)||!marketPointInPolygon(x,z))return;
+      const rr=Math.max(.30,Math.min(1.35,Number(r)||.6));
+      const col=Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0)));
+      const owner=team||null;
+      window.__V72_RAISED_LIST ||= [];
+      for(const p of window.__V72_RAISED_LIST){
+        if(p.team===owner&&Math.abs(p.y-surfaceY)<=.55&&Math.hypot(p.x-x,p.z-z)<Math.max(.8,rr*.75))return;
+      }
+      ensureRaisedInkGroup();
+      if(!raisedInkGroup)return;
+      const mesh=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.12,28),
+        new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:.93}));
+      mesh.position.set(x,Number(surfaceY)+.04,z);
+      mesh.rotation.y=Math.random()*Math.PI*2;
+      mesh.scale.set(rr,1,rr);
+      mesh.userData={v72:true,team:owner,fixedRadius:rr};
+      raisedInkGroup.add(mesh);
+      window.__V72_RAISED_LIST.push({x,z,y:Number(surfaceY),team:owner,r:rr,mesh});
+    };
+    window.__V72_RAISED_FIXED=true;
+  }
+
+  if(typeof paintGround==='function'&&!window.__V72_PAINT_FIXED){
+    const basePaint=paintGround;
+    paintGround=function(x,z,r,colorHex,opts={}){
+      let radius=Number(r);
+      if(!Number.isFinite(radius))return;
+      const cat=opts?.sourceFighter?.weapon?.category;
+      if(cat==='shooter')radius=Math.min(radius,.58);
+      else if(cat==='maneuver')radius=Math.min(radius,.52);
+      else if(cat==='blaster')radius=Math.min(radius,.82);
+      else if(cat==='brella')radius=Math.min(radius,.55);
+      return basePaint(x,z,radius,colorHex,opts);
+    };
+    window.paintGround=paintGround;
+    window.__V72_PAINT_FIXED=true;
+  }
+
+  window.__V72_BUILD='SHOOTER-PAINT-RANGE-FIXED-15-DEGREE-2026-09-28';
+})();
+</script>
 </body>
 </html>
