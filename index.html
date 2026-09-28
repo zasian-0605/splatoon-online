@@ -1776,6 +1776,17 @@ function buildStage(){
   window.__marketStageGimmicks=[];
 
   const STAGE_W=96, STAGE_D=144;
+
+  /* V67: rectangular foundation under the AA stage.
+     The AA outline is intentionally irregular, but the playable floor needs
+     a solid rectangular base so the spawn points never begin over empty space.
+     The polygon floor and obstacles sit slightly above this slab. */
+  const baseMat=new THREE.MeshLambertMaterial({color:0x4b535d});
+  const baseGeo=new THREE.BoxGeometry(STAGE_W+8,0.56,STAGE_D+8);
+  const baseMesh=new THREE.Mesh(baseGeo,baseMat);
+  baseMesh.position.set(0,-0.34,0);
+  stageGroup.add(baseMesh);
+
   const waterMat=new THREE.MeshLambertMaterial({color:0x176b83});
   const water=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+20,STAGE_D+20),waterMat);
   water.rotation.x=-Math.PI/2;
