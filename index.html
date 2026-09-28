@@ -1779,9 +1779,12 @@ function buildStage(){
   spawnPointA=new THREE.Vector3(-4,-0.0,-60);
   spawnPointB=new THREE.Vector3(4,-0.0,60);
 
+  const matConcrete=0x5b6570,matDark=0x38434e,matMetal=0x7d8790;
+  const matBright=0x8e9aa5,matAccent=0x303944,matGlass=0x3f7182;
+
   /* V66: small raised terrain so the stage has places you actually step onto,
      instead of relying only on flat texture changes. */
-  function lowHump(x,z,w,d,y,h,color=0x68727d){
+  function lowHump(x,z,w,d,y,h,color=matConcrete){
     const b=addBlock(x,y,z,w,h,d,color,{climbable:true});
     b.stageHump=true;
     return b;
@@ -1790,9 +1793,6 @@ function buildStage(){
   lowHump(12,-37,12,7,.40,.85,matConcrete);
   lowHump(-12,37,12,7,.40,.85,matConcrete);
   lowHump(12,37,12,7,.40,.85,matConcrete);
-
-  const matConcrete=0x5b6570,matDark=0x38434e,matMetal=0x7d8790;
-  const matBright=0x8e9aa5,matAccent=0x303944,matGlass=0x3f7182;
 
   function shelf(x,z,w,d,h,color=matDark,climbable=true){
     return addBlock(x,0,z,w,h,d,color,{climbable});
