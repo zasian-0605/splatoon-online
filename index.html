@@ -3110,30 +3110,128 @@ function makeAiCfg(team){
 
 function startBattleFromRange(){
   if(currentPhase!==1.5) return;
-  for(let i=0;i<3;i++){
-    const cfg = makeAiCfg('A');
-    const sx = spawnPointA.x + (i-1)*4;
-    fighters.push(createFighter({id:'teamA_'+i, isPlayer:false, team:'A', x:sx, z:spawnPointA.z, cfg}));
-  }
-  for(let i=0;i<4;i++){
-    const cfg = makeAiCfg('B');
-    const sx = spawnPointB.x + (i-1.5)*4;
-    fighters.push(createFighter({id:'teamB_'+i, isPlayer:false, team:'B', x:sx, z:spawnPointB.z, cfg}));
-  }
-  battleTimer = 180;
+
+  /* V67: explicit 4v4 roster.
+     Team A = player + 3 CPU.
+     Team B = 4 CPU.
+     Every CPU receives a tactical role so the team is not eight independent shooters.
+  */
+  const rolesA=['front','mid','back'];
+  const rolesB=['front','mid','back','flex'];
+
+  // Clean up any old CPU fighters before creating a fresh match.
+  fighters=fighters.filter(f=>{
+    if(f.isPlayer)return true;
+    scene.remove(f.root);
+    return false;
+  });
+
+  playerFighter.team='A';
+  playerFighter.alive=true;
+  playerFighter.hp=playerFighter.maxHp;
+  playerFighter.pos.set(spawnPointA.x,0,spawnPointA.z-4);
+  playerFighter.root.visible=true;
+  playerFighter.ink=100;
   playerFighter.specialGauge=0;
-  window.__battleDeadline = Date.now() + 181000;
-  battleActive = true;
-  currentPhase = 2;
+  playerFighter.ai=null;
+  playerFighter._teamRole='front';
+
+  // A team: exactly 3 CPU + the player = 4.
+  for(let i=0;i<3;i++){
+    const cfg=makeAiCfg('A');
+    const f=createFighter({
+      id:'teamA_cpu_'+i,
+      isPlayer:false,
+      team:'A',
+      x:spawnPointA.x+(i-1)*4,
+      z:spawnPointA.z,
+      cfg
+    });
+    f._teamRole=rolesA[i];
+    f.ai.role=rolesA[i];
+    f.ai.squadSlot=i;
+    f.ai.teamSize=4;
+    fighters.push(f);
+  }
+
+  // B team: exactly 4 CPU.
+  for(let i=0;i<4;i++){
+    const cfg=makeAiCfg('B');
+    const f=createFighter({
+      id:'teamB_cpu_'+i,
+      isPlayer:false,
+      team:'B',
+      x:spawnPointB.x+(i-1.5)*4,
+      z:spawnPointB.z,
+      cfg
+    });
+    f._teamRole=rolesB[i];
+    f.ai.role=rolesB[i];
+    f.ai.squadSlot=i;
+    f.ai.teamSize=4;
+    fighters.push(f);
+  }
+
+  // Give every team a shared tactical state.
+  fighters.filter(f=>f.ai&&f.team==='A').forEach(f=>f.ai.squadId='A');
+  fighters.filter(f=>f.ai&&f.team==='B').forEach(f=>f.ai.squadId='B');
+
+  battleTimer=180;
+  window.__battleDeadline=Date.now()+181000;
+  battleActive=true;
+  currentPhase=2;
+
   document.getElementById('hud').style.display='block';
   document.getElementById('top-battle-status').style.display='block';
   document.getElementById('alive-count').style.display='block';
   updateTeamLifeStrip();
   document.getElementById('range-hint').style.display='none';
-  document.getElementById('instructions').innerHTML =
-    '4vs4 ガチマッチ形式（陣取り）開始！ 対戦中は[E]で戻れません<br>チャージャーは長押しチャージ、ローラーは近接スイング、バケツは山なり攻撃です';
-  showToast('4vs4 CPU対戦スタート！');
+  document.getElementById('instructions').innerHTML=
+    '4 VS 4 Xマッチ風CPU戦！<br>'+
+    '味方4人 vs 敵4人｜前衛・中衛・後衛が連携して戦います<br>'+
+    'Shift：押している間だけイカ｜Q：サブ｜R：スペシャル';
+
+  ensureV67TeamHud();
+  updateV67TeamHud();
+  showToast('4 VS 4 MATCH START！　味方4人 vs 敵4人');
 }
+
+function ensureV67TeamHud(){
+  let el=document.getElementById('v67-team-hud');
+  if(el)return el;
+  el=document.createElement('div');
+  el.id='v67-team-hud';
+  Object.assign(el.style,{
+    position:'absolute',top:'74px',left:'50%',transform:'translateX(-50%)',
+    padding:'7px 14px',borderRadius:'14px',
+    background:'rgba(10,8,25,.82)',border:'2px solid rgba(255,255,255,.85)',
+    color:'#fff',font:'900 13px Arial,Meiryo,sans-serif',
+    textAlign:'center',zIndex:'22',pointerEvents:'none',
+    textShadow:'1px 1px 2px #000',whiteSpace:'nowrap'
+  });
+  document.body.appendChild(el);
+  return el;
+}
+
+function updateV67TeamHud(){
+  const el=document.getElementById('v67-team-hud');
+  if(!el)return;
+  const aliveA=fighters.filter(f=>f.team==='A'&&f.alive).length;
+  const aliveB=fighters.filter(f=>f.team==='B'&&f.alive).length;
+  const roleName={front:'前衛',mid:'中衛',back:'後衛',flex:'遊撃'};
+  const a=fighters.filter(f=>f.team==='A').map(f=>f.isPlayer?'YOU':roleName[f._teamRole]||'CPU');
+  const b=fighters.filter(f=>f.team==='B').map(f=>roleName[f._teamRole]||'CPU');
+  el.innerHTML=
+    '🟡 A <b>'+aliveA+'/4</b>　'+a.join('・')+
+    '　　VS　　'+
+    '　🔴 B <b>'+aliveB+'/4</b>　'+b.join('・');
+}
+
+const _v67OldUpdateTeamLifeStrip=updateTeamLifeStrip;
+updateTeamLifeStrip=function(){
+  _v67OldUpdateTeamLifeStrip();
+  if(currentPhase===2)updateV67TeamHud();
+};
 
 function endBattle(){
   if(!battleActive && currentPhase===3){
