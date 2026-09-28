@@ -3895,9 +3895,9 @@ function updateBullets(delta){
       if(b.explosive){
         const impactY=Math.max(groundH+.1,b.mesh.position.y);
         explodeAt(new THREE.Vector3(b.mesh.position.x,b.mesh.position.y<=groundH?groundH+.1:impactY,b.mesh.position.z),
-          b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
+          b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius,sourceFighter:b.sourceFighter});
       }else{
-        paintGround(b.mesh.position.x,b.mesh.position.z,b.paintRadius,col);
+        paintGround(b.mesh.position.x,b.mesh.position.z,b.paintRadius,col,{sourceFighter:b.sourceFighter});
       }
       for(let p=0;p<5;p++)spawnParticle(b.mesh.position.x,groundH+.1,b.mesh.position.z,col);
       scene.remove(b.mesh);bullets.splice(i,1);
@@ -10111,16 +10111,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       if(d<Math.max(.8,p.r*.72,rr*.72)) return;
     }
 
-    /* A CircleGeometry is completely flat on the platform surface. */
+      /* V75: use the same flat surface-stamp primitive as floor paint. */
     const mesh=new THREE.Mesh(
       new THREE.CircleGeometry(rr,28),
       new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.93,depthWrite:false})
     );
     mesh.position.set(x,surfaceY+.045,z);
     mesh.rotation.x=-Math.PI/2;
-    mesh.rotation.z=Math.random()*Math.PI*2;
-    mesh.userData={v74:true,team:owner,fixedRadius:rr};
-    raisedInkGroup.add(mesh);
+    mesh.userData={v75:true,team:owner,fixedRadius:rr};
+    ensureUnifiedPaintGroup();
+    unifiedPaintGroup.add(mesh);
     raisedInkPatches.push({x,z,r:rr,y:surfaceY,color:col,team:owner,mesh});
 
     if(raisedInkPatches.length>MAX_RAISED_PATCHES){
@@ -10223,29 +10223,32 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       Number.isFinite(Number(opts.surfaceY))?Number(opts.surfaceY):undefined);
     const elevated=surfaceY>.22;
 
-    if(elevated){
-      if(hasTo){
-        if(marketPointInPolygon(toX,toZ)){
-          addRaisedLine(px,pz,toX,toZ,safeR,col,surfaceY,opts.team||inferPaintTeam(col,toX,toZ));
-        }
-      }else{
-        addRaisedPatch(px,pz,safeR,col,surfaceY,opts.team||inferPaintTeam(col,px,pz));
-      }
-      sendV66Paint(px,pz,safeR,col,surfaceY,Object.assign({},opts,{to:hasTo?{x:toX,z:toZ}:undefined}));
-      return;
-    }
-
+    /* V75: ALL surfaces use the same floor-style 2D paint stamp.
+       Elevated tops are no longer a separate 3D paint system. */
     const baseOpts=Object.assign({},opts,{noNetwork:true});
     _v66BasePaint(px,pz,safeR,col,baseOpts);
 
+    const paintSurface = hasTo ? {x:(px+toX)*.5,z:(pz+toZ)*.5} : {x:px,z:pz};
+    const stampY = elevated ? surfaceY : 0.05;
+    const stampNormal = new THREE.Vector3(0,1,0);
+    const stampRadius = Math.max(.25,Math.min(1.35,safeR));
+
+    ensureUnifiedPaintGroup();
+    if(hasTo && Math.hypot(toX-px,toZ-pz)>.8 && !elevated){
+      addUnifiedSurfaceStroke(px,pz,toX,toZ,stampRadius,col,stampY,stampNormal);
+    }else{
+      addUnifiedSurfaceStamp(paintSurface.x,stampY,paintSurface.z,stampNormal,stampRadius,col);
+    }
+
+    if(elevated) {
+      addRaisedPatch(paintSurface.x,paintSurface.z,stampRadius,col,stampY,opts.team||inferPaintTeam(col,paintSurface.x,paintSurface.z));
+    }
+
     if(hasTo){
       const toSurface=actualSurfaceY(toX,toZ,Number.isFinite(Number(opts.toY))?opts.toY:surfaceY);
-      if(toSurface>.22 && marketPointInPolygon(toX,toZ)){
-        addRaisedLine(px,pz,toX,toZ,safeR,col,toSurface,opts.team||inferPaintTeam(col,toX,toZ));
-      }
       sendV66Paint(px,pz,safeR,col,toSurface,Object.assign({},opts,{to:{x:toX,z:toZ}}));
     }else if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&!opts.remote&&!opts.noNetwork){
-      sendV66Paint(px,pz,safeR,col,0,opts);
+      sendV66Paint(px,pz,safeR,col,elevated?surfaceY:0,opts);
     }
   };
   window.paintGround=paintGround;
@@ -11026,21 +11029,21 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!w)continue;
     if(w.category==='shooter'){
       w.paintRadius=Math.min(Number(w.paintRadius)||.8,.58);
-      w.range=Math.min(Number(w.range)||22,22);
-      w.life=Math.min(Number(w.life)||1,.95);
-      w.speed=Math.min(Number(w.speed)||30,30);
+      w.range=Math.min(Number(w.range)||16,16);
+      w.life=Math.min(Number(w.life)||1,.75);
+      w.speed=Math.min(Number(w.speed)||28,28);
     }else if(w.category==='maneuver'){
       w.paintRadius=Math.min(Number(w.paintRadius)||.7,.52);
-      w.range=Math.min(Number(w.range)||21,21);
-      w.life=Math.min(Number(w.life)||1,.95);
+      w.range=Math.min(Number(w.range)||15,15);
+      w.life=Math.min(Number(w.life)||1,.75);
     }else if(w.category==='blaster'){
       w.paintRadius=Math.min(Number(w.paintRadius)||1,.82);
-      w.range=Math.min(Number(w.range)||18,18);
-      w.life=Math.min(Number(w.life)||1,.95);
+      w.range=Math.min(Number(w.range)||14,14);
+      w.life=Math.min(Number(w.life)||1,.8);
     }else if(w.category==='brella'){
       w.paintRadius=Math.min(Number(w.paintRadius)||.7,.55);
-      w.range=Math.min(Number(w.range)||18,18);
-      w.life=Math.min(Number(w.life)||1,1);
+      w.range=Math.min(Number(w.range)||15,15);
+      w.life=Math.min(Number(w.life)||1,.8);
     }
   }
 
@@ -11083,6 +11086,83 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     window.paintGround=paintGround;
     window.__V72_PAINT_FIXED=true;
   }
+
+  /* V75 unified paint layer: floor, elevated tops, and walls share one flat stamp system. */
+  let unifiedPaintGroup=null;
+  const unifiedPaintEntries=[];
+  function ensureUnifiedPaintGroup(){
+    if(unifiedPaintGroup || !stageGroup)return;
+    unifiedPaintGroup=new THREE.Group();
+    unifiedPaintGroup.name='UnifiedPaintLayer';
+    stageGroup.add(unifiedPaintGroup);
+  }
+  function addUnifiedSurfaceStamp(x,y,z,normal,radius,colorHex){
+    ensureUnifiedPaintGroup();
+    if(!unifiedPaintGroup)return;
+    const rr=Math.max(.22,Math.min(3.2,Number(radius)||.6));
+    const n=(normal&&normal.clone)?normal.clone():new THREE.Vector3(0,1,0);
+    if(n.lengthSq()<.0001)n.set(0,1,0);else n.normalize();
+    const mesh=new THREE.Mesh(
+      new THREE.CircleGeometry(rr,28),
+      new THREE.MeshBasicMaterial({color:Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0))),transparent:true,opacity:.93,depthWrite:false})
+    );
+    mesh.position.set(x,y+0.026,z);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),n);
+    mesh.userData={v75Unified:true};
+    unifiedPaintGroup.add(mesh);
+    unifiedPaintEntries.push({x,y,z,r:rr,normal:n,mesh,colorHex:Number(colorHex)||0});
+    if(unifiedPaintEntries.length>520){
+      const old=unifiedPaintEntries.shift();
+      if(old?.mesh&&unifiedPaintGroup)unifiedPaintGroup.remove(old.mesh);
+    }
+    return mesh;
+  }
+  function addUnifiedSurfaceStroke(x1,z1,x2,z2,radius,colorHex,y,normal){
+    const len=Math.hypot(x2-x1,z2-z1);
+    if(len<.8)return addUnifiedSurfaceStamp((x1+x2)/2,y,(z1+z2)/2,normal,radius,colorHex);
+    ensureUnifiedPaintGroup();
+    if(!unifiedPaintGroup)return;
+    const rr=Math.max(.22,Math.min(2.2,Number(radius)||.6));
+    const geo=new THREE.PlaneGeometry(1,1);
+    const mat=new THREE.MeshBasicMaterial({
+      color:Math.max(0,Math.min(0xffffff,Math.floor(Number(colorHex)||0))),
+      transparent:true,opacity:.93,depthWrite:false
+    });
+    const mesh=new THREE.Mesh(geo,mat);
+    mesh.position.set((x1+x2)/2,y+0.026,(z1+z2)/2);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal?.clone().normalize()||new THREE.Vector3(0,1,0));
+    mesh.scale.set(rr*2,len,1);
+    mesh.rotation.z += Math.atan2(x2-x1,z2-z1);
+    unifiedPaintGroup.add(mesh);
+    unifiedPaintEntries.push({x:(x1+x2)/2,y,z:(z1+z2)/2,r:rr,normal:normal?.clone()||new THREE.Vector3(0,1,0),mesh,colorHex:Number(colorHex)||0});
+    if(unifiedPaintEntries.length>520){
+      const old=unifiedPaintEntries.shift();
+      if(old?.mesh&&unifiedPaintGroup)unifiedPaintGroup.remove(old.mesh);
+    }
+    return mesh;
+  }
+  window.__V75_UNIFIED_PAINT={stamp:addUnifiedSurfaceStamp,stroke:addUnifiedSurfaceStroke};
+
+  /* Redirect wall decals into the same unified paint layer. */
+  spawnDecal=function(pos,normal,colorHex,size){
+    addUnifiedSurfaceStamp(pos.x,pos.y,pos.z,normal,Math.min(3.6,Math.max(.9,Number(size)||1.2)),colorHex);
+  };
+
+  /* Wall size: deliberately larger per shot, but still bounded. */
+  paintWallSurface=function(block,hitPos,colorHex,team,size){
+    const hit=getFaceHitPoint(block,hitPos);
+    const wallSize=Math.min(3.8,Math.max(1.1,(Number(size)||1.2)*2.0));
+    addUnifiedSurfaceStamp(hit.point.x,hit.point.y,hit.point.z,hit.normal,wallSize,colorHex);
+    if(block.paintTeam===team){
+      block.paintLevel=Math.min(100,block.paintLevel+20);
+    }else{
+      block.paintLevel-=20;
+      if(block.paintLevel<=0){
+        block.paintTeam=team;
+        block.paintLevel=20;
+      }
+    }
+  };
 
   window.__V72_BUILD='SHOOTER-PAINT-RANGE-FIXED-15-DEGREE-2026-09-28';
   window.__V73_BUILD='FIXED-PLATFORM-INK-NO-GROWTH-2026-09-28';
