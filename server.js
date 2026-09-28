@@ -82,7 +82,7 @@ const SERVER_WEAPONS={
   16:{cat:'maneuver',damage:20,rate:82,range:37},17:{cat:'maneuver',damage:30,rate:145,range:31},
   18:{cat:'slosher',damage:68,rate:520,range:22,explosion:2.4},19:{cat:'slosher',damage:50,rate:420,range:21,explosion:1.9},
   20:{cat:'slosher',damage:84,rate:780,range:20,explosion:3.0},21:{cat:'slosher',damage:72,rate:600,range:25,explosion:2.6},
-  22:{cat:'wiper',damage:72,rate:520,range:5.0},23:{cat:'wiper',damage:140,rate:720,range:6.0}
+  22:{cat:'wiper',damage:72,full:105,rate:520,range:5.0},23:{cat:'wiper',damage:95,full:140,rate:720,range:6.0}
 };
 const SERVER_SUBS={
   instant:{delay:0,radius:2.1,damage:60},timed:{delay:1100,radius:3.4,damage:180},stick:{delay:1500,radius:4.0,damage:180},
@@ -95,7 +95,7 @@ const SERVER_SUBS={
 };
 const SERVER_SPECIALS={
   'トリガーキャノン':[220,2.8],'センチネルミサイル':[150,3.0],'ペイントクラウド':[24,4.5],'ギガスタンプ':[160,3.6],
-  'オムニレーザー':[120,2.0],'パルスノード':[55,3.0],'ラッシュカート':[140,3.4],'トライアークトルネード':[120,3.2],
+  'オムニレーザー':[120,2.0],'チャージオーブ':[180,4.0],'パルスノード':[55,3.0],'ラッシュカート':[140,3.4],'トライアークトルネード':[120,3.2],
   'アサルトシェル':[140,3.5],'スワームビーコン':[70,3.0],'コロッサス':[150,3.6],'トリプルクラッシュ':[140,3.0],
   'スモークスクリーン':[20,3.8],'ウルトラショット':[120,2.8],'ナイスダマ':[140,4.0],'カニタンク':[110,3.2],
   'キューインキ':[75,3.0],'アメフラシ':[14,3.8],'ホップソナー':[70,3.2],'サメライド':[150,3.8],
@@ -196,13 +196,15 @@ function serverResolveShot(room,player,m){
   const dx=Number(m.dx),dy=Number(m.dy),dz=Number(m.dz),len=Math.hypot(dx,dy,dz);
   if(!Number.isFinite(len)||len<.001||len>2)return;
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
+  const mode=String(m.mode||'');
+  const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
   let nearest=null;
   for(const target of room.players.values()){
     if(!target.serverAlive||target.team===player.team)continue;
     const p=target.serverPos||target.spawn;
     const hit=serverDistanceToSegment(p.x,p.y+.9,p.z,origin.x,origin.y,origin.z,
       origin.x+dir.x*range,origin.y+dir.y*range,origin.z+dir.z*range);
-    if(hit.distance<.95&&(!nearest||hit.t<nearest.hit.t))nearest={target,hit};
+    if(hit.distance<hitRadius&&(!nearest||hit.t<nearest.hit.t))nearest={target,hit};
   }
   if(w.cat==='blaster'||w.cat==='slosher'){
     const center=nearest?{x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}:{x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
@@ -215,7 +217,17 @@ function serverResolveShot(room,player,m){
     if(nearest)serverApplyDamage(room,nearest.target,w.tap+(w.full-w.tap)*frac,player,'charger');
     return;
   }
-  if(nearest)serverApplyDamage(room,nearest.target,w.damage,player,w.cat);
+  if(w.cat==='wiper'){
+    const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
+    const dmg=(w.damage||72)+((w.full||w.damage||72)-(w.damage||72))*frac;
+    if(nearest)serverApplyDamage(room,nearest.target,dmg,player,'wiper');
+    return;
+  }
+  if(nearest){
+    let dmg=w.damage||0;
+    if(mode==='roller-roll')dmg=Math.min(65,dmg);
+    serverApplyDamage(room,nearest.target,dmg,player,w.cat);
+  }
 }
 function serverResolveSub(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return;
@@ -636,6 +648,7 @@ wss.on('connection', ws => {
       if(!saneWorldPosition(nums[0],nums[1],nums[2])||nums[3]<0||nums[3]>100)return;
       player.lastSpecialAt=now;player.lastSpecialStartAt=0;
       broadcast(room,{type:'special',specialType:'chargeOrb',phase:'throw',id:player.id,team:player.team,x:nums[0],y:nums[1],z:nums[2],charge:Math.max(0,Math.min(100,nums[3]))},player.id);
+      serverResolveSpecial(room,player,{specialName:'チャージオーブ',x:nums[0],y:nums[1],z:nums[2]});
       return;
     }
     if (m.type === 'special') {

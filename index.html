@@ -9337,9 +9337,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
        impossible vertical shortcuts. */
     const surfaceY=(p)=>{
       let best=0;
+      const hint=Number(p.y);
+      const limit=Number.isFinite(hint)?hint+.25:50;
       for(const block of collidableBlocks){
         if(p.x>=block.minX && p.x<=block.maxX && p.z>=block.minZ && p.z<=block.maxZ &&
-           block.maxY<=Math.max(0,Number(p.y)||0)+.25 && block.maxY>best){
+           block.maxY<=limit && block.maxY>best){
           best=block.maxY;
         }
       }
