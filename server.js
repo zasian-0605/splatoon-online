@@ -73,18 +73,27 @@ const SERVER_STAGE_POLYGON=[[48,-30.4],[14,-72],[0.5,-38.4],[-3.5,-44.8],[-19,-2
 const SERVER_PLAYABLE_HALF_X=52;
 const SERVER_PLAYABLE_HALF_Z=76;
 const SERVER_WEAPONS={
-  0:{cat:'shooter',damage:32,rate:95,range:34},1:{cat:'shooter',damage:42,rate:180,range:32},
-  2:{cat:'shooter',damage:24,rate:70,range:34},3:{cat:'shooter',damage:35,rate:145,range:38},
-  4:{cat:'shooter',damage:48,rate:245,range:34},5:{cat:'blaster',damage:76,rate:650,range:28,explosion:2.6,splash:36},
-  6:{cat:'blaster',damage:58,rate:820,range:28,explosion:3.2,splash:55},7:{cat:'blaster',damage:55,rate:430,range:30,explosion:2.0,splash:26},
-  8:{cat:'blaster',damage:82,rate:700,range:30,explosion:2.8,splash:44},9:{cat:'charger',tap:34,full:120,rate:900,range:58},
-  10:{cat:'charger',tap:30,full:170,rate:1350,range:62},11:{cat:'charger',tap:26,full:100,rate:640,range:58},
-  12:{cat:'roller',damage:78,rate:380,range:4.0},13:{cat:'roller',damage:108,rate:560,range:4.6},
-  14:{cat:'roller',damage:45,rate:190,range:3.2},15:{cat:'maneuver',damage:18,rate:60,range:34},
-  16:{cat:'maneuver',damage:20,rate:82,range:37},17:{cat:'maneuver',damage:30,rate:145,range:31},
-  18:{cat:'slosher',damage:68,rate:520,range:22,explosion:2.4},19:{cat:'slosher',damage:50,rate:420,range:21,explosion:1.9},
-  20:{cat:'slosher',damage:84,rate:780,range:20,explosion:3.0},21:{cat:'slosher',damage:72,rate:600,range:25,explosion:2.6},
-  22:{cat:'wiper',damage:72,full:105,rate:520,range:5.0},23:{cat:'wiper',damage:95,full:140,rate:720,range:6.0}
+  0:{cat:'shooter',damage:32,rate:95,range:30,speed:37},1:{cat:'shooter',damage:42,rate:180,range:31,speed:35},
+  2:{cat:'shooter',damage:24,rate:70,range:30,speed:38},3:{cat:'shooter',damage:35,rate:145,range:39,speed:42},
+  4:{cat:'shooter',damage:48,rate:245,range:38,speed:38},
+  5:{cat:'blaster',damage:76,rate:590,range:22,speed:20,explosion:2.55,splash:48},6:{cat:'blaster',damage:58,rate:180,range:24,speed:20,explosion:2.4,splash:55},
+  7:{cat:'blaster',damage:54,rate:430,range:32,speed:30,explosion:1.9,splash:28},8:{cat:'blaster',damage:82,rate:720,range:30,speed:22,explosion:2.8,splash:44},
+  9:{cat:'charger',tap:34,full:160,rate:900,range:62,speed:70},10:{cat:'charger',tap:30,full:180,rate:1250,range:72,speed:85},11:{cat:'charger',tap:32,full:92,rate:520,range:48,speed:60},
+  12:{cat:'roller',damage:78,rate:380,range:3},13:{cat:'roller',damage:108,rate:560,range:3.5},14:{cat:'roller',damage:42,rate:145,range:2},
+  15:{cat:'maneuver',damage:18,rate:55,range:21,speed:34},16:{cat:'maneuver',damage:19,rate:78,range:35,speed:37},17:{cat:'maneuver',damage:30,rate:145,range:31,speed:29},
+  18:{cat:'slosher',damage:70,rate:500,range:16,speed:17,explosion:2.4},19:{cat:'slosher',damage:50,rate:400,range:13,speed:19,explosion:1.9},
+  20:{cat:'slosher',damage:84,rate:720,range:22,speed:15,explosion:3.0},21:{cat:'slosher',damage:70,rate:640,range:28,speed:21,explosion:2.6},
+  22:{cat:'wiper',damage:72,full:120,rate:520,range:5},23:{cat:'wiper',damage:100,full:150,rate:720,range:6},
+  24:{cat:'shooter',damage:28,rate:70,range:32,speed:43},25:{cat:'shooter',damage:14,rate:42,range:28,speed:38},
+  26:{cat:'shooter',damage:29,rate:240,range:35,speed:41},27:{cat:'shooter',damage:41,rate:300,range:38,speed:43},
+  28:{cat:'blaster',damage:85,rate:600,range:23,speed:27,explosion:2.35,splash:50},29:{cat:'roller',damage:70,rate:300,range:2.65},
+  30:{cat:'roller',damage:42,rate:120,range:2.35},31:{cat:'spinner',damage:29,rate:50,range:30,speed:46},
+  32:{cat:'spinner',damage:31,rate:62,range:38,speed:48},33:{cat:'spinner',damage:41,rate:70,range:45,speed:50},
+  34:{cat:'maneuver',damage:28,rate:55,range:30,speed:38},35:{cat:'brella',damage:34,rate:550,range:20,speed:32},36:{cat:'brella',damage:26,rate:330,range:18,speed:34},
+  37:{cat:'charger',kind:'stringer',tap:22,full:76,rate:900,range:48,speed:48},38:{cat:'charger',kind:'stringer',tap:18,full:52,rate:620,range:42,speed:52},
+  39:{cat:'charger',tap:30,full:105,rate:520,range:42,speed:66},40:{cat:'charger',tap:24,full:125,rate:1000,range:50,speed:70},
+  41:{cat:'roller',damage:38,rate:100,range:2.15},42:{cat:'roller',damage:70,rate:170,range:2.65},
+  43:{cat:'blaster',damage:92,rate:750,range:27,speed:22,explosion:2.7,splash:55},44:{cat:'slosher',damage:70,rate:540,range:25,speed:18,explosion:2.5}
 };
 const SERVER_SUBS={
   instant:{delay:0,radius:2.1,damage:60},timed:{delay:1100,radius:3.4,damage:180},stick:{delay:1500,radius:4.0,damage:180},
@@ -146,72 +155,24 @@ function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   return {distance:Math.hypot(px-qx,py-qy,pz-qz),t,x:qx,y:qy,z:qz};
 }
 function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
-  const range=Math.max(1,Number(w.range)||35);
-  const candidates=[];
-  const addSegment=(a,b,order)=>{
-    for(const target of room.players.values()){
-      if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
-      const p=target.serverPos||target.spawn;
-      const hit=serverDistanceToSegment(
-        p.x,p.y+.9,p.z,
-        a.x,a.y,a.z,b.x,b.y,b.z
-      );
-      if(hit.distance<hitRadius){
-        candidates.push({target,hit,order:order+hit.t});
-      }
-    }
-  };
-
-  const straightEnd={
-    x:origin.x+dir.x*range,
-    y:origin.y+dir.y*range,
-    z:origin.z+dir.z*range
-  };
-
-  if(w.cat==='blaster'||w.cat==='charger'){
-    addSegment(origin,straightEnd,0);
-    addSegment(straightEnd,{x:straightEnd.x,y:-8,z:straightEnd.z},1);
-    candidates.sort((a,b)=>a.order-b.order);
-    return {
-      hit:candidates[0]||null,
-      straightEnd,
-      dropEnd:{x:straightEnd.x,y:-8,z:straightEnd.z}
-    };
+  const range=Math.max(1,Number(w.range)||35),candidates=[];
+  const addSegment=(a,b,order)=>{for(const target of room.players.values()){
+    if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
+    const p=target.serverPos||target.spawn,hit=serverDistanceToSegment(p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z);
+    if(hit.distance<hitRadius)candidates.push({target,hit,order:order+hit.t});
+  }};
+  const deg=w.cat==='slosher'?15:(w.kind==='stringer'?8:0),ang=Math.PI*deg/180,cos=Math.cos(ang),sin=Math.sin(ang);
+  const fd={x:dir.x*cos,y:sin,z:dir.z*cos};
+  if(w.cat==='charger'&&w.kind!=='stringer'){
+    const end={x:origin.x+fd.x*range,y:origin.y+fd.y*range,z:origin.z+fd.z*range};addSegment(origin,end,0);candidates.sort((a,b)=>a.order-b.order);return {hit:candidates[0]||null,straightEnd:end,dropEnd:end};
   }
-
-  if(w.cat==='shooter'||w.cat==='maneuver'||w.cat==='spinner'){
-    const straightDist=Math.min(7.5,range*.28);
-    const straight={
-      x:origin.x+dir.x*straightDist,
-      y:origin.y+dir.y*straightDist,
-      z:origin.z+dir.z*straightDist
-    };
-    addSegment(origin,straight,0);
-
-    const speed=w.speed||35;
-    const remainDist=Math.max(0,range-straightDist);
-    const totalTime=remainDist/Math.max(1,speed);
-    const steps=Math.max(12,Math.min(36,Math.ceil(totalTime*40)));
-    let prev=straight;
-    for(let i=1;i<=steps;i++){
-      const t=totalTime*i/steps;
-      const cur={
-        x:straight.x+dir.x*speed*t,
-        y:straight.y+dir.y*speed*t-0.5*18*t*t,
-        z:straight.z+dir.z*speed*t
-      };
-      addSegment(prev,cur,i/steps);
-      prev=cur;
-    }
-    candidates.sort((a,b)=>a.order-b.order);
-    return {hit:candidates[0]||null,straightEnd:straight,dropEnd:prev};
-  }
-
-  addSegment(origin,straightEnd,0);
-  candidates.sort((a,b)=>a.order-b.order);
-  return {hit:candidates[0]||null,straightEnd,dropEnd:straightEnd};
+  const straightDist=Math.min(7.5,range*.45),straight={x:origin.x+fd.x*straightDist,y:origin.y+fd.y*straightDist,z:origin.z+fd.z*straightDist};
+  addSegment(origin,straight,0);
+  const speed=Math.max(1,Number(w.speed)||35),remain=Math.max(0,range-straightDist),gravity=w.cat==='slosher'||w.kind==='stringer'?22:18;
+  const totalTime=remain/Math.max(1,speed*cos),steps=Math.max(12,Math.min(48,Math.ceil(totalTime*45)));let prev=straight;
+  for(let i=1;i<=steps;i++){const t=totalTime*i/steps,cur={x:straight.x+fd.x*speed*t,y:straight.y+fd.y*speed*t-.5*gravity*t*t,z:straight.z+fd.z*speed*t};addSegment(prev,cur,i/steps);prev=cur;}
+  candidates.sort((a,b)=>a.order-b.order);return {hit:candidates[0]||null,straightEnd:straight,dropEnd:prev};
 }
-
 function broadcastDamage(room,target,damage,attacker,reason,killed){
   broadcast(room,{type:'damage',targetId:target.id,attackerId:attacker?attacker.id:null,damage:Math.max(0,Math.round(damage)),
     hp:Math.max(0,Math.round(target.serverHp)),killed:!!killed,reason:reason||'weapon'});
@@ -261,7 +222,7 @@ function serverResolveShot(room,player,m){
   const dx=Number(m.dx),dy=Number(m.dy),dz=Number(m.dz),len=Math.hypot(dx,dy,dz);
   if(!Number.isFinite(len)||len<.001||len>2)return;
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
-  const mode=String(m.mode||'');
+  const rawMode=String(m.mode||''); const mode=rawMode==='rollerFlick'?'roller-flick':rawMode;
   const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
   // Helper needs the firing team's identity so friendly players are never hit.
   w._attackerTeam=player.team;
