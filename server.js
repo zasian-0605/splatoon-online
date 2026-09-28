@@ -70,6 +70,8 @@ const sockets = new Map();
 const SERVER_CELL=2;
 const SERVER_Y_STEP=.5;
 const SERVER_STAGE_POLYGON=[[48,-30.4],[14,-72],[0.5,-38.4],[-3.5,-44.8],[-19,-20.8],[-20.5,-33.6],[-20.5,-17.6],[-14,-3.2],[-36.5,3.2],[-47.5,20.8],[-48,35.2],[-14,72],[-4,46.4],[4,48],[20.5,24],[20,8],[19,20.8],[13.5,9.6],[36,0],[48,-17.6]];
+const SERVER_PLAYABLE_HALF_X=52;
+const SERVER_PLAYABLE_HALF_Z=76;
 const SERVER_WEAPONS={
   0:{cat:'shooter',damage:32,rate:95,range:34},1:{cat:'shooter',damage:42,rate:180,range:32},
   2:{cat:'shooter',damage:24,rate:70,range:34},3:{cat:'shooter',damage:35,rate:145,range:38},
@@ -103,13 +105,9 @@ const SERVER_SPECIALS={
   'デコイチラシ':[70,2.4],'スミナガシート':[20,3.5],'ウルトラチャクチ':[160,4.0],'ショクワンダー':[80,3.0]
 };
 function serverPointInStage(x,z){
-  let inside=false;
-  for(let i=0,j=SERVER_STAGE_POLYGON.length-1;i<SERVER_STAGE_POLYGON.length;j=i++){
-    const xi=SERVER_STAGE_POLYGON[i][0],zi=SERVER_STAGE_POLYGON[i][1],xj=SERVER_STAGE_POLYGON[j][0],zj=SERVER_STAGE_POLYGON[j][1];
-    const hit=((zi>z)!==(zj>z))&&(x<(xj-xi)*(z-zi)/(zj-zi)+xi);
-    if(hit)inside=!inside;
-  }
-  return inside;
+  return Number.isFinite(x)&&Number.isFinite(z)
+    && x>=-SERVER_PLAYABLE_HALF_X && x<=SERVER_PLAYABLE_HALF_X
+    && z>=-SERVER_PLAYABLE_HALF_Z && z<=SERVER_PLAYABLE_HALF_Z;
 }
 function serverCellKey(x,z,y){
   return Math.floor(Number(x)/SERVER_CELL)+','+Math.floor(Number(z)/SERVER_CELL)+','+Math.round(Number(y||0)/SERVER_Y_STEP);
@@ -767,10 +765,11 @@ wss.on('connection', ws => {
     }
     if (m.type === 'state') {
       const now=Date.now(); if(now-player.lastStateAt<28)return;
-      const x=Number(m.x),y=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
-      if(!saneWorldPosition(x,y,z)||!Number.isFinite(yaw)){securityStrike(player,'invalid-position');return;}
-      if(y<-1||y>14){securityStrike(player,'invalid-height');return;}
+      const x=Number(m.x),rawY=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
+      if(!saneWorldPosition(x,rawY,z)||!Number.isFinite(yaw)){securityStrike(player,'invalid-position');return;}
+      if(rawY<-1||rawY>14){securityStrike(player,'invalid-height');return;}
       if(!serverPointInStage(x,z)){securityStrike(player,'outside-stage');return;}
+      const y=Math.max(0,rawY);
       if(player.serverHp==null)player.serverHp=100; if(player.serverAlive==null)player.serverAlive=true; if(player.serverInk==null)player.serverInk=100;
       if(player.serverAlive){
         if(player.serverPos){
