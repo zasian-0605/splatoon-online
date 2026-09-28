@@ -295,7 +295,7 @@ html.cursor-force-visible canvas{
 #online-ready.ready{background:#e3ff00;color:#2f059c;}
 #online-profile{margin:8px 0;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid #555;border-radius:10px;font:800 13px/1.4 Arial,sans-serif;}
 </style>
-<meta name="game-version" content="v68-straight-shots-ai-respawn-facing"></head>
+<meta name="game-version" content="v69-45deg-shots-ai-respawn-facing"></head>
 <body>
 
 <div id="loading-screen">
@@ -3792,21 +3792,25 @@ function updateBullets(delta){
     const before=b.mesh.position.clone();
 
     if(b.trajectory==='delayed-gravity' || b.trajectory==='flat-drop'){
-      // V68: Shooter / dualies / blaster / charger projectiles stay horizontal.
-      // They travel a finite distance and then disappear/impact instead of
-      // turning into a long vertical falling line.
-      const speed=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
+      // V69: finite ballistic flight. The projectile can leave the muzzle at
+      // a steep upward angle, then gravity bends it down naturally. It never
+      // switches to a pure vertical fall.
+      const speedXZ=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
       const maxRange=Number.isFinite(b.maxRange)&&b.maxRange>0 ? b.maxRange : 32;
       const remainRange=Math.max(0,maxRange-(b.pathTravel||0));
       if(remainRange<=0)return before;
-      const move=Math.min(speed*dt,remainRange);
-      const t=move/Math.max(.001,speed);
-      const vx=b.velocity.x, vz=b.velocity.z;
-      b.mesh.position.x += vx*t;
-      b.mesh.position.z += vz*t;
+
+      const move=Math.min(speedXZ*dt,remainRange);
+      const t=move/speedXZ;
+
+      // Integrate vertical motion separately so the shot remains a real arc.
+      b.velocity.y -= (Number(b.gravity)||0)*t;
+      b.mesh.position.x += b.velocity.x*t;
+      b.mesh.position.y += b.velocity.y*t;
+      b.mesh.position.z += b.velocity.z*t;
+
       b.pathTravel=(b.pathTravel||0)+move;
       b.travelled=(b.travelled||0)+move;
-      b.mesh.position.y=b.startPos.y;
       return before;
     }
 
@@ -10888,6 +10892,94 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
 
   window.__V68_BUILD='STRAIGHT-FINITE-SHOOTS-AI-RESPAWN-WATCHDOG-FACING-2026-09-28';
+})();
+</script>
+<script>
+/* V69 FINAL: fixed 45-degree launch + anti-ground camera
+   - Ranged shots leave the muzzle at a fixed ~45° upward angle.
+   - Gravity then creates a natural arc; there is no artificial straight-down drop.
+   - The camera is clamped above the highest supporting surface below it.
+*/
+(function(){
+  'use strict';
+
+  const UP45=Math.SQRT1_2;
+
+  function shot45(dir,f){
+    const d=dir&&dir.clone?dir.clone():new THREE.Vector3();
+    d.y=0;
+    if(d.lengthSq()<.0001){
+      const yawNow=(f&&f.root)?f.root.rotation.y:0;
+      d.set(Math.sin(yawNow),0,Math.cos(yawNow));
+    }
+    d.normalize();
+    return new THREE.Vector3(d.x*UP45,UP45,d.z*UP45);
+  }
+
+  // Every V60 projectile gets the same reliable upward launch angle.
+  if(typeof window.__spawnBulletV60==='function'){
+    const baseSpawnV69=window.__spawnBulletV60;
+    window.__spawnBulletV60=function(f,dir,opts){
+      const o=Object.assign({},opts||{});
+      const d=shot45(dir,f);
+      const speed=Number(o.speed)||30;
+
+      // Calculate a useful gravity for the requested max range, so the arc
+      // naturally comes back down instead of producing an artificial drop.
+      const startY=(Number(o.yOffset)!==undefined?Number(o.yOffset):1.2);
+      const range=Math.max(4,Number(o.maxRange)||Number(o.straightDistance)||24);
+      const horizontalSpeed=Math.max(.001,speed*UP45);
+      const flightTime=range/horizontalSpeed;
+      if(o.gravity===undefined || Number(o.gravity)===0){
+        o.gravity=Math.max(10,2*(startY+speed*UP45*flightTime)/(flightTime*flightTime));
+      }
+      return baseSpawnV69(f,d,o);
+    };
+  }
+
+  // The emergency/player click path also passes through the fixed 45° aim.
+  if(typeof window.__V67_SIMPLE_SAFE_SHOT==='function'){
+    const baseSimpleV69=window.__V67_SIMPLE_SAFE_SHOT;
+    window.__V67_SIMPLE_SAFE_SHOT=function(f,dir,now){
+      return baseSimpleV69(f,shot45(dir,f),now);
+    };
+  }
+
+  // Charger path: keep its charge timing/damage, only normalize launch angle.
+  if(typeof fireChargerShot==='function'){
+    const baseChargerV69=fireChargerShot;
+    fireChargerShot=function(f,dir,frac){
+      return baseChargerV69(f,shot45(dir,f),frac);
+    };
+    window.fireChargerShot=fireChargerShot;
+  }
+
+  function keepCameraAboveGround(cam){
+    if(!cam||!Number.isFinite(cam.x)||!Number.isFinite(cam.y)||!Number.isFinite(cam.z))return;
+    let support=-Infinity;
+
+    // Highest solid surface at or below the camera position.
+    for(const b of collidableBlocks||[]){
+      if(cam.x>=b.minX && cam.x<=b.maxX && cam.z>=b.minZ && cam.z<=b.maxZ){
+        if(b.maxY<=cam.y+0.05 && b.maxY>support) support=b.maxY;
+      }
+    }
+
+    // Always leave headroom between the camera and the surface.
+    const minimumY=(Number.isFinite(support)?support:0)+0.75;
+    if(cam.y<minimumY)cam.y=minimumY;
+  }
+
+  // Clamp immediately before every render, covering both normal and spectate cameras.
+  if(renderer&&typeof renderer.render==='function'){
+    const baseRenderV69=renderer.render.bind(renderer);
+    renderer.render=function(sceneArg,cameraArg){
+      keepCameraAboveGround(cameraArg);
+      return baseRenderV69(sceneArg,cameraArg);
+    };
+  }
+
+  window.__V69_BUILD='FIXED-45-DEGREE-SHOTS-ANTI-GROUND-CAMERA-2026-09-28';
 })();
 </script>
 </body>
