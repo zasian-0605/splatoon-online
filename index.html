@@ -13390,3 +13390,116 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 
 </body>
 </html>
+
+<script>
+/* V91 INTEGRATION
+   Consolidates the accumulated V60-V90 gameplay fixes behind one final public
+   implementation per subsystem. The older implementations remain private
+   compatibility layers so behavior is preserved while future patches target
+   only these canonical entry points.
+*/
+(function(){
+  'use strict';
+
+  const BUILD='V91-INTEGRATED-2026-09-30';
+  window.__V91_INTEGRATED=true;
+  window.__V91_BUILD=BUILD;
+
+  // Keep exactly one public entry point for each heavily patched subsystem.
+  // Capture the already-composed V90/V89 implementations once, then expose
+  // stable canonical functions instead of allowing later code to wrap them.
+  const movementCore = (typeof updatePlayerMovement==='function')
+    ? updatePlayerMovement : null;
+  const shootCore = (typeof tryShoot==='function') ? tryShoot : null;
+  const paintCore = (typeof paintGround==='function') ? paintGround : null;
+  const specialCore = (typeof fireSpecial==='function') ? fireSpecial : null;
+  const subCore = (typeof tryThrowSub==='function') ? tryThrowSub : null;
+  const ongoingCore = (typeof updateOngoingEffects==='function') ? updateOngoingEffects : null;
+  const collisionCore = (typeof tryMoveWithCollision==='function') ? tryMoveWithCollision : null;
+  const aiCore = (typeof updateAI==='function') ? updateAI : null;
+  const bulletsCore = (typeof updateBullets==='function') ? updateBullets : null;
+
+  function safeCall(fn,args,label){
+    if(typeof fn!=='function') return undefined;
+    try{return fn.apply(null,args);}
+    catch(e){
+      console.warn('[SPLATOON ONLINE][V91 '+label+']',e);
+      return undefined;
+    }
+  }
+
+  function canonicalMovement(delta){
+    return safeCall(movementCore,[delta],'MOVEMENT');
+  }
+  function canonicalShoot(f,dir,now){
+    if(!f||!f.alive) return false;
+    return safeCall(shootCore,[f,dir,now],'SHOOT');
+  }
+  function canonicalPaint(x,z,r,c,o){
+    return safeCall(paintCore,[x,z,r,c,o||{}],'PAINT');
+  }
+  function canonicalSpecial(f){
+    if(!f||!f.alive) return false;
+    return safeCall(specialCore,[f],'SPECIAL');
+  }
+  function canonicalSub(f,dir,now){
+    if(!f||!f.alive) return false;
+    return safeCall(subCore,[f,dir,now],'SUB');
+  }
+  function canonicalOngoing(delta){
+    return safeCall(ongoingCore,[delta],'ONGOING');
+  }
+  function canonicalCollision(f,v,dt,isSquid){
+    if(!f||!f.alive) return false;
+    return safeCall(collisionCore,[f,v,dt,isSquid],'COLLISION');
+  }
+  function canonicalAI(f,delta,now){
+    return safeCall(aiCore,[f,delta,now],'AI');
+  }
+  function canonicalBullets(delta){
+    return safeCall(bulletsCore,[delta],'BULLETS');
+  }
+
+  // Publish one canonical implementation. All event handlers that resolve
+  // these names after V91 therefore use the same final entry point.
+  window.updatePlayerMovement=canonicalMovement;
+  window.tryShoot=canonicalShoot;
+  window.paintGround=canonicalPaint;
+  window.fireSpecial=canonicalSpecial;
+  window.tryThrowSub=canonicalSub;
+  window.updateOngoingEffects=canonicalOngoing;
+  window.tryMoveWithCollision=canonicalCollision;
+  window.updateAI=canonicalAI;
+  window.updateBullets=canonicalBullets;
+
+  // Keep lexical bindings synchronized with the canonical window functions.
+  try{updatePlayerMovement=canonicalMovement;}catch(_){}
+  try{tryShoot=canonicalShoot;}catch(_){}
+  try{paintGround=canonicalPaint;}catch(_){}
+  try{fireSpecial=canonicalSpecial;}catch(_){}
+  try{tryThrowSub=canonicalSub;}catch(_){}
+  try{updateOngoingEffects=canonicalOngoing;}catch(_){}
+  try{tryMoveWithCollision=canonicalCollision;}catch(_){}
+  try{updateAI=canonicalAI;}catch(_){}
+  try{updateBullets=canonicalBullets;}catch(_){}
+
+  // Re-apply the V90 obstacle-top invariant at the final boundary. A squid
+  // that is already standing on an obstacle top must not be interpreted as a
+  // wall attachment and launched sideways.
+  window.__V91_isSafeObstacleTop=function(f){
+    if(!f||!Array.isArray(collidableBlocks)) return false;
+    const y=Number(f.pos?.y);
+    if(!Number.isFinite(y)) return false;
+    for(const b of collidableBlocks){
+      if(!b) continue;
+      const inside=f.pos.x>=b.minX-.35&&f.pos.x<=b.maxX+.35&&
+        f.pos.z>=b.minZ-.35&&f.pos.z<=b.maxZ+.35;
+      if(!inside) continue;
+      if(Math.abs(y-(Number(b.maxY)+.05))<.28) return true;
+    }
+    return false;
+  };
+
+  console.log('[SPLATOON ONLINE]['+BUILD+'] canonical gameplay entry points installed');
+})();
+</script>
