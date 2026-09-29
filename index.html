@@ -12413,152 +12413,119 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 </script>
 
 <script>
-/* =====================================================================
-   V88 WALL CLIMB ROOT FIX
-   The active V80 movement function was still checking __v80WallMarks,
-   while V82/V83/V87 store current wall ink in __v82WallMarks. Replace the
-   final movement function so both old and current paint data are honored.
-   ===================================================================== */
+/* V89: unified wall paint/climb physics; controls unchanged. */
 (function(){
-  'use strict';
-
-  function friendlyWallInkV88(block,f){
-    if(!block||!f||!f.team)return false;
-    if(block.paintTeam===f.team&&Number(block.paintLevel||0)>=20)return true;
-
-    const oldMarks=block.__v80WallMarks||[];
-    for(const m of oldMarks){
-      if(m.team===f.team){
-        const r=Math.max(.25,Number(m.r)||.8)+.55;
-        if(m.face==='minX'||m.face==='maxX'){
-          const fx=m.face==='minX'?block.minX:block.maxX;
-          if(Math.abs(f.pos.x-fx)<=1.15&&Math.hypot(f.pos.z-m.z,f.pos.y-m.y)<=r)return true;
-        }else if(m.face==='minZ'||m.face==='maxZ'){
-          const fz=m.face==='minZ'?block.minZ:block.maxZ;
-          if(Math.abs(f.pos.z-fz)<=1.15&&Math.hypot(f.pos.x-m.x,f.pos.y-m.y)<=r)return true;
-        }
-      }
-    }
-
-    const marks=block.__v82WallMarks||[];
-    const cx=(block.minX+block.maxX)/2;
-    const cy=(block.minY+block.maxY)/2;
-    const cz=(block.minZ+block.maxZ)/2;
-    const lx=f.pos.x-cx,ly=f.pos.y-cy,lz=f.pos.z-cz;
-    for(const m of marks){
-      if(m.team!==f.team)continue;
-      const r=Math.max(.25,Number(m.r)||.8)+.72;
-      if(m.face==='minX'||m.face==='maxX'){
-        if(Math.abs(lx-m.lx)<=1.15&&Math.hypot(lz-m.lz,ly-m.ly)<=r)return true;
-      }else if(m.face==='minZ'||m.face==='maxZ'){
-        if(Math.abs(lz-m.lz)<=1.15&&Math.hypot(lx-m.lx,ly-m.ly)<=r)return true;
-      }
-    }
-    return false;
+'use strict';
+const V89='V89-UNIFIED-WALL-2026-09-29'; window.__V89_WALL_SYSTEM=V89;
+const num=(v,d)=>Number.isFinite(Number(v))?Number(v):d;
+function marks(b){if(!b.__v89WallMarks)b.__v89WallMarks=[];return b.__v89WallMarks;}
+function faceAt(b,p){
+ const dx=Math.min(Math.abs(p.x-b.minX),Math.abs(p.x-b.maxX));
+ const dz=Math.min(Math.abs(p.z-b.minZ),Math.abs(p.z-b.maxZ));
+ return dx<=dz?(p.x<=(b.minX+b.maxX)/2?'minX':'maxX'):(p.z<=(b.minZ+b.maxZ)/2?'minZ':'maxZ');
+}
+function toWall(b,p,face){
+ const cx=(b.minX+b.maxX)/2,cy=(b.minY+b.maxY)/2,cz=(b.minZ+b.maxZ)/2;
+ return face==='minX'||face==='maxX'
+  ?{face,lx:p.x-(face==='minX'?b.minX:b.maxX),ly:p.y-cy,lz:p.z-cz}
+  :{face,lx:p.x-cx,ly:p.y-cy,lz:p.z-(face==='minZ'?b.minZ:b.maxZ)};
+}
+function mergeLegacy(b){
+ const out=marks(b), seen=new Set(out.map(m=>m.__k));
+ for(const m of (b.__v80WallMarks||[])){
+  const k='80:'+m.face+':'+Math.round(num(m.x,0)*20)+':'+Math.round(num(m.y,0)*20)+':'+Math.round(num(m.z,0)*20)+':'+m.team;
+  if(seen.has(k))continue;
+  out.push({face:m.face,lx:num(m.lx,0),ly:num(m.ly,0),lz:num(m.lz,0),r:Math.max(.2,num(m.r,.8)),team:m.team,color:m.color,__k:k});seen.add(k);
+ }
+ const cx=(b.minX+b.maxX)/2,cy=(b.minY+b.maxY)/2,cz=(b.minZ+b.maxZ)/2;
+ for(const m of (b.__v82WallMarks||[])){
+  const k='82:'+m.face+':'+Math.round(num(m.lx,0)*20)+':'+Math.round(num(m.ly,0)*20)+':'+Math.round(num(m.lz,0)*20)+':'+m.team;
+  if(seen.has(k))continue;
+  out.push({face:m.face,lx:num(m.lx,num(m.x,0)-cx),ly:num(m.ly,num(m.y,0)-cy),lz:num(m.lz,num(m.z,0)-cz),r:Math.max(.2,num(m.r,.8)),team:m.team,color:m.color,__k:k});seen.add(k);
+ }
+ return out;
+}
+function addPaint(b,p,color,team,r){
+ if(!b||!team)return false;
+ const face=faceAt(b,p),q=toWall(b,p,face);
+ marks(b).push({face,lx:q.lx,ly:q.ly,lz:q.lz,r:Math.max(.18,num(r,.8)),team,color});
+ if(marks(b).length>900)marks(b).splice(0,marks(b).length-900);
+ return true;
+}
+const oldPaint=paintWallSurface;
+paintWallSurface=function(b,p,color,team,r){try{oldPaint(b,p,color,team,r);}catch(_){}try{addPaint(b,p,color,team,r);}catch(_){}};
+window.paintWallSurface=paintWallSurface;
+function wet(b,f){
+ if(!b||!f||!f.team)return false;
+ mergeLegacy(b);
+ if(b.paintTeam===f.team&&num(b.paintLevel,0)>=20)return true;
+ const cx=(b.minX+b.maxX)/2,cy=(b.minY+b.maxY)/2,cz=(b.minZ+b.maxZ)/2;
+ for(const m of marks(b)){
+  if(m.team!==f.team)continue;
+  const r=Math.max(.2,num(m.r,.8))+.85;
+  if(m.face==='minX'||m.face==='maxX'){
+   const fx=m.face==='minX'?b.minX:b.maxX;
+   if(Math.abs(f.pos.x-fx)<=1.2&&Math.hypot(f.pos.z-(cz+m.lz),f.pos.y-(cy+m.ly))<=r)return true;
+  }else{
+   const fz=m.face==='minZ'?b.minZ:b.maxZ;
+   if(Math.abs(f.pos.z-fz)<=1.2&&Math.hypot(f.pos.x-(cx+m.lx),f.pos.y-(cy+m.ly))<=r)return true;
   }
-
-  function findClimbWallV88(f,x,z,y){
-    let best=null,bestDist=Infinity;
-    for(const b of collidableBlocks||[]){
-      if((b.maxY-b.minY)<1.3)continue;
-      if(b.climbable===false)continue;
-      if(y>b.maxY-0.06)continue;
-      if(y+1.7<b.minY)continue;
-
-      const dx=x<b.minX?b.minX-x:x>b.maxX?x-b.maxX:0;
-      const dz=z<b.minZ?b.minZ-z:z>b.maxZ?z-b.maxZ:0;
-      const d=Math.hypot(dx,dz);
-      if(d>1.18)continue;
-
-      /* Current V82 paint, old V80 paint, or the accumulated wall state. */
-      if(!friendlyWallInkV88(b,f))continue;
-      if(d<bestDist){best=b;bestDist=d;}
-    }
-    return best;
-  }
-
-  tryMoveWithCollision=function(f,vel,delta,isSquid){
-    const rawX=f.pos.x+vel.x*delta;
-    const rawZ=f.pos.z+vel.z*delta;
-    const bounded=clampStageXY(rawX,rawZ);
-    const nx=bounded.x,nz=bounded.z;
-
-    if(!marketPointInPolygon(rawX,rawZ)){
-      const dist=Math.hypot(rawX-nx,rawZ-nz);
-      if(dist>1.6){
-        if(f.isPlayer){
-          f.alive=false;
-          f.deathLocation=f.pos.clone();
-          f.human.visible=false;f.squid.visible=false;
-          showToastFor(f,'ステージ外！');
-          if(typeof respawnFighter==='function')setTimeout(()=>{
-            if(f&&currentPhase===2)respawnFighter(f);
-          },900);
-        }
-        return false;
-      }
-    }
-
-    /* === 最重要: 現在の壁インクデータを直接使って登る === */
-    if(isSquid&&(Math.abs(vel.x)+Math.abs(vel.z))>.001){
-      const climb=findClimbWallV88(f,nx,nz,f.pos.y)||
-        findClimbWallV88(f,f.pos.x,f.pos.z,f.pos.y);
-      if(climb&&f.pos.y<climb.maxY-0.06){
-        const centerX=(climb.minX+climb.maxX)/2;
-        const centerZ=(climb.minZ+climb.maxZ)/2;
-        const left=Math.abs(f.pos.x-climb.minX);
-        const right=Math.abs(f.pos.x-climb.maxX);
-        const back=Math.abs(f.pos.z-climb.minZ);
-        const front=Math.abs(f.pos.z-climb.maxZ);
-        const smallest=Math.min(left,right,back,front);
-        const stick=.34;
-
-        if(smallest===left){
-          f.pos.x=climb.minX-stick;
-          f.pos.z=Math.max(climb.minZ-stick,Math.min(climb.maxZ+stick,f.pos.z+vel.z*delta));
-        }else if(smallest===right){
-          f.pos.x=climb.maxX+stick;
-          f.pos.z=Math.max(climb.minZ-stick,Math.min(climb.maxZ+stick,f.pos.z+vel.z*delta));
-        }else if(smallest===back){
-          f.pos.z=climb.minZ-stick;
-          f.pos.x=Math.max(climb.minX-stick,Math.min(climb.maxX+stick,f.pos.x+vel.x*delta));
-        }else if(smallest===front){
-          f.pos.z=climb.maxZ+stick;
-          f.pos.x=Math.max(climb.minX-stick,Math.min(climb.maxX+stick,f.pos.x+vel.x*delta));
-        }else{
-          /* 初回接触で内側/外側の面が曖昧な場合は中心から近い面を選ぶ。 */
-          if(Math.abs(f.pos.x-centerX)<=Math.abs(f.pos.z-centerZ)){
-            const side=f.pos.x<=centerX?-1:1;
-            f.pos.x=side<0?climb.minX-stick:climb.maxX+stick;
-            f.pos.z=Math.max(climb.minZ-stick,Math.min(climb.maxZ+stick,f.pos.z+vel.z*delta));
-          }else{
-            const side=f.pos.z<=centerZ?-1:1;
-            f.pos.z=side<0?climb.minZ-stick:climb.maxZ+stick;
-            f.pos.x=Math.max(climb.minX-stick,Math.min(climb.maxX+stick,f.pos.x+vel.x*delta));
-          }
-        }
-
-        /* 上昇はここで明示。さらに通常移動側のclimbing分が加わる。 */
-        f.pos.y=Math.min(climb.maxY+0.04,f.pos.y+10.5*delta);
-        if(f.pos.y>=climb.maxY-0.04)f.pos.y=climb.maxY+0.04;
-        return true;
-      }
-    }
-
-    const wall=getBlockingWall(nx,nz,f.pos.y);
-    if(!wall){
-      f.pos.x=nx;f.pos.z=nz;
-      return false;
-    }
-    const wallX=getBlockingWall(nx,f.pos.z,f.pos.y);
-    const wallZ=getBlockingWall(f.pos.x,nz,f.pos.y);
-    if(!wallX)f.pos.x=nx;
-    if(!wallZ)f.pos.z=nz;
-    return false;
-  };
-  window.tryMoveWithCollision=tryMoveWithCollision;
-  window.__V88_WALL_CLIMB_READY=true;
+ }
+ return false;
+}
+function wallBlock(b){return !!b&&b.climbable!==false&&num(b.maxY,0)-num(b.minY,0)>=1.3;}
+function findWall(f,x,z,y){
+ let best=null,bd=Infinity;
+ for(const b of collidableBlocks||[]){
+  if(!wallBlock(b)||y>b.maxY-.05||y+1.7<b.minY)continue;
+  const dx=x<b.minX?b.minX-x:x>b.maxX?x-b.maxX:0,dz=z<b.minZ?b.minZ-z:z>b.maxZ?z-b.maxZ:0,d=Math.hypot(dx,dz);
+  if(d>1.25||d>=bd||!wet(b,f))continue;best=b;bd=d;
+ }
+ return best;
+}
+function chooseFace(b,x,z){
+ const dx=Math.min(Math.abs(x-b.minX),Math.abs(x-b.maxX)),dz=Math.min(Math.abs(z-b.minZ),Math.abs(z-b.maxZ));
+ return dx<=dz?(x<=(b.minX+b.maxX)/2?'minX':'maxX'):(z<=(b.minZ+b.maxZ)/2?'minZ':'maxZ');
+}
+function attach(f,b,face){f.__v89Wall=b;f.__v89WallFace=face;f.__v89WallClimbing=true;}
+function detach(f){f.__v89Wall=null;f.__v89WallFace=null;f.__v89WallClimbing=false;}
+function along(f,b,face,v,dt){
+ const s=.34;
+ if(face==='minX'||face==='maxX'){f.pos.x=(face==='minX'?b.minX:b.maxX)+(face==='minX'?-s:s);f.pos.z=Math.max(b.minZ-s,Math.min(b.maxZ+s,f.pos.z+v.z*dt));}
+ else{f.pos.z=(face==='minZ'?b.minZ:b.maxZ)+(face==='minZ'?-s:s);f.pos.x=Math.max(b.minX-s,Math.min(b.maxX+s,f.pos.x+v.x*dt));}
+}
+function topOut(f,b){
+ f.pos.y=b.maxY+.05;
+ const p=.48,face=f.__v89WallFace;
+ if(face==='minX')f.pos.x=b.minX-p; else if(face==='maxX')f.pos.x=b.maxX+p; else if(face==='minZ')f.pos.z=b.minZ-p; else if(face==='maxZ')f.pos.z=b.maxZ+p;
+ detach(f);
+}
+const baseMove=tryMoveWithCollision;
+tryMoveWithCollision=function(f,v,dt,isSquid){
+ const rx=f.pos.x+v.x*dt,rz=f.pos.z+v.z*dt,bd=clampStageXY(rx,rz),nx=bd.x,nz=bd.z;
+ if(!marketPointInPolygon(rx,rz)&&Math.hypot(rx-nx,rz-nz)>1.6){
+  if(f.isPlayer){f.alive=false;f.deathLocation=f.pos.clone();f.human.visible=false;f.squid.visible=false;try{showToastFor(f,'ステージ外！');}catch(_){}if(typeof respawnFighter==='function')setTimeout(()=>{if(f&&currentPhase===2)respawnFighter(f);},900);}
+  return false;
+ }
+ if(f.__v89WallClimbing){
+  const b=f.__v89Wall;
+  if(!isSquid||!wallBlock(b)||!wet(b,f))detach(f);
+  else{along(f,b,f.__v89WallFace,v,dt);f.pos.y=Math.min(b.maxY+.05,f.pos.y+10.5*dt);if(f.pos.y>=b.maxY-.04)topOut(f,b);return true;}
+ }
+ if(isSquid&&(Math.abs(v.x)+Math.abs(v.z))>.001){
+  const b=findWall(f,nx,nz,f.pos.y)||findWall(f,f.pos.x,f.pos.z,f.pos.y);
+  if(b){attach(f,b,chooseFace(b,f.pos.x,f.pos.z));along(f,b,f.__v89WallFace,v,dt);f.pos.y=Math.min(b.maxY+.05,f.pos.y+10.5*dt);if(f.pos.y>=b.maxY-.04)topOut(f,b);return true;}
+ }
+ return baseMove(f,v,dt,isSquid);
+};
+window.tryMoveWithCollision=tryMoveWithCollision;
+function specialWallAttach(f){if(!f||!f.alive)return false;const b=findWall(f,f.pos.x,f.pos.z,f.pos.y);if(!b)return false;attach(f,b,chooseFace(b,f.pos.x,f.pos.z));return true;}
+function releaseWall(f){if(!f||!f.__v89WallClimbing)return;const b=f.__v89Wall,face=f.__v89WallFace;detach(f);if(face==='minX')f.pos.x=b.minX-.55;else if(face==='maxX')f.pos.x=b.maxX+.55;else if(face==='minZ')f.pos.z=b.minZ-.55;else if(face==='maxZ')f.pos.z=b.maxZ+.55;}
+window.__v89SpecialWallAttach=specialWallAttach;window.__v89ReleaseWall=releaseWall;
+for(const b of collidableBlocks||[]){if(b.stagePartType==='STAGE_SOLID'){if(b.climbable===undefined)b.climbable=num(b.maxY,0)-num(b.minY,0)>=1.4;b.paintSurfaceMesh=b.paintSurfaceMesh||b.mesh;}}
+window.__V89_WALL_CLIMB_READY=true;window.__V89_WALL_PAINT_READY=true;
 })();
+</script>
 </script>
 </body>
 </html>
