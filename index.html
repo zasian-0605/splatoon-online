@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V90-SPECIAL-8TO13-OBSTACLE-FIX-2026-09-29';
+  const BUILD_ID='V91-OBSTACLE-TOP-STABLE-SPECIALS-8TO13-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -12549,7 +12549,8 @@ function v90OnSolidTop(f){
   return support>0 && Math.abs(f.pos.y-support)<0.32;
 }
 tryMoveWithCollision=function(f,v,dt,isSquid){
-  if(f&&v90OnSolidTop(f)){
+  const nx=f?.pos?.x+(v?.x||0)*dt, nz=f?.pos?.z+(v?.z||0)*dt;
+  if(f&&(v90OnSolidTop(f)||v90OnSolidTop(f,nx,nz,f.pos.y))){
     if(f.__v89WallClimbing){
       f.__v89WallClimbing=false;f.__v89Wall=null;f.__v89WallFace=null;
     }
@@ -12759,6 +12760,12 @@ function updateV90Specials(delta){
     if(u){
       if(!f.alive||n>=u.until){f.v60UltraStampUntil=0;f.invulnUntil=0;stopStamp(f);}
       else{
+        const dir=moveInputDir();
+        if(dir){
+          const v=dir.clone().multiplyScalar(4.9);
+          tryMoveWithCollision(f,v,delta,false);
+          f.root.rotation.y=Math.atan2(v.x,v.z);
+        }
         if(u.visual){u.visual.rotation.y=f.root.rotation.y;u.visual.position.z=isShooting?.20:0;u.visual.rotation.x=isShooting?-.08:0;}
         if(keys.space&&!u.lastSpace&&!isShooting&&n-u.lastSmash>550){
           u.lastSmash=n;const p=f.pos.clone();p.y+=.15;
@@ -12799,6 +12806,18 @@ function updateV90Specials(delta){
         setHuman(f,true);
       }
     }
+  }
+
+  /* Energy Stand also acts as a physical projectile shield. */
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i]; if(!b?.mesh)continue;
+    let blocked=false;
+    for(const st of sp90.stands){
+      if(b.team===st.team)continue;
+      const d=Math.hypot(b.mesh.position.x-st.pos.x,b.mesh.position.z-st.pos.z);
+      if(d<1.18 && Math.abs(b.mesh.position.y-(st.pos.y+1.0))<1.9){blocked=true;break;}
+    }
+    if(blocked){scene.remove(b.mesh);bullets.splice(i,1);}
   }
 
   for(let i=sp90.stands.length-1;i>=0;i--){
