@@ -11139,5 +11139,323 @@ performRollerSwing=function(f,now){
 window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 })();
 </script>
+
+<script>
+/* V80 FIX: continuous paint + precise wall ink + unified stage collision
+   - Paint follows projectile travel instead of only the final impact.
+   - Wall ink uses per-face local marks so a huge visual decal cannot fake wet state.
+   - Wall decals are smaller and oriented to the actual hit face.
+   - Squid/wall detection checks the painted face near the player.
+   - Base floor and every obstacle share one unified stage-part collision registry.
+*/
+(function(){
+  'use strict';
+
+  const basePaintGround = window.paintGround;
+  const baseOnFighterInk = window.onFighterInk;
+  const baseTryMoveWithCollision = window.tryMoveWithCollision;
+  const V80_PAINT_LAYER_NAME='V80_WALL_INK';
+  const V80_MAX_WALL_MARKS=900;
+
+  function v80Layer(){
+    let g=window.__v80WallInkLayer;
+    if(g&&g.parent===stageGroup)return g;
+    if(!stageGroup)return null;
+    g=new THREE.Group();
+    g.name=V80_PAINT_LAYER_NAME;
+    stageGroup.add(g);
+    window.__v80WallInkLayer=g;
+    return g;
+  }
+
+  function v80Color(h){
+    return Math.max(0,Math.min(0xffffff,Math.floor(Number(h)||0)));
+  }
+
+  function v80NearestFace(block,pos){
+    if(!block||!pos)return null;
+    const dx0=Math.abs(pos.x-block.minX),dx1=Math.abs(pos.x-block.maxX);
+    const dz0=Math.abs(pos.z-block.minZ),dz1=Math.abs(pos.z-block.maxZ);
+    const dy=Math.abs(pos.y-block.maxY);
+    const list=[
+      {face:'minX',d:dx0,n:new THREE.Vector3(-1,0,0),x:block.minX},
+      {face:'maxX',d:dx1,n:new THREE.Vector3(1,0,0),x:block.maxX},
+      {face:'minZ',d:dz0,n:new THREE.Vector3(0,0,-1),z:block.minZ},
+      {face:'maxZ',d:dz1,n:new THREE.Vector3(0,0,1),z:block.maxZ},
+      {face:'maxY',d:dy,n:new THREE.Vector3(0,1,0),y:block.maxY}
+    ];
+    list.sort((a,b)=>a.d-b.d);
+    return list[0];
+  }
+
+  function v80StoreWallMark(block,point,normal,r,color,team){
+    if(!block)return;
+    if(!block.__v80WallMarks)block.__v80WallMarks=[];
+    const face=v80NearestFace(block,point);
+    if(!face)return;
+    const mark={
+      face:face.face,x:point.x,y:point.y,z:point.z,
+      r:Math.max(.25,Math.min(2.0,Number(r)||.8)),
+      color:v80Color(color),team:team||null,normal:normal.clone()
+    };
+    block.__v80WallMarks.push(mark);
+    if(block.__v80WallMarks.length>180)block.__v80WallMarks.shift();
+    let total=0;
+    for(const b of collidableBlocks||[])total+=(b.__v80WallMarks?.length||0);
+    while(total>V80_MAX_WALL_MARKS){
+      let victim=null;
+      for(const b of collidableBlocks||[]){
+        if(b.__v80WallMarks?.length){victim=b;break;}
+      }
+      if(!victim)break;
+      victim.__v80WallMarks.shift(); total--;
+    }
+    block.paintTeam=team||block.paintTeam;
+    block.paintLevel=Math.min(100,(Number(block.paintLevel)||0)+20);
+  }
+
+  function v80WallWet(block,pos,team,extra=0.55){
+    if(!block||!pos||!team)return false;
+    const marks=block.__v80WallMarks||[];
+    for(const m of marks){
+      if(m.team!==team)continue;
+      const r=Math.max(.25,m.r)+extra;
+      if(m.face==='minX'||m.face==='maxX'){
+        const faceX=(m.face==='minX'?block.minX:block.maxX);
+        if(Math.abs(pos.x-faceX)<=1.05 && Math.hypot(pos.z-m.z,pos.y-m.y)<=r)return true;
+      }else if(m.face==='minZ'||m.face==='maxZ'){
+        const faceZ=(m.face==='minZ'?block.minZ:block.maxZ);
+        if(Math.abs(pos.z-faceZ)<=1.05 && Math.hypot(pos.x-m.x,pos.y-m.y)<=r)return true;
+      }else{
+        if(Math.abs(pos.y-block.maxY)<=1.0 && Math.hypot(pos.x-m.x,pos.z-m.z)<=r)return true;
+      }
+    }
+    return false;
+  }
+
+  function v80WallVisual(point,normal,color,r){
+    const g=v80Layer();if(!g)return;
+    const rr=Math.max(.34,Math.min(1.9,Number(r)||.75));
+    const geo=new THREE.CircleGeometry(1,18);
+    const pa=geo.attributes.position;
+    for(let i=1;i<pa.count;i++){
+      const a=Math.atan2(pa.getY(i),pa.getX(i));
+      const m=.84+Math.random()*.24;
+      pa.setX(i,Math.cos(a)*m);pa.setY(i,Math.sin(a)*m);
+    }
+    pa.needsUpdate=true;
+    const mat=new THREE.MeshBasicMaterial({color:v80Color(color),transparent:true,opacity:.88,depthWrite:false,side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo,mat);
+    const n=normal?.clone?normal.clone():new THREE.Vector3(0,0,1);
+    if(n.lengthSq()<.0001)n.set(0,0,1);else n.normalize();
+    mesh.position.copy(point).addScaledVector(n,.035);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),n);
+    mesh.scale.setScalar(rr);
+    mesh.userData.v80WallInk=true;
+    g.add(mesh);
+    window.__v80WallVisuals=window.__v80WallVisuals||[];
+    window.__v80WallVisuals.push(mesh);
+    if(window.__v80WallVisuals.length>V80_MAX_WALL_MARKS){
+      const old=window.__v80WallVisuals.shift();
+      if(old?.parent)old.parent.remove(old);
+      try{old.geometry.dispose();old.material.dispose();}catch(_){}
+    }
+  }
+
+  function v80NetPaint(x,z,r,color,surfaceY,normal,to){
+    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1)return;
+    try{
+      const m={type:'paint',roomId:onlineRoomId,x:Number(x),z:Number(z),radius:Number(r),colorHex:v80Color(color),y:Number(surfaceY)||0};
+      const n=normal?.clone?normal.clone():new THREE.Vector3(0,1,0);
+      m.nx=n.x;m.ny=n.y;m.nz=n.z;
+      if(to&&Number.isFinite(Number(to.x))&&Number.isFinite(Number(to.z))){m.x2=Number(to.x);m.z2=Number(to.z);}
+      onlineSocket.send(JSON.stringify(m));
+    }catch(_){}
+  }
+
+  function v80PaintInk(x,z,r,color,o){
+    o=o||{};
+    const px=Number(x),pz=Number(z),rr=Math.max(.2,Math.min(5,Number(r)||.7)),col=v80Color(color);
+    if(!Number.isFinite(px)||!Number.isFinite(pz))return;
+    if(typeof marketPointInPolygon==='function'&&!marketPointInPolygon(px,pz))return;
+    const sy=Number.isFinite(Number(o.surfaceY))?Number(o.surfaceY):.05;
+    const n=o.normal?.clone?o.normal.clone():new THREE.Vector3(0,1,0);
+    if(n.lengthSq()<.0001)n.set(0,1,0);else n.normalize();
+    const to=o.to&&Number.isFinite(Number(o.to.x))&&Number.isFinite(Number(o.to.z))?{x:Number(o.to.x),z:Number(o.to.z)}:null;
+
+    /* Wall/vertical surface: never draw on the floor canvas. */
+    if(Math.abs(n.y)<.90){
+      const bx=px,bz=pz;
+      let block=null,best=Infinity;
+      for(const b of collidableBlocks||[]){
+        if((b.maxY-b.minY)<1.3)continue;
+        const face=v80NearestFace(b,new THREE.Vector3(px,sy,pz));if(!face)continue;
+        const q=Math.abs(Math.min(Math.abs((face.face==='minX'||face.face==='maxX')?(px-(face.face==='minX'?b.minX:b.maxX)):(pz-(face.face==='minZ'?b.minZ:b.maxZ)):sy-b.maxY),50));
+        if(q<best){
+          const within=px>=b.minX-1.2&&px<=b.maxX+1.2&&pz>=b.minZ-1.2&&pz<=b.maxZ+1.2&&sy>=b.minY-.5&&sy<=b.maxY+.5;
+          if(within){block=b;best=q;}
+        }
+      }
+      if(block){
+        const facePoint=new THREE.Vector3(px,sy,pz);
+        const face=v80NearestFace(block,facePoint);
+        const nr=Math.min(1.7,Math.max(.45,rr*.82));
+        v80StoreWallMark(block,facePoint,n,col,nr,o.team);
+        v80WallVisual(facePoint,n,col,nr);
+      }else{
+        v80WallVisual(new THREE.Vector3(px,sy,pz),n,col,Math.min(1.5,rr*.82));
+      }
+      if(to)v80PaintInk(to.x,to.z,rr,col,Object.assign({},o,{surfaceY:sy,to:null,remote:o.remote,noNetwork:true}));
+      if(!o.remote&&!o.noNetwork)v80NetPaint(px,pz,rr,col,sy,n,to);
+      return;
+    }
+
+    /* Flat / elevated top surface keeps the existing canvas + raised ink system. */
+    try{
+      basePaintGround(px,pz,rr,col,Object.assign({},o,{surfaceY:sy,normal:n,noNetwork:true}));
+      if(to)basePaintGround(to.x,to.z,rr,col,Object.assign({},o,{surfaceY:sy,normal:n,to:null,noNetwork:true}));
+    }catch(_){}
+
+    if(to&&Math.hypot(to.x-px,to.z-pz)>.25){
+      const steps=Math.max(2,Math.min(14,Math.ceil(Math.hypot(to.x-px,to.z-pz)/1.15)));
+      for(let i=1;i<steps;i++){
+        const t=i/steps;
+        try{basePaintGround(px+(to.x-px)*t,pz+(to.z-pz)*t,rr,col,Object.assign({},o,{surfaceY:sy,normal:n,noNetwork:true}));}catch(_){}
+      }
+    }
+    if(!o.remote&&!o.noNetwork)v80NetPaint(px,pz,rr,col,sy,n,to);
+  }
+
+  function v80PaintGround(x,z,r,c,o){
+    return v80PaintInk(x,z,r,c,o||{});
+  }
+  window.paintInk=v80PaintInk;
+  paintGround=v80PaintGround;
+  window.paintGround=v80PaintGround;
+
+  paintWallSurface=function(block,hitPos,c,team,size){
+    const hit=getFaceHitPoint(block,hitPos);
+    if(!hit)return;
+    const rr=Math.min(1.7,Math.max(.45,(Number(size)||.9)*.82));
+    v80StoreWallMark(block,hit.point,hit.normal,rr,c,team);
+    v80WallVisual(hit.point,hit.normal,c,rr);
+    if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      v80NetPaint(hit.point.x,hit.point.z,rr,c,hit.point.y,hit.normal,null);
+    }
+  };
+  window.paintWallSurface=paintWallSurface;
+
+  onFighterInk=function(f){
+    if(!f)return false;
+    /* Painted wall directly under/next to squid form. */
+    for(const b of collidableBlocks||[]){
+      if((b.maxY-b.minY)<1.3)continue;
+      const nearX=Math.max(b.minX-f.pos.x,0,f.pos.x-b.maxX);
+      const nearZ=Math.max(b.minZ-f.pos.z,0,f.pos.z-b.maxZ);
+      const edge=Math.hypot(nearX,nearZ);
+      if(edge<=1.15 && f.pos.y>=b.minY-.45 && f.pos.y<=b.maxY+.5 && v80WallWet(b,f.pos,f.team,.45))return true;
+    }
+    return baseOnFighterInk(f);
+  };
+  window.onFighterInk=onFighterInk;
+
+  function v80FindWallForMove(f,x,z,y){
+    for(const b of collidableBlocks||[]){
+      if((b.maxY-b.minY)<1.3)continue;
+      if(x>=b.minX-.5&&x<=b.maxX+.5&&z>=b.minZ-.5&&z<=b.maxZ+.5&&y+0.2<b.maxY&&y+1.5>b.minY)return b;
+    }
+    return null;
+  }
+
+  tryMoveWithCollision=function(f,vel,delta,isSquid){
+    const rawNx=f.pos.x+vel.x*delta,rawNz=f.pos.z+vel.z*delta;
+    if(!marketPointInPolygon(rawNx,rawNz)){
+      const p=clampStageXY(rawNx,rawNz),dist=Math.hypot(rawNx-p.x,rawNz-p.z);
+      if(dist>1.6){
+        if(f.isPlayer){
+          f.alive=false;f.deathLocation=f.pos.clone();f.human.visible=false;f.squid.visible=false;
+          showToastFor(f,'ステージ外！');
+          if(typeof respawnFighter==='function')setTimeout(()=>{if(f&&currentPhase===2)respawnFighter(f);},900);
+        }
+        return false;
+      }
+    }
+    const p=clampStageXY(rawNx,rawNz),nx=p.x,nz=p.z;
+    const wall=v80FindWallForMove(f,nx,nz,f.pos.y);
+    if(!wall){f.pos.x=nx;f.pos.z=nz;return false;}
+
+    const mine=v80WallWet(wall,f.pos,f.team,.65);
+    if(isSquid&&mine&&f.pos.y<wall.maxY-0.08&&(Math.abs(vel.x)+Math.abs(vel.z))>.001){
+      const dx=Math.min(Math.abs(f.pos.x-wall.minX),Math.abs(f.pos.x-wall.maxX));
+      const dz=Math.min(Math.abs(f.pos.z-wall.minZ),Math.abs(f.pos.z-wall.maxZ));
+      if(dx<=dz){
+        const side=f.pos.x<=(wall.minX+wall.maxX)/2?-1:1;
+        f.pos.x=side<0?wall.minX-0.46:wall.maxX+0.46;
+        f.pos.z=Math.max(wall.minZ-0.46,Math.min(wall.maxZ+0.46,f.pos.z+vel.z*delta));
+      }else{
+        const side=f.pos.z<=(wall.minZ+wall.maxZ)/2?-1:1;
+        f.pos.z=side<0?wall.minZ-0.46:wall.maxZ+0.46;
+        f.pos.x=Math.max(wall.minX-0.46,Math.min(wall.maxX+0.46,f.pos.x+vel.x*delta));
+      }
+      f.pos.y=Math.min(wall.maxY+0.04,f.pos.y+9.5*delta);
+      if(f.pos.y>=wall.maxY-0.04)f.pos.y=wall.maxY+0.04;
+      return true;
+    }
+
+    const wx=v80FindWallForMove(f,nx,f.pos.z,f.pos.y),wz=v80FindWallForMove(f,f.pos.x,nz,f.pos.y);
+    if(!wx)f.pos.x=nx;
+    if(!wz)f.pos.z=nz;
+    return false;
+  };
+  window.tryMoveWithCollision=tryMoveWithCollision;
+
+  /* Every rendered projectile frame now paints the actual travel segment.
+     The paint is applied on the nearest supporting surface once the projectile
+     is close enough to the surface; the impact still receives its normal paint. */
+  const oldUpdateBullets=updateBullets;
+  updateBullets=function(dt){
+    const before=new Map();
+    for(const b of bullets||[]){
+      if(!b||!b.mesh)continue;
+      before.set(b,b.mesh.position.clone());
+    }
+    try{oldUpdateBullets(dt);}catch(_){}
+    const now=performance.now();
+    for(const [b,prev] of before){
+      if(!b||!bullets.includes(b)||!b.mesh||!b.sourceFighter?.isPlayer)continue;
+      if(now-(b.__v80TrailAt||0)<22)continue;
+      const cur=b.mesh.position.clone();
+      const dist=prev.distanceTo(cur);
+      if(dist<.08)continue;
+      b.__v80TrailAt=now;
+
+      const samples=Math.max(1,Math.min(8,Math.ceil(dist/.8)));
+      for(let i=0;i<=samples;i++){
+        const t=i/samples;
+        const q=prev.clone().lerp(cur,t);
+        const ground=getSupportHeight(q.x,q.z,Math.max(q.y,1));
+        if(q.y<=ground+3.2 || i===samples){
+          paintGround(q.x,q.z,Math.max(.38,(b.paintRadius||.8)*.48),b.colorHex,{surfaceY:ground,noNetwork:true,sourceFighter:b.sourceFighter});
+        }
+      }
+    }
+  };
+
+  /* Unified collision registry: the giant base and every stage obstacle are
+     treated as the same gameplay part type, without changing their geometry. */
+  try{
+    for(const b of collidableBlocks||[]){
+      b.unifiedStagePart=true;
+      b.stageCollisionGroup='STAGE_SOLIDS';
+      if(b.stageBase)b.isGiantStageBase=true;
+      if(!b.paintSurfaceMesh)b.paintSurfaceMesh=b.mesh;
+    }
+    window.__V80_UNIFIED_STAGE_PARTS=(collidableBlocks||[]);
+  }catch(_){}
+
+  window.__V80_BUILD='PAINT-TRAIL-PRECISE-WALL-UNIFIED-STAGE-2026-09-29';
+})();
+</script>
+
 </body>
 </html>
