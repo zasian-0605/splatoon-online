@@ -11803,6 +11803,17 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     }
   }
 
+  function findPaintSurfaceV82(x,z,projectileY){
+    let best=0;
+    for(const block of collidableBlocks||[]){
+      if(x<block.minX||x>block.maxX||z<block.minZ||z>block.maxZ)continue;
+      /* 弾より上にある台は「下から塗る」対象にしない。 */
+      if(block.maxY>projectileY+.38)continue;
+      if(block.maxY>best)best=block.maxY;
+    }
+    return best;
+  }
+
   function v82PaintTravelDrop(b,p,force=false){
     if(!b||!b.sourceFighter||!p)return;
     const kind=String(b.kind||'shooter');
@@ -11824,9 +11835,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     b.__v82PaintDistance += force ? spacing : 0;
     if(!force && b.__v82PaintDistance<spacing)return;
 
-    const surface=getSupportHeight(
-      p.x,p.z,p.y+1.65
-    );
+    const surface=findPaintSurfaceV82(p.x,p.z,p.y);
     const verticalGap=p.y-surface;
     /* 空中のかなり高いところには塗らず、弾の飛沫が届く高さだけ塗る。 */
     if(verticalGap<-.05||verticalGap>1.65)return;
@@ -11838,7 +11847,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     paintGroundV82(
       px,pz,radius,b.colorHex,{
         surfaceY:surface,
-        yHint:p.y+1.65,
+        yHint:p.y,
         team:b.team,
         sourceFighter:b.sourceFighter
       }
