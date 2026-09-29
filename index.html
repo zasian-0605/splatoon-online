@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V80-LOCAL-THREE-2026-09-29';
+  const BUILD_ID='V82-INK-LOCAL-THREE-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -4918,9 +4918,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(m.type==='paint'){
           const x2=Number(m.x2), z2=Number(m.z2);
           if(Number.isFinite(x2)&&Number.isFinite(z2)){
-            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined,to:{x:x2,z:z2}});
+            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,team:m.team,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined,to:{x:x2,z:z2}});
           }else{
-            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined});
+            paintGround(m.x,m.z,m.radius,m.colorHex,{mult:m.mult||1,remote:true,team:m.team,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined});
           }
           return;
         }
@@ -11018,7 +11018,7 @@ function inkStamp(x,y,z,n,r,c){
   mesh.position.set(Number(x)||0,(Number(y)||0)+.028,Number(z)||0);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),nn);
   mesh.scale.set(rr,rr,1);mesh.userData.v79Unified=true;g.add(mesh);paintEntries.push(mesh);
-  if(paintEntries.length>420){const old=paintEntries.shift();if(old?.parent===g)g.remove(old);try{old.geometry.dispose();old.material.dispose();}catch(_){}}
+  if(paintEntries.length>5000){const old=paintEntries.shift();if(old?.parent===g)g.remove(old);try{old.geometry.dispose();old.material.dispose();}catch(_){}}
   return mesh;
 }
 function inkStroke(a,b,r,c,y,n){
@@ -11485,5 +11485,611 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 })();
 </script>
 
+<script>
+/* V82 INK PHYSICS FIX
+   - 空中では塗らない。着弾した瞬間だけ塗る。
+   - 地面 / 高台の上面 / 縦壁を別サーフェスとして扱う。
+   - 高台インクはステージ部品の子にするので、動く台と一緒に上下する。
+   - 旧V69の全弾45度発射を使わず、短い直進→空気抵抗＋重力にする。
+   - V80の「飛行中を毎フレーム塗る」処理を無効化する。
+*/
+(function(){
+  'use strict';
+  const V82_BUILD='V82-INK-PHYSICS-IMPACT-SURFACES-MOVING-STAGE-2026-09-29';
+  window.__V82_BUILD=V82_BUILD;
+
+  const baseGroundV82=window.paintGround;
+  const baseOnInkV82=window.onFighterInk;
+  const baseReceiveShotV82=window.__receiveOnlineShotV60;
+  const v82Bullets=[];
+  const v82SurfaceVisuals=[];
+  const v82WallVisuals=[];
+  const UP=new THREE.Vector3(0,1,0);
+  const ZN=new THREE.Vector3(0,0,1);
+
+  function num(v,d=0){return Number.isFinite(Number(v))?Number(v):d;}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function colorOf(c){return Math.max(0,Math.min(0xffffff,Math.floor(num(c,0))));}
+
+  function supportBlock(x,z,yHint=50){
+    let best=null,bestY=-Infinity;
+    for(const b of collidableBlocks||[]){
+      if(x<b.minX||x>b.maxX||z<b.minZ||z>b.maxZ)continue;
+      if(b.maxY>yHint+1.15)continue;
+      if(b.maxY>bestY){best=b;bestY=b.maxY;}
+    }
+    return best;
+  }
+
+  function makeIrregularCircle(radius,color){
+    const geo=new THREE.CircleGeometry(1,14);
+    const p=geo.attributes.position;
+    for(let i=1;i<p.count;i++){
+      const a=Math.atan2(p.getY(i),p.getX(i));
+      const wobble=.84+Math.random()*.24;
+      p.setX(i,Math.cos(a)*wobble);
+      p.setY(i,Math.sin(a)*wobble);
+    }
+    p.needsUpdate=true;
+    const mat=new THREE.MeshBasicMaterial({
+      color:colorOf(color),transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide
+    });
+    const mesh=new THREE.Mesh(geo,mat);
+    mesh.scale.setScalar(Math.max(.22,radius));
+    return mesh;
+  }
+
+  function markSurface(block,x,z,r,color,team){
+    if(!block||block.maxY<=.22)return;
+    if(!block.__v82SurfaceMarks)block.__v82SurfaceMarks=[];
+    const cx=(block.minX+block.maxX)/2,cz=(block.minZ+block.maxZ)/2;
+    const mark={
+      lx:num(x)-cx,lz:num(z)-cz,r:clamp(num(r,.7),.2,3.2),
+      color:colorOf(color),team:team||null
+    };
+    block.__v82SurfaceMarks.push(mark);
+
+    const mesh=makeIrregularCircle(mark.r,mark.color);
+    mesh.position.set(mark.lx,block.h/2+.032,mark.lz);
+    mesh.quaternion.setFromUnitVectors(ZN,UP);
+    mesh.userData.v82SurfaceInk=true;
+    block.mesh.add(mesh);
+    v82SurfaceVisuals.push(mesh);
+  }
+
+  function faceFor(block,point){
+    if(!block||!point)return null;
+    const list=[
+      {face:'minX',d:Math.abs(point.x-block.minX),n:new THREE.Vector3(-1,0,0)},
+      {face:'maxX',d:Math.abs(point.x-block.maxX),n:new THREE.Vector3(1,0,0)},
+      {face:'minZ',d:Math.abs(point.z-block.minZ),n:new THREE.Vector3(0,0,-1)},
+      {face:'maxZ',d:Math.abs(point.z-block.maxZ),n:new THREE.Vector3(0,0,1)},
+      {face:'maxY',d:Math.abs(point.y-block.maxY),n:UP.clone()}
+    ];
+    list.sort((a,b)=>a.d-b.d);
+    return list[0];
+  }
+
+  function markWall(block,point,normal,r,color,team){
+    if(!block)return;
+    const face=faceFor(block,point);
+    if(!face||face.face==='maxY')return;
+    if(!block.__v82WallMarks)block.__v82WallMarks=[];
+    const cx=(block.minX+block.maxX)/2,cy=(block.minY+block.maxY)/2,cz=(block.minZ+block.maxZ)/2;
+    const rr=clamp(num(r,.7),.25,1.65);
+    block.__v82WallMarks.push({
+      face:face.face,
+      lx:num(point.x)-cx,ly:num(point.y)-cy,lz:num(point.z)-cz,
+      r:rr,color:colorOf(color),team:team||null
+    });
+
+    const mesh=makeIrregularCircle(rr,color);
+    mesh.position.set(num(point.x)-cx,num(point.y)-cy,num(point.z)-cz);
+    const n=normal?.clone?normal.clone():face.n.clone();
+    if(n.lengthSq()<.0001)n.copy(face.n);else n.normalize();
+    mesh.position.addScaledVector(n,.032);
+    mesh.quaternion.setFromUnitVectors(ZN,n);
+    mesh.userData.v82WallInk=true;
+    block.mesh.add(mesh);
+    v82WallVisuals.push(mesh);
+  }
+
+  function wallWet(block,pos,team,extra=.35){
+    const marks=block?.__v82WallMarks||[];
+    const cx=(block.minX+block.maxX)/2,cy=(block.minY+block.maxY)/2,cz=(block.minZ+block.maxZ)/2;
+    const lx=pos.x-cx,ly=pos.y-cy,lz=pos.z-cz;
+    for(const m of marks){
+      if(m.team!==team)continue;
+      const rr=m.r*1.16+extra;
+      if(m.face==='minX'||m.face==='maxX'){
+        if(Math.abs(lx-m.lx)<1.05&&Math.hypot(lz-m.lz,ly-m.ly)<=rr)return true;
+      }else{
+        if(Math.abs(lz-m.lz)<1.05&&Math.hypot(lx-m.lx,ly-m.ly)<=rr)return true;
+      }
+    }
+    return false;
+  }
+
+  function surfaceWet(block,pos,team){
+    if(!block||pos.y<block.maxY-.65||pos.y>block.maxY+1.0)return false;
+    const marks=block.__v82SurfaceMarks||[];
+    const cx=(block.minX+block.maxX)/2,cz=(block.minZ+block.maxZ)/2;
+    const lx=pos.x-cx,lz=pos.z-cz;
+    for(const m of marks){
+      if(m.team===team&&Math.hypot(lx-m.lx,lz-m.lz)<=m.r+.72)return true;
+    }
+    return false;
+  }
+
+  function sendPaintV82(x,z,r,color,o){
+    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1||o?.noNetwork)return;
+    try{
+      const n=o?.normal?.clone?o.normal.clone():UP.clone();
+      const m={
+        type:'paint',roomId:onlineRoomId,x:num(x),z:num(z),
+        radius:clamp(num(r,.7),.2,5),colorHex:colorOf(color),team:o?.team||o?.sourceFighter?.team||null,
+        y:num(o?.surfaceY,0),nx:n.x,ny:n.y,nz:n.z
+      };
+      if(o?.to&&Number.isFinite(Number(o.to.x))&&Number.isFinite(Number(o.to.z))){
+        m.x2=num(o.to.x);m.z2=num(o.to.z);
+      }
+      onlineSocket.send(JSON.stringify(m));
+    }catch(_){}
+  }
+
+  function paintGroundV82(x,z,r,color,o){
+    o=o||{};
+    const px=num(x),pz=num(z),rr=clamp(num(r,.7),.2,3.6),col=colorOf(color);
+    if(!Number.isFinite(px)||!Number.isFinite(pz))return;
+    if(typeof marketPointInPolygon==='function'&&!marketPointInPolygon(px,pz))return;
+
+    const sy=Number.isFinite(Number(o.surfaceY))
+      ? Number(o.surfaceY)
+      : getSupportHeight(px,pz,Number.isFinite(Number(o.yHint))?Number(o.yHint):50);
+    const n=o.normal?.clone?o.normal.clone():UP.clone();
+    if(n.lengthSq()<.0001)n.copy(UP);else n.normalize();
+    const team=o.team||o.sourceFighter?.team||null;
+
+    if(Math.abs(n.y)<.90){
+      let block=null,best=Infinity;
+      for(const b of collidableBlocks||[]){
+        if((b.maxY-b.minY)<1.3)continue;
+        const f=faceFor(b,new THREE.Vector3(px,sy,pz));
+        if(!f)continue;
+        const within=
+          px>=b.minX-1.0&&px<=b.maxX+1.0&&
+          pz>=b.minZ-1.0&&pz<=b.maxZ+1.0&&
+          sy>=b.minY-.5&&sy<=b.maxY+.5;
+        if(within&&f.d<best){best=f.d;block=b;}
+      }
+      if(block){
+        markWall(block,new THREE.Vector3(px,sy,pz),n,rr,col,team);
+        block.paintTeam=team||block.paintTeam;
+        block.paintLevel=Math.min(100,num(block.paintLevel,0)+20);
+      }
+      if(!o.remote&&!o.noNetwork){
+        sendPaintV82(px,pz,rr,col,{surfaceY:sy,normal:n,team,to:o.to});
+      }
+      return;
+    }
+
+    const b=supportBlock(px,pz,Math.max(sy,.22)+.18);
+    if(b&&b.maxY>.22){
+      markSurface(b,px,pz,rr,col,team);
+      b.paintTeam=team||b.paintTeam;
+      b.paintLevel=Math.min(100,num(b.paintLevel,0)+10);
+      if(!o.remote&&!o.noNetwork){
+        sendPaintV82(px,pz,rr,col,{surfaceY:b.maxY,normal:UP,team,to:o.to});
+      }
+      return;
+    }
+
+    try{
+      baseGroundV82(px,pz,rr,col,Object.assign({},o,{
+        surfaceY:0.05,normal:UP,noNetwork:true
+      }));
+    }catch(_){}
+    if(!o.remote&&!o.noNetwork){
+      sendPaintV82(px,pz,rr,col,{surfaceY:0.05,normal:UP,team,to:o.to});
+    }
+  }
+
+  window.paintGround=paintGroundV82;
+  paintGround=paintGroundV82;
+  window.paintInk=paintGroundV82;
+
+  paintWallSurface=function(block,hitPos,color,team,size){
+    if(!block||!hitPos)return;
+    const hit=getFaceHitPoint(block,hitPos);
+    if(!hit)return;
+    const rr=clamp(num(size,.9)*.82,.35,1.65);
+    markWall(block,hit.point,hit.normal,rr,color,team);
+    block.paintTeam=team||block.paintTeam;
+    block.paintLevel=Math.min(100,num(block.paintLevel,0)+20);
+    sendPaintV82(hit.point.x,hit.point.z,rr,color,{
+      surfaceY:hit.point.y,normal:hit.normal,team:team
+    });
+  };
+  window.paintWallSurface=paintWallSurface;
+
+  onFighterInk=function(f){
+    if(!f)return false;
+    for(const b of collidableBlocks||[]){
+      if((b.maxY-b.minY)>=1.3&&wallWet(b,f.pos,f.team,.42))return true;
+      if(b.maxY>.22&&surfaceWet(b,f.pos,f.team))return true;
+    }
+    try{return baseOnInkV82(f);}catch(_){return false;}
+  };
+  window.onFighterInk=onFighterInk;
+
+  function aimV82(dir,f,angleDeg=0){
+    const d=dir?.clone?dir.clone():new THREE.Vector3();
+    if(d.lengthSq()<.0001){
+      const yaw=f?.root?.rotation?.y||0;
+      d.set(Math.sin(yaw),0,Math.cos(yaw));
+    }
+    d.normalize();
+    const h=Math.max(.001,Math.hypot(d.x,d.z));
+    const pitch=Math.atan2(clamp(d.y,-.22,.22),h)+THREE.MathUtils.degToRad(Number(angleDeg)||0);
+    const yawD=Math.atan2(d.x,d.z),cp=Math.cos(pitch);
+    return new THREE.Vector3(
+      Math.sin(yawD)*cp,Math.sin(pitch),Math.cos(yawD)*cp
+    ).normalize();
+  }
+
+  function spawnV82(f,dir,o){
+    const launch=aimV82(dir,f,num(o?.angleDeg,0));
+    const speed=clamp(num(o?.speed,30),8,55);
+    const range=clamp(num(o?.maxRange,18),5,34);
+    const s=f.pos.clone();
+    s.y+=num(o?.yOffset,1.2);
+    s.addScaledVector(launch,.55);
+    const mesh=new THREE.Mesh(
+      new THREE.SphereGeometry(clamp(num(o?.radius,.14),.1,.34),8,8),
+      new THREE.MeshBasicMaterial({color:colorOf(getFighterInkHex(f))})
+    );
+    mesh.position.copy(s);
+    scene.add(mesh);
+
+    const b={
+      mesh,velocity:launch.multiplyScalar(speed),age:0,travelled:0,maxRange:range,
+      straightTime:num(o?.straightTime,.09),
+      gravity:num(o?.gravity,6),drag:num(o?.drag,.035),
+      life:clamp(num(o?.life,range/speed+.35),.35,2.2),
+      radius:num(o?.radius,.14),paintRadius:num(o?.paintRadius,.8),
+      damage:num(o?.damage,0),team:f.team,colorHex:colorOf(getFighterInkHex(f)),
+      explosive:!!o?.explosive,explosionRadius:num(o?.explosionRadius,0),
+      splashDamage:num(o?.splashDamage,0),fromId:f.id,sourceFighter:f,
+      kind:o?.kind||'shooter'
+    };
+    v82Bullets.push(b);
+    return b;
+  }
+
+  function segmentWall(a,b){
+    const dist=a.distanceTo(b),steps=Math.max(1,Math.ceil(dist/.42));
+    for(let i=1;i<=steps;i++){
+      const p=a.clone().lerp(b,i/steps);
+      const w=getBlockingWall(p.x,p.z,p.y);
+      if(w)return {block:w,point:p};
+    }
+    return null;
+  }
+
+  function impactV82(b,p){
+    const ground=getSupportHeight(p.x,p.z,Math.max(p.y,1));
+    const iy=Math.max(ground+.04,p.y<=ground+.05?ground+.04:p.y);
+    if(b.explosive){
+      try{
+        explodeAt(
+          new THREE.Vector3(p.x,iy,p.z),b.explosionRadius,b.splashDamage,b.team,
+          {paintRadius:b.paintRadius,colorHex:b.colorHex,sourceFighter:b.sourceFighter}
+        );
+      }catch(_){
+        paintGroundV82(p.x,p.z,b.paintRadius,b.colorHex,{surfaceY:ground,team:b.team});
+      }
+    }else{
+      paintGroundV82(
+        p.x,p.z,b.paintRadius,b.colorHex,
+        {surfaceY:ground,team:b.team,sourceFighter:b.sourceFighter}
+      );
+    }
+  }
+
+  function updateV82(dt){
+    for(let i=v82Bullets.length-1;i>=0;i--){
+      const b=v82Bullets[i],prev=b.mesh.position.clone();
+      b.age+=dt;
+
+      if(b.age<=b.straightTime){
+        b.mesh.position.addScaledVector(b.velocity,dt);
+      }else{
+        const drag=clamp(1-b.drag*dt,.70,1);
+        b.velocity.x*=drag;
+        b.velocity.z*=drag;
+        b.velocity.y-=b.gravity*dt;
+        b.mesh.position.addScaledVector(b.velocity,dt);
+      }
+      b.travelled+=Math.hypot(
+        b.mesh.position.x-prev.x,b.mesh.position.z-prev.z
+      );
+
+      let hitFighter=null,hitPoint=null,bestT=Infinity;
+      for(const f of fighters||[]){
+        if(!f?.alive||f.team===b.team||f.id===b.fromId)continue;
+        const target=f.pos.clone();
+        target.y+=.9;
+        const ab=b.mesh.position.clone().sub(prev);
+        const den=Math.max(.0001,ab.lengthSq());
+        const t=clamp(target.clone().sub(prev).dot(ab)/den,0,1);
+        const q=prev.clone().addScaledVector(ab,t);
+        if(q.distanceTo(target)<=(b.radius+.55)&&t<bestT){
+          bestT=t;hitFighter=f;hitPoint=q;
+        }
+      }
+
+      const wallHit=segmentWall(prev,b.mesh.position);
+      const ground=getSupportHeight(
+        b.mesh.position.x,b.mesh.position.z,Math.max(b.mesh.position.y,1)
+      );
+      const crossed=prev.y>ground+.02&&b.mesh.position.y<=ground+.02;
+      const rangeDone=b.travelled>=b.maxRange;
+
+      if(hitFighter){
+        b.mesh.position.copy(hitPoint);
+        if(b.explosive){
+          try{
+            explodeAt(
+              b.mesh.position.clone(),b.explosionRadius,b.splashDamage,b.team,
+              {paintRadius:b.paintRadius,colorHex:b.colorHex,sourceFighter:b.sourceFighter}
+            );
+          }catch(_){}
+          applyDamage(hitFighter,Math.max(0,b.damage-b.splashDamage),null);
+        }else{
+          applyDamage(hitFighter,b.damage,null);
+        }
+        scene.remove(b.mesh);
+        v82Bullets.splice(i,1);
+        continue;
+      }
+
+      if(wallHit){
+        b.mesh.position.copy(wallHit.point);
+        if(b.explosive){
+          try{
+            explodeAt(
+              wallHit.point.clone(),b.explosionRadius,b.splashDamage,b.team,
+              {paintRadius:b.paintRadius,colorHex:b.colorHex,sourceFighter:b.sourceFighter}
+            );
+          }catch(_){}
+        }
+        paintWallSurface(
+          wallHit.block,wallHit.point,b.colorHex,b.team,b.paintRadius
+        );
+        scene.remove(b.mesh);
+        v82Bullets.splice(i,1);
+        continue;
+      }
+
+      if(crossed||b.mesh.position.y<=ground+.01||rangeDone||b.age>b.life){
+        const p=b.mesh.position.clone();
+        p.y=Math.max(p.y,ground+.02);
+        impactV82(b,p);
+        scene.remove(b.mesh);
+        v82Bullets.splice(i,1);
+      }
+    }
+  }
+
+  function weaponRangeV82(w){
+    return clamp(num(w?.range,18)*.78,10,30);
+  }
+
+  function fireBasicV82(f,dir,now){
+    if(!f||!f.alive)return false;
+    const w=f.weapon||weaponList[0];
+    if(!w||w.category==='charger'||w.category==='roller'||w.category==='wiper'||w.brush)return false;
+
+    const rate=num(w.rate,100);
+    if(now-num(f.lastShot,0)<rate)return false;
+
+    const cost=typeof inkCost==='function'
+      ? inkCost(f,num(w.inkCost,1))
+      : num(w.inkCost,1);
+    if(typeof consumeInk==='function'){
+      if(!consumeInk(f,cost))return false;
+    }else{
+      if(num(f.ink,0)<cost)return false;
+      f.ink-=cost;
+    }
+    f.lastShot=now;
+
+    const base=aimV82(dir,f,0);
+    const range=weaponRangeV82(w);
+    const emit=(d,o)=>spawnV82(f,d,Object.assign({maxRange:range},o));
+    let fired=0;
+
+    if(w.category==='blaster'){
+      emit(base,{
+        speed:clamp(num(w.speed,22),12,30),gravity:5.8,drag:.04,radius:.23,
+        paintRadius:num(w.paintRadius,1.35),damage:num(w.damage,70),
+        life:1.2,explosive:true,explosionRadius:num(w.explosionRadius,2.5),
+        splashDamage:num(w.splashDamage,40),kind:'blaster'
+      });
+      fired=1;
+    }else if(w.category==='slosher'){
+      emit(aimV82(dir,f,11),{
+        speed:clamp(num(w.speed,19),12,26),gravity:10.5,drag:.02,radius:.28,
+        paintRadius:num(w.paintRadius,1.5),damage:num(w.damage,60),
+        life:1.25,explosive:true,explosionRadius:num(w.explosionRadius,2.2),
+        splashDamage:num(w.damage,30),kind:'slosher'
+      });
+      fired=1;
+    }else if(w.category==='maneuver'){
+      for(const side of [-1,1]){
+        const d=base.clone().applyAxisAngle(
+          UP,side*clamp(num(w.spread,.05),.015,.11)
+        );
+        emit(d,{
+          speed:clamp(num(w.speed,35),20,45),gravity:4.8,drag:.04,radius:.13,
+          paintRadius:num(w.paintRadius,.8),damage:num(w.damage,18),
+          life:1.05,kind:'dualies'
+        });
+        fired++;
+      }
+    }else if(w.category==='brella'){
+      const count=clamp(Math.floor(num(w.pellets,5)),3,8);
+      for(let i=0;i<count;i++){
+        const d=base.clone().applyAxisAngle(
+          UP,(i-(count-1)/2)*.055
+        );
+        emit(d,{
+          speed:clamp(num(w.speed,30),18,40),gravity:4.8,drag:.05,radius:.13,
+          paintRadius:num(w.paintRadius,.7),damage:num(w.damage,18),
+          life:1.0,kind:'brella'
+        });
+        fired++;
+      }
+    }else{
+      const count=clamp(Math.floor(num(w.burst,1)),1,3);
+      for(let i=0;i<count;i++){
+        const d=base.clone();
+        if(count>1)d.applyAxisAngle(
+          UP,(i-(count-1)/2)*.028
+        );
+        emit(d,{
+          speed:clamp(num(w.speed,34),22,44),gravity:5.2,drag:.045,radius:.13,
+          paintRadius:num(w.paintRadius,.9),damage:num(w.damage,28),
+          life:Math.min(
+            1.15,range/Math.max(22,num(w.speed,34))+.32
+          ),
+          kind:w.category==='spinner'?'splatling':'shooter'
+        });
+        fired++;
+      }
+    }
+
+    if(fired&&f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+      try{
+        onlineSocket.send(JSON.stringify({
+          type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+          dx:base.x,dy:base.y,dz:base.z,weaponId:f.weapon.id,mode:w.category
+        }));
+      }catch(_){}
+    }
+    try{
+      f.specialGauge=Math.min(
+        100,num(f.specialGauge,0)+.7*fired*(f.gearProfile?.specialGain||1)
+      );
+      sfx('shoot');
+    }catch(_){}
+    return fired>0;
+  }
+
+  tryShoot=fireBasicV82;
+  window.tryShoot=fireBasicV82;
+  window.__spawnBulletV60=spawnV82;
+
+  if(baseReceiveShotV82){
+    window.__receiveOnlineShotV60=function(m){
+      const wp=weaponList[Number(m.weaponId)||0]||weaponList[0];
+      const ranged=
+        wp.category==='shooter'||wp.category==='blaster'||
+        wp.category==='slosher'||wp.category==='maneuver'||
+        wp.category==='brella'||wp.category==='spinner';
+      if(!ranged)return baseReceiveShotV82(m);
+
+      let rf=fighters.find(x=>x.id===m.id);
+      if(!rf){
+        rf=ensureRemoteFighter({
+          id:m.id,team:m.team,weaponId:wp.id,
+          spawn:{x:num(m.x),z:num(m.z)},config:{weapon:wp.id}
+        });
+      }
+      rf.weapon=wp;
+
+      const d=new THREE.Vector3(
+        num(m.dx),num(m.dy),num(m.dz,1)
+      );
+      if(d.lengthSq()<.0001)d.set(0,0,1);
+      d.normalize();
+
+      const baseOpt={
+        maxRange:weaponRangeV82(wp),
+        speed:clamp(num(wp.speed,34),18,44),
+        gravity:5.2,drag:.045,radius:.13,
+        paintRadius:num(wp.paintRadius,.9),
+        damage:num(wp.damage,28),life:1.0,kind:'shooter'
+      };
+
+      if(wp.category==='blaster'){
+        spawnV82(rf,d,Object.assign(baseOpt,{
+          speed:clamp(num(wp.speed,22),12,30),gravity:5.8,radius:.23,
+          paintRadius:num(wp.paintRadius,1.35),damage:num(wp.damage,70),
+          life:1.2,explosive:true,
+          explosionRadius:num(wp.explosionRadius,2.5),
+          splashDamage:num(wp.splashDamage,40),kind:'blaster'
+        }));
+      }else if(wp.category==='slosher'){
+        spawnV82(rf,d,Object.assign(baseOpt,{
+          speed:clamp(num(wp.speed,19),12,26),gravity:10.5,
+          radius:.28,paintRadius:num(wp.paintRadius,1.5),
+          damage:num(wp.damage,60),life:1.25,explosive:true,
+          explosionRadius:num(wp.explosionRadius,2.2),
+          splashDamage:num(wp.damage,30),kind:'slosher',angleDeg:11
+        }));
+      }else if(wp.category==='maneuver'){
+        for(const side of [-1,1]){
+          const dd=d.clone().applyAxisAngle(
+            UP,side*clamp(num(wp.spread,.05),.015,.11)
+          );
+          spawnV82(rf,dd,Object.assign({},baseOpt,{kind:'dualies'}));
+        }
+      }else if(wp.category==='brella'){
+        const count=clamp(Math.floor(num(wp.pellets,5)),3,8);
+        for(let i=0;i<count;i++){
+          const dd=d.clone().applyAxisAngle(
+            UP,(i-(count-1)/2)*.055
+          );
+          spawnV82(rf,dd,Object.assign({},baseOpt,{kind:'brella'}));
+        }
+      }else{
+        spawnV82(rf,d,baseOpt);
+      }
+      return;
+    };
+  }
+
+  /* V80の飛行中ペイントは旧bulletsにだけ残っているため、
+     player発射の旧bulletだけsourceFighterを一時的に隠して無効化する。 */
+  const legacyUpdateV82=updateBullets;
+  updateBullets=function(dt){
+    const touched=[];
+    for(const b of bullets||[]){
+      if(b?.sourceFighter?.isPlayer){
+        touched.push([b,b.sourceFighter]);
+        b.sourceFighter=Object.assign({},b.sourceFighter,{isPlayer:false});
+      }
+    }
+    try{legacyUpdateV82(dt);}catch(_){}
+    for(const [b,src] of touched){
+      if(bullets.includes(b))b.sourceFighter=src;
+    }
+    updateV82(dt);
+  };
+
+  /* 動く台そのものは元のギミック処理で上下する。
+     インクをblock.meshの子にしたので、その変位に自動追従する。 */
+  const oldGimmickV82=updateMarketStageGimmicks;
+  updateMarketStageGimmicks=function(time,delta){
+    oldGimmickV82(time,delta);
+    for(const b of collidableBlocks||[]){
+      b.__v82LastMaxY=b.maxY;
+    }
+  };
+
+  window.__V82_PHYSICS_READY=true;
+})();
+</script>
 </body>
 </html>
