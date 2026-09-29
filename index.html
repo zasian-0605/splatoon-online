@@ -11318,7 +11318,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
       for(const b of collidableBlocks||[]){
         if((b.maxY-b.minY)<1.3)continue;
         const face=v80NearestFace(b,new THREE.Vector3(px,sy,pz));if(!face)continue;
-        const q=Math.abs(Math.min(Math.abs((face.face==='minX'||face.face==='maxX')?(px-(face.face==='minX'?b.minX:b.maxX)):(pz-(face.face==='minZ'?b.minZ:b.maxZ)):sy-b.maxY),50));
+        const q=(face.face==='minX'||face.face==='maxX') ? Math.abs(px-(face.face==='minX'?b.minX:b.maxX)) : ((face.face==='minZ'||face.face==='maxZ') ? Math.abs(pz-(face.face==='minZ'?b.minZ:b.maxZ)) : Math.abs(sy-b.maxY));
         if(q<best){
           const within=px>=b.minX-1.2&&px<=b.maxX+1.2&&pz>=b.minZ-1.2&&pz<=b.maxZ+1.2&&sy>=b.minY-.5&&sy<=b.maxY+.5;
           if(within){block=b;best=q;}
