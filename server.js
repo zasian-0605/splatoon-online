@@ -169,22 +169,70 @@ function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
 }
 function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
   const range=Math.max(1,Number(w.range)||35),candidates=[];
-  const addSegment=(a,b,order)=>{for(const target of room.players.values()){
-    if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
-    const p=target.serverPos||target.spawn,hit=serverDistanceToSegment(p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z);
-    if(hit.distance<hitRadius)candidates.push({target,hit,order:order+hit.t});
-  }};
-  const deg=w.cat==='slosher'?15:(w.kind==='stringer'?8:0),ang=Math.PI*deg/180,cos=Math.cos(ang),sin=Math.sin(ang);
-  const fd={x:dir.x*cos,y:sin,z:dir.z*cos};
+  const addSegment=(a,b,order)=>{
+    for(const target of room.players.values()){
+      if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
+      const p=target.serverPos||target.spawn;
+      const hit=serverDistanceToSegment(p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z);
+      if(hit.distance<hitRadius)candidates.push({target,hit,order:order+hit.t});
+    }
+  };
+
   if(w.cat==='charger'&&w.kind!=='stringer'){
-    const end={x:origin.x+fd.x*range,y:origin.y+fd.y*range,z:origin.z+fd.z*range};addSegment(origin,end,0);candidates.sort((a,b)=>a.order-b.order);return {hit:candidates[0]||null,straightEnd:end,dropEnd:end};
+    const end={
+      x:origin.x+dir.x*range,
+      y:origin.y+dir.y*range,
+      z:origin.z+dir.z*range
+    };
+    addSegment(origin,end,0);
+    candidates.sort((a,b)=>a.order-b.order);
+    return {hit:candidates[0]||null,straightEnd:end,dropEnd:end};
   }
-  const straightDist=Math.min(7.5,range*.45),straight={x:origin.x+fd.x*straightDist,y:origin.y+fd.y*straightDist,z:origin.z+fd.z*straightDist};
+
+  const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
+  const basePitch=Math.atan2(dir.y,horizontal);
+  const extraPitch=w.cat==='slosher'
+    ? Math.PI*11/180
+    : (w.kind==='stringer'?Math.PI*8/180:0);
+  const pitch=basePitch+extraPitch;
+  const yaw=Math.atan2(dir.x,dir.z);
+  const cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const fd={
+    x:Math.sin(yaw)*cp,
+    y:sp,
+    z:Math.cos(yaw)*cp
+  };
+
+  const straightDist=Math.min(4.2,range*.24);
+  const straight={
+    x:origin.x+fd.x*straightDist,
+    y:origin.y+fd.y*straightDist,
+    z:origin.z+fd.z*straightDist
+  };
   addSegment(origin,straight,0);
-  const speed=Math.max(1,Number(w.speed)||35),remain=Math.max(0,range-straightDist),gravity=w.cat==='slosher'||w.kind==='stringer'?22:18;
-  const totalTime=remain/Math.max(1,speed*cos),steps=Math.max(12,Math.min(48,Math.ceil(totalTime*45)));let prev=straight;
-  for(let i=1;i<=steps;i++){const t=totalTime*i/steps,cur={x:straight.x+fd.x*speed*t,y:straight.y+fd.y*speed*t-.5*gravity*t*t,z:straight.z+fd.z*speed*t};addSegment(prev,cur,i/steps);prev=cur;}
-  candidates.sort((a,b)=>a.order-b.order);return {hit:candidates[0]||null,straightEnd:straight,dropEnd:prev};
+
+  const speed=Math.max(1,Number(w.speed)||35);
+  const remain=Math.max(0,range-straightDist);
+  const gravity=w.cat==='slosher'?10.5:5.5;
+  const totalTime=remain/Math.max(1,speed*cp);
+  const steps=Math.max(16,Math.min(56,Math.ceil(totalTime*50)));
+  let prev=straight;
+  for(let i=1;i<=steps;i++){
+    const t=totalTime*i/steps;
+    const cur={
+      x:straight.x+fd.x*speed*t,
+      y:straight.y+fd.y*speed*t-.5*gravity*t*t,
+      z:straight.z+fd.z*speed*t
+    };
+    addSegment(prev,cur,i/steps);
+    prev=cur;
+  }
+  candidates.sort((a,b)=>a.order-b.order);
+  return {
+    hit:candidates[0]||null,
+    straightEnd:straight,
+    dropEnd:prev
+  };
 }
 function broadcastDamage(room,target,damage,attacker,reason,killed){
   broadcast(room,{type:'damage',targetId:target.id,attackerId:attacker?attacker.id:null,damage:Math.max(0,Math.round(damage)),
@@ -225,12 +273,49 @@ function serverApplyAoE(room,center,radius,damage,team,attacker,reason){
     }
   }
 }
+function serverShotInkCost(w,m){
+  const cat=w?.cat||'shooter';
+  if(cat==='charger'){
+    const frac=Math.max(0,Math.min(1,Number(m?.charge)||0));
+    return 5+7*frac;
+  }
+  if(cat==='blaster')return 3.0;
+  if(cat==='slosher')return 3.8;
+  if(cat==='maneuver')return .9;
+  if(cat==='brella')return 2.8;
+  if(cat==='spinner')return .9;
+  if(cat==='roller')return 1.5;
+  if(cat==='wiper')return 2.0;
+  return .9;
+}
+function serverSubInkCost(type){
+  const costs={
+    instant:45,timed:70,stick:70,bounce:60,seek:55,slide:65,homing:65,
+    splatBomb:70,suctionBomb:70,burstBomb:55,curlingBomb:55,fizzyBomb:50,
+    autobomb:55,torpedo:55,angleShooter:30,toxicMist:50,inkMine:55,
+    pointSensor:45,splashWall:60,sprinkler:60,sensor:45,turret:65
+  };
+  return costs[String(type||'')]||55;
+}
+function serverTrySpendInk(player,cost){
+  const c=Math.max(0,Number(cost)||0);
+  if(c<=0)return true;
+  if((player.serverInk??100)<c)return false;
+  player.serverInk=Math.max(0,player.serverInk-c);
+  player.serverInkUseAt=Date.now();
+  return true;
+}
 function serverResolveShot(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return;
   const wid=Number.isFinite(Number(m.weaponId))?Math.max(0,Math.min(200,Math.floor(Number(m.weaponId)))):player.weaponId;
   const w=SERVER_WEAPONS[wid];if(!w)return;
   const now=Date.now();
   if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return;
+  const shotCost=serverShotInkCost(w,m);
+  if(!serverTrySpendInk(player,shotCost)){
+    send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
+    return;
+  }
   player.lastShotAt=now;
   const dx=Number(m.dx),dy=Number(m.dy),dz=Number(m.dz),len=Math.hypot(dx,dy,dz);
   if(!Number.isFinite(len)||len<.001||len>2)return;
@@ -277,7 +362,13 @@ function serverResolveShot(room,player,m){
 function serverResolveSub(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return;
   const def=SERVER_SUBS[String(m.subType||'')];if(!def)return;
-  const now=Date.now();if(now-(player.lastSubAt||0)<180)return;player.lastSubAt=now;
+  const now=Date.now();if(now-(player.lastSubAt||0)<180)return;
+  const subCost=serverSubInkCost(m.subType);
+  if(!serverTrySpendInk(player,subCost)){
+    send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
+    return;
+  }
+  player.lastSubAt=now;
   const pos=Object.assign({},player.serverPos||player.spawn),vx=Number(m.vx)||0,vz=Number(m.vz)||0;
   const scale=Math.min(1.8,Math.max(.25,(def.delay||0)/1000)),center={x:pos.x+vx*scale,z:pos.z+vz*scale,y:pos.y||0};
   if(!serverPointInStage(center.x,center.z))return;
@@ -393,7 +484,7 @@ function assignTeamsAndStart(room) {
   room.inkCells=new Map();
   seedServerSpawnInk(room);
   for(const p of ps){
-    p.serverHp=100;p.serverAlive=true;p.serverInk=100;p.serverRespawnAt=0;p.serverPos=Object.assign({},p.spawn);
+    p.serverHp=100;p.serverAlive=true;p.serverInk=100;p.serverSquid=false;p.serverInkLastAt=Date.now();p.serverInkUseAt=0;p.serverRespawnAt=0;p.serverPos=Object.assign({},p.spawn);
     p.lastStatePos=Object.assign({},p.spawn);p.lastStateAt=Date.now();p.lastShotAt=0;p.lastSubAt=0;p.lastHazardAt=0;
   }
   room.started = true; room.startsAt = Date.now() + 1500; room.timer = 180;
@@ -752,11 +843,18 @@ wss.on('connection', ws => {
         }
         player.serverPos={x,y,z}; player.lastStatePos={x,z,y}; player.lastStateAt=now;
       }
+      const prevInkAt=player.serverInkLastAt||now;
+      const inkDt=Math.max(0,Math.min(.25,(now-prevInkAt)/1000));
+      if(player.serverSquid&&now-(player.serverInkUseAt||0)>=450){
+        player.serverInk=Math.min(100,(player.serverInk??100)+42*inkDt);
+      }
+      player.serverInkLastAt=now;
       if(room.started&&player.serverAlive&&player.team&&now-(player.lastHazardAt||0)>=350){
         player.lastHazardAt=now; const inkTeam=serverInkTeamAt(room,player.serverPos||player.spawn);
         if(inkTeam&&inkTeam!==player.team){const damage=Math.max(0,Math.min(4,Math.max(0,player.serverHp-1)));if(damage>0)serverApplyDamage(room,player,damage,null,'enemy-ink');}
       }
       const serverPos=player.serverPos||player.spawn,enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
+      player.serverSquid=!!m.squid&&!enemyInk;
       const packet={type:'state',id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
         hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId};
       broadcast(room,packet,player.id); send(player.ws,packet); return;
@@ -766,8 +864,10 @@ wss.on('connection', ws => {
       if(!room.started||!player.team||!player.serverAlive)return;
       const x=Number(m.x),z=Number(m.z),radius=Number(m.radius);
       if(![x,z,radius].every(Number.isFinite)||radius<.2||radius>8||!serverPointInStage(x,z))return;
-      const serverPos=player.serverPos||player.spawn,y=Number(serverPos.y)||0,cost=Math.max(.35,Math.min(8,.42+radius*.72));
-      if(player.serverInk<=.01)return; player.serverInk=Math.max(0,player.serverInk-cost);
+      const now=Date.now();
+      if(now-(player.lastPaintAt||0)<28)return;
+      player.lastPaintAt=now;
+      const serverPos=player.serverPos||player.spawn,y=Number.isFinite(Number(m.y))?Number(m.y):Number(serverPos.y)||0;
       const colorHex=Number.isFinite(Number(player.config?.inkColorHex))?Number(player.config.inkColorHex):(player.team==='A'?0xe3ff00:0xff2255);
       const x2=Number(m.x2),z2=Number(m.z2);
       markServerPaint(room,x,z,radius,player.team,y,
