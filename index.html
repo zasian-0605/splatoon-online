@@ -12396,7 +12396,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
         if(f._v87SensorTargetTag)f._v87SensorTargetTag.visible=false;
       }
 
-      if(Number(f._sensorTaggedUntil)||0>now){
+      if((Number(f._sensorTaggedUntil)||0)>now){
         const warning=sensorWarningTag(f);warning.visible=true;
       }else if(f._v87SensorWarning){
         f._v87SensorWarning.visible=false;
