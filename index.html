@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V84-WALL-WATER-RANGE-2026-09-29';
+  const BUILD_ID='V85-WALL-INK-RARE-DROPS-3RANGE-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -1873,7 +1873,7 @@ function buildStage(){
   [
     [-37,-31,3,13,3],[-37,-5,3,10,3],[-37,12,3,12,3],[-36,31,3,12,3],
     [37,-32,3,15,3],[37,-6,3,12,3],[37,12,3,10,3],[36,30,3,12,3]
-  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4],matAccent,false));
+  ].forEach(v=>shelf(v[0],v[1],v[2],v[3],v[4],matAccent,true));
 
   /* =========================================================
      3. 中央構造
@@ -2207,6 +2207,12 @@ function applyDamage(target, dmg, fromFighter){
   }
 }
 
+function spawnRareInkImpactParticle(x,y,z,colorHex){
+  /* 小さい落下インクは通常の1/100相当の頻度だけ出す。 */
+  if(Math.random()>=0.01) return;
+  spawnParticle(x,y,z,colorHex);
+}
+
 function spawnParticle(x,y,z,colorHex){
   const p = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:colorHex}));
   p.position.set(x,y,z);
@@ -2357,7 +2363,7 @@ function fireChargerShot(fighter, aimDir, chargeFrac){
 
   if(hitFighterObj){
     applyDamage(hitFighterObj, Math.round(damage), null);
-    for(let p=0;p<6;p++) spawnParticle(hitPoint.x,hitPoint.y,hitPoint.z,col);
+    spawnRareInkImpactParticle(hitPoint.x,hitPoint.y,hitPoint.z,col);
   } else if(hitBlock){
     paintWallSurface(hitBlock, hitPoint, col, fighter.team, wp.paintRadius||1.3);
   } else {
@@ -3667,7 +3673,9 @@ function tryMoveWithCollision(f, vel, delta, isSquid){
   const p=clampStageXY(rawNx,rawNz), nx=p.x, nz=p.z;
 
   /* 塗られた登れる壁は、壁の内側へ押し込まず「接触位置」を維持して上る。 */
-  const climbWall=isSquid ? getClimbableWallNear(nx,nz,f.pos.y,f.team) : null;
+  const climbWall=isSquid
+    ? getClimbableWallNear(nx,nz,f.pos.y,f.team)
+    : null;
   if(climbWall && f.pos.y<climbWall.maxY-0.08 &&
      (Math.abs(vel.x)+Math.abs(vel.z))>0.001){
     const left=Math.abs(f.pos.x-climbWall.minX), right=Math.abs(f.pos.x-climbWall.maxX);
@@ -3825,25 +3833,35 @@ function updateBullets(delta){
     const before=b.mesh.position.clone();
 
     if(b.trajectory==='delayed-gravity' || b.trajectory==='flat-drop'){
-      // V69: finite ballistic flight. The projectile can leave the muzzle at
-      // a steep upward angle, then gravity bends it down naturally. It never
-      // switches to a pure vertical fall.
+      /* 3種類の旧弾道にも、射程超過後の減速を適用する。 */
       const speedXZ=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
       const maxRange=Number.isFinite(b.maxRange)&&b.maxRange>0 ? b.maxRange : 32;
-      const remainRange=Math.max(0,maxRange-(b.pathTravel||0));
-      if(remainRange<=0)return before;
+      const alreadyOver=(b.pathTravel||0)>=maxRange;
+      if(!alreadyOver){
+        const remainRange=Math.max(0,maxRange-(b.pathTravel||0));
+        const move=Math.min(speedXZ*dt,remainRange);
+        const t=move/speedXZ;
+        b.velocity.y -= (Number(b.gravity)||0)*t;
+        b.mesh.position.x += b.velocity.x*t;
+        b.mesh.position.y += b.velocity.y*t;
+        b.mesh.position.z += b.velocity.z*t;
+        b.pathTravel=(b.pathTravel||0)+move;
+        b.travelled=(b.travelled||0)+move;
 
-      const move=Math.min(speedXZ*dt,remainRange);
-      const t=move/speedXZ;
+        if((b.pathTravel||0)>=maxRange&&!b.__rangeSoftened){
+          b.__rangeSoftened=true;
+          b.__rangeSoftAt=b.age;
+          b.velocity.x*=3/50;
+          b.velocity.z*=3/50;
+          b.life=Math.max(Number(b.life)||0,b.age+.38);
+        }
+        return before;
+      }
 
-      // Integrate vertical motion separately so the shot remains a real arc.
-      b.velocity.y -= (Number(b.gravity)||0)*t;
-      b.mesh.position.x += b.velocity.x*t;
-      b.mesh.position.y += b.velocity.y*t;
-      b.mesh.position.z += b.velocity.z*t;
-
-      b.pathTravel=(b.pathTravel||0)+move;
-      b.travelled=(b.travelled||0)+move;
+      /* 射程超過後は前進力だけ3/50にし、重力はそのまま続ける。 */
+      b.velocity.y -= (Number(b.gravity)||0)*dt;
+      b.mesh.position.addScaledVector(b.velocity,dt);
+      b.travelled=(b.travelled||0)+Math.hypot(b.velocity.x,b.velocity.z)*dt;
       return before;
     }
 
@@ -3879,10 +3897,9 @@ function updateBullets(delta){
     const prev=advanceBullet(b,delta);
     b.age+=delta;
 
-    // シューター系は最大射程に到達したらそこで弾を終わらせる。
-    // ブラスター/チャージャーは最大射程で垂直落下フェーズへ移るため除外。
-    const reachedMaxRange=(b.trajectory==='delayed-gravity'||b.trajectory==='flat-drop') &&
-      Number.isFinite(b.maxRange) && b.maxRange>0 && (b.pathTravel||0)>=b.maxRange;
+    /* 旧3弾道も射程超過後に少しだけ惰性で飛ぶ。 */
+    const rangeExpired=!!b.__rangeSoftened &&
+      b.age>=(b.__rangeSoftAt||b.age)+.38;
 
     let hitFighter=null,hitPoint=null,hitScore=Infinity;
     for(let k=0;k<fighters.length;k++){
@@ -3911,18 +3928,18 @@ function updateBullets(delta){
       }else{
         applyDamage(hitFighter,b.damage,null);
       }
-      for(let p=0;p<4;p++)spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
+      spawnRareInkImpactParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
       scene.remove(b.mesh);bullets.splice(i,1);continue;
     }
 
     if(wall){
       if(b.explosive)explodeAt(b.mesh.position.clone(),b.explosionRadius,b.splashDamage,b.team,{paintRadius:b.paintRadius});
       paintWallSurface(wall,b.mesh.position.clone(),col,b.team,b.paintRadius);
-      for(let p=0;p<5;p++)spawnParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
+      spawnRareInkImpactParticle(b.mesh.position.x,b.mesh.position.y,b.mesh.position.z,col);
       scene.remove(b.mesh);bullets.splice(i,1);continue;
     }
 
-    if(crossedGround || b.mesh.position.y<=groundH || b.age>b.life || reachedMaxRange){
+    if(crossedGround || b.mesh.position.y<=groundH || b.age>b.life || rangeExpired){
       if(b.explosive){
         const impactY=Math.max(groundH+.1,b.mesh.position.y);
         explodeAt(new THREE.Vector3(b.mesh.position.x,b.mesh.position.y<=groundH?groundH+.1:impactY,b.mesh.position.z),
@@ -3930,7 +3947,7 @@ function updateBullets(delta){
       }else{
         paintGround(b.mesh.position.x,b.mesh.position.z,b.paintRadius,col);
       }
-      for(let p=0;p<5;p++)spawnParticle(b.mesh.position.x,groundH+.1,b.mesh.position.z,col);
+      spawnRareInkImpactParticle(b.mesh.position.x,groundH+.1,b.mesh.position.z,col);
       scene.remove(b.mesh);bullets.splice(i,1);
     }
   }
@@ -4599,7 +4616,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     // スペースを一度離すまで、同じ長押し入力では再発動しない。
     if(!keys.space) f._maneuverSlideInputConsumed=false;
-    const isSquid=!!keys.shift && onFighterInk(f) && f.ink>0;
+    const nearClimbableInkWall=typeof getClimbableWallNear==='function'
+      ? !!getClimbableWallNear(f.pos.x,f.pos.z,f.pos.y,f.team)
+      : false;
+    const isSquid=!!keys.shift && (onFighterInk(f)||nearClimbableInkWall) && f.ink>0;
     f.squid_mode=isSquid;
 
     /* Squid movement itself does not consume ink. Ink is spent by weapon/sub
