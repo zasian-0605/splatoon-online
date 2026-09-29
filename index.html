@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V82-INK-LOCAL-THREE-2026-09-29';
+  const BUILD_ID='V84-WALL-WATER-RANGE-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -1796,10 +1796,15 @@ function buildStage(){
   addBlock(0,-0.04,0,PLAYABLE_HALF_X*2,0.08,PLAYABLE_HALF_Z*2,0x4b535d,
     {climbable:false,paintTop:true});
 
-  const waterMat=new THREE.MeshLambertMaterial({color:0x176b83});
-  const water=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+20,STAGE_D+20),waterMat);
+  const waterMat=new THREE.MeshLambertMaterial({color:0x176b83,transparent:true,opacity:.92});
+  /* ステージの外周を広く水面にする。 */
+  const water=new THREE.Mesh(
+    new THREE.PlaneGeometry(PLAYABLE_HALF_X*2+64,PLAYABLE_HALF_Z*2+64),
+    waterMat
+  );
   water.rotation.x=-Math.PI/2;
-  water.position.y=-0.5;
+  water.position.y=-0.55;
+  water.userData.stageWater=true;
   stageGroup.add(water);
 
   /* The rectangular base is the actual floor; AA shape is obstacle reference only. */
@@ -3630,6 +3635,20 @@ function clampStageXY(x,z){
   };
 }
 
+function getClimbableWallNear(x,z,y,team){
+  let best=null,bestDist=Infinity;
+  for(const b of collidableBlocks||[]){
+    if((b.maxY-b.minY)<1.3 || !b.climbable) continue;
+    if(b.paintTeam!==team || b.paintLevel<20) continue;
+    if(y > b.maxY-0.08 || y+1.7 < b.minY) continue;
+    const dx=x<b.minX ? b.minX-x : x>b.maxX ? x-b.maxX : 0;
+    const dz=z<b.minZ ? b.minZ-z : z>b.maxZ ? z-b.maxZ : 0;
+    const d=Math.hypot(dx,dz);
+    if(d<=0.95 && d<bestDist){ best=b; bestDist=d; }
+  }
+  return best;
+}
+
 function tryMoveWithCollision(f, vel, delta, isSquid){
   const rawNx=f.pos.x+vel.x*delta, rawNz=f.pos.z+vel.z*delta;
   if(!marketPointInPolygon(rawNx,rawNz)){
@@ -3646,25 +3665,35 @@ function tryMoveWithCollision(f, vel, delta, isSquid){
     }
   }
   const p=clampStageXY(rawNx,rawNz), nx=p.x, nz=p.z;
-  const wall=getBlockingWall(nx,nz,f.pos.y);
-  if(!wall){ f.pos.x=nx; f.pos.z=nz; return false; }
-  const mine=wall.paintTeam===f.team && wall.paintLevel>=20 && wall.climbable;
-  if(isSquid && mine && f.pos.y<wall.maxY-0.08 && (Math.abs(vel.x)+Math.abs(vel.z))>0.001){
-    const dx=Math.min(Math.abs(f.pos.x-wall.minX),Math.abs(f.pos.x-wall.maxX));
-    const dz=Math.min(Math.abs(f.pos.z-wall.minZ),Math.abs(f.pos.z-wall.maxZ));
-    if(dx<=dz){
-      const side=f.pos.x<=(wall.minX+wall.maxX)/2?-1:1;
-      f.pos.x=side<0?wall.minX-0.46:wall.maxX+0.46;
-      f.pos.z=Math.max(wall.minZ-0.46,Math.min(wall.maxZ+0.46,f.pos.z+vel.z*delta));
+
+  /* 塗られた登れる壁は、壁の内側へ押し込まず「接触位置」を維持して上る。 */
+  const climbWall=isSquid ? getClimbableWallNear(nx,nz,f.pos.y,f.team) : null;
+  if(climbWall && f.pos.y<climbWall.maxY-0.08 &&
+     (Math.abs(vel.x)+Math.abs(vel.z))>0.001){
+    const left=Math.abs(f.pos.x-climbWall.minX), right=Math.abs(f.pos.x-climbWall.maxX);
+    const back=Math.abs(f.pos.z-climbWall.minZ), front=Math.abs(f.pos.z-climbWall.maxZ);
+    const m=Math.min(left,right,back,front);
+    const stick=.24;
+    if(m===left){
+      f.pos.x=climbWall.minX-stick;
+      f.pos.z=Math.max(climbWall.minZ-stick,Math.min(climbWall.maxZ+stick,f.pos.z+vel.z*delta));
+    }else if(m===right){
+      f.pos.x=climbWall.maxX+stick;
+      f.pos.z=Math.max(climbWall.minZ-stick,Math.min(climbWall.maxZ+stick,f.pos.z+vel.z*delta));
+    }else if(m===back){
+      f.pos.z=climbWall.minZ-stick;
+      f.pos.x=Math.max(climbWall.minX-stick,Math.min(climbWall.maxX+stick,f.pos.x+vel.x*delta));
     }else{
-      const side=f.pos.z<=(wall.minZ+wall.maxZ)/2?-1:1;
-      f.pos.z=side<0?wall.minZ-0.46:wall.maxZ+0.46;
-      f.pos.x=Math.max(wall.minX-0.46,Math.min(wall.maxX+0.46,f.pos.x+vel.x*delta));
+      f.pos.z=climbWall.maxZ+stick;
+      f.pos.x=Math.max(climbWall.minX-stick,Math.min(climbWall.maxX+stick,f.pos.x+vel.x*delta));
     }
-    f.pos.y=Math.min(wall.maxY+0.04,f.pos.y+9.5*delta);
-    if(f.pos.y>=wall.maxY-0.04) f.pos.y=wall.maxY+0.04;
+    f.pos.y=Math.min(climbWall.maxY+0.04,f.pos.y+10.5*delta);
+    if(f.pos.y>=climbWall.maxY-0.04) f.pos.y=climbWall.maxY+0.04;
     return true;
   }
+
+  const wall=getBlockingWall(nx,nz,f.pos.y);
+  if(!wall){ f.pos.x=nx; f.pos.z=nz; return false; }
   const wallX=getBlockingWall(nx,f.pos.z,f.pos.y), wallZ=getBlockingWall(f.pos.x,nz,f.pos.y);
   if(!wallX) f.pos.x=nx;
   if(!wallZ) f.pos.z=nz;
@@ -11818,18 +11847,16 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     if(!b||!b.sourceFighter||!p)return;
     const kind=String(b.kind||'shooter');
     /* 連続線ではなく、弾道に沿った「飛沫」を一定間隔で落とす。 */
-    const spacing =
+    const baseSpacing =
       kind==='blaster' ? 2.7 :
       kind==='slosher' ? 1.35 :
       kind==='charger' ? 2.4 :
       kind==='brella' ? 1.55 :
       kind==='dualies' ? 1.45 :
       kind==='splatling' ? 1.55 : 1.55;
-    const radius =
-      kind==='blaster' ? .28 :
-      kind==='slosher' ? .42 :
-      kind==='charger' ? .34 :
-      kind==='brella' ? .28 : .30;
+    /* 飛沫の間隔は従来の約1/3。粒は小粒ではなく通常サイズ。 */
+    const spacing=Math.max(.42,baseSpacing/3);
+    const radius=clamp(num(b.paintRadius,.9)*.92,.70,1.35);
 
     b.__v82PaintDistance=num(b.__v82PaintDistance,0);
     b.__v82PaintDistance += force ? spacing : 0;
@@ -11896,7 +11923,17 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
         b.mesh.position.x,b.mesh.position.z,Math.max(b.mesh.position.y,1)
       );
       const crossed=prev.y>ground+.02&&b.mesh.position.y<=ground+.02;
-      const rangeDone=b.travelled>=b.maxRange;
+      const rangeCrossed=b.travelled>=b.maxRange&&!b.__v82RangeDropped;
+      if(rangeCrossed){
+        b.__v82RangeDropped=true;
+        /* 有効射程を越えた瞬間、前方向の速度を3/50(=6%)まで落とす。 */
+        b.velocity.x*=3/50;
+        b.velocity.z*=3/50;
+        b.__v82RangeAt=b.age;
+        b.life=Math.max(b.life,b.age+.38);
+      }
+      const rangeExpired=!!b.__v82RangeDropped &&
+        b.age>=(b.__v82RangeAt||b.age)+.38;
 
       if(hitFighter){
         b.mesh.position.copy(hitPoint);
@@ -11936,7 +11973,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
         continue;
       }
 
-      if(crossed||b.mesh.position.y<=ground+.01||rangeDone||b.age>b.life){
+      if(crossed||b.mesh.position.y<=ground+.01||rangeExpired||b.age>b.life){
         const p=b.mesh.position.clone();
         p.y=Math.max(p.y,ground+.02);
         v82PaintTravelDrop(b,p,true);
