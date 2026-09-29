@@ -4789,10 +4789,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(count) count.textContent=`${safe}人`;
     if(note) note.textContent='現在オンラインの全プレイヤー';
   }
-  function showGlobalOnlineHud(show){
-    const hud=document.getElementById('global-online-hud');
-    if(hud) hud.style.display=show?'block':'none';
-  }
   function setOnlineCount(n, note){
     const requested=Number(n);
     const safe=Math.max(1,Math.min(8,Number.isFinite(requested)?requested:1));
@@ -12913,7 +12909,6 @@ window.__ONLINE_BUILD_ID=V;
 
 function n(v,d=0){return Number.isFinite(Number(v))?Number(v):d;}
 function now(){return performance.now();}
-function col(f){return getFighterInkHex(f);}
 function face(f){
   const d=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
   return d.lengthSq()<.001?new THREE.Vector3(0,0,1):d.normalize();
