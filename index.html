@@ -357,7 +357,7 @@ html.cursor-force-visible canvas{
       <button id="account-login" class="account-primary">ログイン</button>
       <button id="account-register" class="account-secondary">新規登録</button>
     </div>
-    <div class="account-actions"><button id="account-guest" class="account-ghost" style="display:none" disabled>ゲストで続ける（オフライン）</button></div>
+    <div class="account-actions"><button id="account-guest" class="account-ghost">ゲストで続ける（オフライン）</button></div>
     <div id="account-status"></div>
     <div id="account-profile"></div>
   </div>
@@ -7095,7 +7095,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 })();
 </script>
 <script>
-/* V43: every load starts at the login gate; P always forces the online room */
+/* V80: every load starts at the account gate; offline guest entry is allowed */
 (function(){
   function requireLogin(){
     window.__accountReady=false;
@@ -7107,9 +7107,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(window.showAccountScreen) window.showAccountScreen();
   }
 
-  // The account module's old Guest button is deliberately unavailable.
+  // V80: offline guest mode is available again.
   const guest=document.getElementById('account-guest');
-  if(guest){ guest.disabled=true; guest.style.display='none'; }
+  if(guest){
+    guest.disabled=false;
+    guest.style.removeProperty('display');
+  }
 
   // Login is mandatory on every fresh load/reload.
   if(document.readyState==='loading'){
