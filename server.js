@@ -59,9 +59,21 @@ async function readBody(req) {
   let s = ''; for await (const chunk of req) { s += chunk; if (s.length > 64 * 1024) throw new Error('too large'); }
   return JSON.parse(s || '{}');
 }
+function sessionForToken(token) {
+  token=String(token||'');
+  if(!token)return null;
+  const live=sessions.get(token);
+  if(live)return live;
+
+  /* 再起動後もアカウントに紐づいた最終トークンを復元する。 */
+  for(const a of Object.values(accounts)){
+    if(a && a.sessionToken===token)return {name:a.name};
+  }
+  return null;
+}
 function getSession(req) {
   const auth = String(req.headers.authorization || '');
-  return sessions.get(auth.startsWith('Bearer ') ? auth.slice(7) : '');
+  return sessionForToken(auth.startsWith('Bearer ') ? auth.slice(7) : '');
 }
 
 const rooms = new Map();
@@ -374,14 +386,81 @@ function serverResolveSub(room,player,m){
   if(!serverPointInStage(center.x,center.z))return;
   setTimeout(()=>{if(!rooms.get(room.id)||!room.started)return;serverApplyAoE(room,center,def.radius||0,def.damage||0,player.team,player,'sub');},Math.max(0,def.delay||0));
 }
+function serverSendSensorMark(viewer,target,specialName,durationMs){
+  if(!viewer||!target||viewer===target||!viewer.ws||!target.ws)return;
+  const now=Date.now();
+  const until=now+Math.max(500,Number(durationMs)||8000);
+  const pos=target.serverPos||target.spawn||{x:0,y:0,z:0};
+  const payload={
+    type:'sensorMark',
+    targetId:target.id,
+    targetName:target.accountName||target.id,
+    targetTeam:target.team,
+    weaponId:target.weaponId,
+    x:Number(pos.x)||0,y:Number(pos.y)||0,z:Number(pos.z)||0,
+    specialName:String(specialName||''),
+    until
+  };
+  send(viewer.ws,payload);
+  send(target.ws,{
+    type:'sensorTagged',
+    targetId:target.id,
+    sourceId:viewer.id,
+    sourceName:viewer.accountName||viewer.id,
+    specialName:String(specialName||''),
+    until
+  });
+}
+
+function serverApplySensorPulse(room,viewer,center,radius,specialName,durationMs,maxTargets){
+  if(!room?.started||!viewer?.team)return;
+  const rr=Math.max(.5,Number(radius)||20);
+  const from=center||viewer.serverPos||viewer.spawn;
+  const targets=[...room.players.values()]
+    .filter(t=>t!==viewer&&t.serverAlive&&t.team&&t.team!==viewer.team)
+    .map(t=>{
+      const p=t.serverPos||t.spawn;
+      return {target:t,d:Math.hypot((p.x||0)-(from.x||0),(p.z||0)-(from.z||0))};
+    })
+    .filter(v=>v.d<=rr)
+    .sort((a,b)=>a.d-b.d)
+    .slice(0,Math.max(1,Number(maxTargets)||99));
+  for(const v of targets){
+    serverSendSensorMark(viewer,v.target,specialName,durationMs);
+  }
+  return targets.length;
+}
+
 function serverResolveSpecial(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return;
   const name=String(m.specialName||''),spec=SERVER_SPECIALS[name];if(!spec)return;
   const me=player.serverPos||player.spawn;let x=Number(m.x),z=Number(m.z);
   if(!Number.isFinite(x))x=me.x;if(!Number.isFinite(z))z=me.z;
   const dist=Math.hypot(x-me.x,z-me.z);
-  if(dist>45){const s=45/dist;x=me.x+(x-me.x)*s;z=me.z+(z-me.z)*s;}
+  if(dist>45){const scale=45/dist;x=me.x+(x-me.x)*scale;z=me.z+(z-me.z)*scale;}
   if(!serverPointInStage(x,z))return;
+
+  const sensorAlias=name==='パルスノード';
+  const sensorHop=name==='ホップソナー'||sensorAlias;
+  const sensorMega=name==='メガホンレーザー5.1ch'||name==='オムニレーザー';
+  const sensorMissile=name==='センチネルミサイル';
+
+  if(sensorMega){
+    serverApplySensorPulse(room,player,{x,y:Number(m.y)||0,z},45,name,3000,3);
+  }else if(sensorHop){
+    /* ホップソナーはウェーブごとに再索敵する。 */
+    const center={x,y:Number(m.y)||0,z};
+    serverApplySensorPulse(room,player,center,20,name,8000,99);
+    [1600,4100,6600].forEach(delay=>{
+      setTimeout(()=>{
+        if(rooms.get(room.id)!==room||!room.started||!player.serverAlive)return;
+        serverApplySensorPulse(room,player,player.serverPos||center,20,name,8000,99);
+      },delay);
+    });
+  }else if(sensorMissile){
+    serverApplySensorPulse(room,player,{x,y:Number(m.y)||0,z},45,name,4000,3);
+  }
+
   serverApplyAoE(room,{x,y:Number(m.y)||0,z},spec[1],spec[0],player.team,player,'special:'+name);
 }
 function finishServerMatch(room){
@@ -565,7 +644,10 @@ const server = http.createServer(async (req, res) => {
         const actual = Buffer.from(a.hash, 'hex');
         if (supplied.length !== actual.length || !crypto.timingSafeEqual(supplied, actual)) return json(res, 401, { ok: false, error: '名前またはパスワードが違います。' });
       }
-      const token = issueToken(); sessions.set(token, { name });
+      const token = issueToken();
+      sessions.set(token, { name });
+      accounts[name].sessionToken=token;
+      saveAccounts();
       return json(res, 200, { ok: true, token, profile: profile(accounts[name]), created: p.endsWith('register') });
     } catch { return json(res, 400, { ok: false, error: 'リクエストを処理できませんでした。' }); }
   }
@@ -672,7 +754,7 @@ wss.on('connection', ws => {
     }
     if (m.type === 'bindAccount') {
       const token = String(m.token || '');
-      const s = sessions.get(token);
+      const s = sessionForToken(token);
       if (s && accounts[s.name]) {
         player.accountName = s.name;
         player.accountToken = token;
