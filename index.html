@@ -1718,8 +1718,18 @@ function paintWallSurface(block, hitPos, colorHex, team, size){
    ステージ生成
    ========================================================= */
 function addBlock(x,y,z,w,h,d,color,opts={}){
-  const mat = new THREE.MeshLambertMaterial({color});
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  /* Every physical piece of the stage uses the same STAGE_SOLID part type.
+     The floor is not a second special object: its top paint is simply the
+     top material of the same box. */
+  const sideMat = new THREE.MeshLambertMaterial({color});
+  const material = opts.paintTop
+    ? [
+        sideMat, sideMat,
+        new THREE.MeshLambertMaterial({map:paintTexture}),
+        sideMat, sideMat, sideMat
+      ]
+    : sideMat;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), material);
   mesh.position.set(x, y+h/2, z);
   stageGroup.add(mesh);
   const rec = {
@@ -1727,6 +1737,8 @@ function addBlock(x,y,z,w,h,d,color,opts={}){
     minZ:z-d/2, maxZ:z+d/2, w,h,d,
     paintLevel:0, paintTeam:null,
     baseColor: color,
+    stagePartType:'STAGE_SOLID',
+    paintSurfaceMesh:mesh,
     climbable: (opts.climbable!==undefined? opts.climbable : h>=1.4)
   };
   collidableBlocks.push(rec);
@@ -1779,18 +1791,10 @@ function buildStage(){
 
   /* V67: large rectangular playable platform floating above the water.
      IMPORTANT: this is a real collision block, not just a decorative mesh. */
-  const baseFloor=addBlock(0,-0.04,0,PLAYABLE_HALF_X*2,0.08,PLAYABLE_HALF_Z*2,0x4b535d,{climbable:false});
-  baseFloor.stageBase=true;
-
-  /* Full rectangular paintable surface. The AA polygon is used only as the
-     obstacle/layout reference now; the player always has solid ground below. */
-  const baseTop=new THREE.Mesh(
-    new THREE.PlaneGeometry(PLAYABLE_HALF_X*2,PLAYABLE_HALF_Z*2),
-    new THREE.MeshLambertMaterial({map:paintTexture})
-  );
-  baseTop.rotation.x=-Math.PI/2;
-  baseTop.position.y=0.045;
-  stageGroup.add(baseTop);
+  /* Ground is one ordinary STAGE_SOLID. Its top face is the paint surface,
+     so there is no separate baseTop object anymore. */
+  addBlock(0,-0.04,0,PLAYABLE_HALF_X*2,0.08,PLAYABLE_HALF_Z*2,0x4b535d,
+    {climbable:false,paintTop:true});
 
   const waterMat=new THREE.MeshLambertMaterial({color:0x176b83});
   const water=new THREE.Mesh(new THREE.PlaneGeometry(STAGE_W+20,STAGE_D+20),waterMat);
@@ -4569,7 +4573,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const isSquid=!!keys.shift && onFighterInk(f) && f.ink>0;
     f.squid_mode=isSquid;
 
-    if(isSquid && (keys.w||keys.a||keys.s||keys.d)) consumeInk(f,0.04);
+    /* Squid movement itself does not consume ink. Ink is spent by weapon/sub
+       actions only; being in squid form is used for movement + regeneration. */
     regenPlayer(f,delta,isSquid);
 
     const gp=f.gearProfile||gearProfile(f);
@@ -11219,7 +11224,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     const marks=block.__v80WallMarks||[];
     for(const m of marks){
       if(m.team!==team)continue;
-      const r=Math.max(.25,m.r)+extra;
+      const r=Math.max(.25,m.r*1.18)+extra;
       if(m.face==='minX'||m.face==='maxX'){
         const faceX=(m.face==='minX'?block.minX:block.maxX);
         if(Math.abs(pos.x-faceX)<=1.05 && Math.hypot(pos.z-m.z,pos.y-m.y)<=r)return true;
@@ -11235,30 +11240,53 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 
   function v80WallVisual(point,normal,color,r){
     const g=v80Layer();if(!g)return;
-    const rr=Math.max(.34,Math.min(1.9,Number(r)||.75));
-    const geo=new THREE.CircleGeometry(1,18);
-    const pa=geo.attributes.position;
-    for(let i=1;i<pa.count;i++){
-      const a=Math.atan2(pa.getY(i),pa.getX(i));
-      const m=.84+Math.random()*.24;
-      pa.setX(i,Math.cos(a)*m);pa.setY(i,Math.sin(a)*m);
-    }
-    pa.needsUpdate=true;
-    const mat=new THREE.MeshBasicMaterial({color:v80Color(color),transparent:true,opacity:.88,depthWrite:false,side:THREE.DoubleSide});
-    const mesh=new THREE.Mesh(geo,mat);
+    const rr=Math.max(.28,Math.min(1.55,Number(r)||.7));
     const n=normal?.clone?normal.clone():new THREE.Vector3(0,0,1);
     if(n.lengthSq()<.0001)n.set(0,0,1);else n.normalize();
-    mesh.position.copy(point).addScaledVector(n,.035);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),n);
-    mesh.scale.setScalar(rr);
-    mesh.userData.v80WallInk=true;
-    g.add(mesh);
-    window.__v80WallVisuals=window.__v80WallVisuals||[];
-    window.__v80WallVisuals.push(mesh);
-    if(window.__v80WallVisuals.length>V80_MAX_WALL_MARKS){
-      const old=window.__v80WallVisuals.shift();
-      if(old?.parent)old.parent.remove(old);
-      try{old.geometry.dispose();old.material.dispose();}catch(_){}
+
+    /* Wall ink is an irregular core plus smaller satellite splashes.
+       The whole shape stays on the hit face instead of becoming a giant
+       circular blob. */
+    const up=new THREE.Vector3(0,1,0);
+    let side=new THREE.Vector3().crossVectors(up,n);
+    if(side.lengthSq()<.0001)side.set(1,0,0);
+    side.normalize();
+
+    function addBlob(center,rad,opacity,angle){
+      const geo=new THREE.CircleGeometry(1,18);
+      const pa=geo.attributes.position;
+      for(let i=1;i<pa.count;i++){
+        const a=Math.atan2(pa.getY(i),pa.getX(i))+angle;
+        const m=.82+Math.random()*.20;
+        pa.setX(i,Math.cos(a)*m);
+        pa.setY(i,Math.sin(a)*m);
+      }
+      pa.needsUpdate=true;
+      const mat=new THREE.MeshBasicMaterial({color:v80Color(color),transparent:true,opacity,depthWrite:false,side:THREE.DoubleSide});
+      const mesh=new THREE.Mesh(geo,mat);
+      mesh.position.copy(center).addScaledVector(n,.036);
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),n);
+      mesh.scale.setScalar(rad);
+      mesh.userData.v80WallInk=true;
+      g.add(mesh);
+      window.__v80WallVisuals=window.__v80WallVisuals||[];
+      window.__v80WallVisuals.push(mesh);
+      if(window.__v80WallVisuals.length>V80_MAX_WALL_MARKS){
+        const old=window.__v80WallVisuals.shift();
+        if(old?.parent)old.parent.remove(old);
+        try{old.geometry.dispose();old.material.dispose();}catch(_){}
+      }
+    }
+
+    addBlob(point,rr*.68,.90,Math.random()*Math.PI*2);
+    const count=3+Math.floor(Math.random()*3);
+    for(let i=0;i<count;i++){
+      const a=(Math.PI*2*i/count)+Math.random()*.55;
+      const off=rr*(.56+Math.random()*.28);
+      const center=point.clone()
+        .addScaledVector(side,Math.cos(a)*off)
+        .addScaledVector(up,Math.sin(a)*off);
+      addBlob(center,rr*(.16+Math.random()*.13),.62,Math.random()*Math.PI*2);
     }
   }
 
@@ -11447,7 +11475,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     for(const b of collidableBlocks||[]){
       b.unifiedStagePart=true;
       b.stageCollisionGroup='STAGE_SOLIDS';
-      if(b.stageBase)b.isGiantStageBase=true;
+      b.stagePartType='STAGE_SOLID';
       if(!b.paintSurfaceMesh)b.paintSurfaceMesh=b.mesh;
     }
     window.__V80_UNIFIED_STAGE_PARTS=(collidableBlocks||[]);
