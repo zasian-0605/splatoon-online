@@ -121,15 +121,28 @@ function serverPointInStage(x,z){
 function serverCellKey(x,z,y){
   return Math.floor(Number(x)/SERVER_CELL)+','+Math.floor(Number(z)/SERVER_CELL)+','+Math.round(Number(y||0)/SERVER_Y_STEP);
 }
-function markServerPaint(room,x,z,radius,team,y){
+function markServerPaint(room,x,z,radius,team,y,x2,z2){
   const r=Math.max(.2,Math.min(8,Number(radius)||0));
-  const minX=Math.floor((x-r)/SERVER_CELL),maxX=Math.ceil((x+r)/SERVER_CELL);
-  const minZ=Math.floor((z-r)/SERVER_CELL),maxZ=Math.ceil((z+r)/SERVER_CELL);
+  const sx=Number(x),sz=Number(z);
+  if(!Number.isFinite(sx)||!Number.isFinite(sz))return;
+  const ex=Number.isFinite(Number(x2))?Number(x2):sx;
+  const ez=Number.isFinite(Number(z2))?Number(z2):sz;
+  const dist=Math.hypot(ex-sx,ez-sz);
+  const steps=Math.max(0,Math.min(48,Math.ceil(dist/Math.max(.75,r*.55))));
   const gy=Math.round((Number(y)||0)/SERVER_Y_STEP);
-  for(let gx=minX;gx<=maxX;gx++){
-    for(let gz=minZ;gz<=maxZ;gz++){
-      const cx=(gx+.5)*SERVER_CELL,cz=(gz+.5)*SERVER_CELL;
-      if(Math.hypot(cx-x,cz-z)<=r+1 && serverPointInStage(cx,cz))room.inkCells.set(gx+','+gz+','+gy,team);
+
+  for(let i=0;i<=steps;i++){
+    const t=steps?i/steps:0;
+    const px=sx+(ex-sx)*t,pz=sz+(ez-sz)*t;
+    const minX=Math.floor((px-r)/SERVER_CELL),maxX=Math.ceil((px+r)/SERVER_CELL);
+    const minZ=Math.floor((pz-r)/SERVER_CELL),maxZ=Math.ceil((pz+r)/SERVER_CELL);
+    for(let gx=minX;gx<=maxX;gx++){
+      for(let gz=minZ;gz<=maxZ;gz++){
+        const cx=(gx+.5)*SERVER_CELL,cz=(gz+.5)*SERVER_CELL;
+        if(Math.hypot(cx-px,cz-pz)<=r+1 && serverPointInStage(cx,cz)){
+          room.inkCells.set(gx+','+gz+','+gy,team);
+        }
+      }
     }
   }
 }
@@ -756,9 +769,18 @@ wss.on('connection', ws => {
       const serverPos=player.serverPos||player.spawn,y=Number(serverPos.y)||0,cost=Math.max(.35,Math.min(8,.42+radius*.72));
       if(player.serverInk<=.01)return; player.serverInk=Math.max(0,player.serverInk-cost);
       const colorHex=Number.isFinite(Number(player.config?.inkColorHex))?Number(player.config.inkColorHex):(player.team==='A'?0xe3ff00:0xff2255);
-      markServerPaint(room,x,z,radius,player.team,y);
-      const x2=Number(m.x2),z2=Number(m.z2); if(Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2))markServerPaint(room,x2,z2,radius,player.team,y);
-      broadcast(room,{type:'paint',id:player.id,team:player.team,x,z,radius,colorHex,y,mult:1,...(Number.isFinite(x2)&&Number.isFinite(z2)?{x2,z2}:{})},player.id);
+      const x2=Number(m.x2),z2=Number(m.z2);
+      markServerPaint(room,x,z,radius,player.team,y,
+        Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2)?x2:undefined,
+        Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2)?z2:undefined);
+      const pn={
+        type:'paint',id:player.id,team:player.team,x,z,radius,colorHex,y,mult:1,
+        ...(Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2)?{x2,z2}:{}),
+        ...(Number.isFinite(Number(m.nx))&&Number.isFinite(Number(m.ny))&&Number.isFinite(Number(m.nz))?{
+          nx:Number(m.nx),ny:Number(m.ny),nz:Number(m.nz)
+        }:{})
+      };
+      broadcast(room,pn,player.id);
       send(player.ws,{type:'serverInk',ink:player.serverInk}); return;
     }
 
