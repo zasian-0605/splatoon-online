@@ -1,0 +1,18 @@
+name: ChatGPT ZIP Export
+on:
+  push:
+    branches:
+      - chatgpt-export-2026-09-29
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create ZIP
+        run: |
+          zip -r /tmp/splatoon-online.zip . -x ".git/*" "splatoon-online.zip"
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: splatoon-online
+          path: /tmp/splatoon-online.zip

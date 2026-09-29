@@ -53,7 +53,8 @@ v38: v25ベースの動作系を維持しつつ、平面大型ステージ、相
 - HTML構文検証スクリプトを修正し、`npm run validate` を追加。
 
 
-## v80（ChatGPT検証版）
-- Three.js r128を `three@0.128.0` としてnpm依存に追加。
-- ブラウザは同一Renderサービスの `/node_modules/three/build/three.min.js` を使用し、cdnjsへの依存を削減。
-- `npm run validate` によるHTML/JavaScript検証を確認。
+### v80 安定化（ChatGPT検証）
+- Three.js r128をnpm依存（three@0.128.0）に変更し、外部cdnjsへの依存を削減。
+- ブラウザ側は `/node_modules/three/build/three.min.js` を同一Renderサービスから読み込む。
+- 既存の高低差・AIナビゲーション・3Dインク・オンライン同期を保持。
+- `npm run validate` のHTML/JavaScript検証を通過。
