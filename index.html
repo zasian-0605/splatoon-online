@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V85-WALL-INK-RARE-DROPS-3RANGE-2026-09-29';
+  const BUILD_ID='V86-WALL-CLIMB-ALL-RANGE-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -3645,12 +3645,30 @@ function getClimbableWallNear(x,z,y,team){
   let best=null,bestDist=Infinity;
   for(const b of collidableBlocks||[]){
     if((b.maxY-b.minY)<1.3 || !b.climbable) continue;
-    if(b.paintTeam!==team || b.paintLevel<20) continue;
     if(y > b.maxY-0.08 || y+1.7 < b.minY) continue;
+
+    /* 壁全体のpaintTeamだけでなく、実際の壁インク記録も確認する。 */
+    let paintedForTeam=(b.paintTeam===team && Number(b.paintLevel||0)>=20);
+    if(!paintedForTeam){
+      const marks=b.__v82WallMarks||[];
+      const cx=(b.minX+b.maxX)/2,cy=(b.minY+b.maxY)/2,cz=(b.minZ+b.maxZ)/2;
+      const lx=x-cx,ly=y-cy,lz=z-cz;
+      for(const m of marks){
+        if(m.team!==team)continue;
+        const rr=Number(m.r)||0.7;
+        if((m.face==='minX'||m.face==='maxX')
+          ? Math.abs(lx-m.lx)<=1.0 && Math.hypot(lz-m.lz,ly-m.ly)<=rr+.65
+          : Math.abs(lz-m.lz)<=1.0 && Math.hypot(lx-m.lx,ly-m.ly)<=rr+.65){
+          paintedForTeam=true;break;
+        }
+      }
+    }
+    if(!paintedForTeam) continue;
+
     const dx=x<b.minX ? b.minX-x : x>b.maxX ? x-b.maxX : 0;
     const dz=z<b.minZ ? b.minZ-z : z>b.maxZ ? z-b.maxZ : 0;
     const d=Math.hypot(dx,dz);
-    if(d<=0.95 && d<bestDist){ best=b; bestDist=d; }
+    if(d<=1.15 && d<bestDist){ best=b; bestDist=d; }
   }
   return best;
 }
@@ -12188,13 +12206,34 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
   const legacyUpdateV82=updateBullets;
   updateBullets=function(dt){
     const touched=[];
+    const before=[];
     for(const b of bullets||[]){
       if(b?.sourceFighter?.isPlayer){
         touched.push([b,b.sourceFighter]);
         b.sourceFighter=Object.assign({},b.sourceFighter,{isPlayer:false});
       }
+      before.push([b,b?.mesh?.position?.clone?b.mesh.position.clone():null]);
     }
+
     try{legacyUpdateV82(dt);}catch(_){}
+
+    /* V86: legacy normal trajectoryにも射程超過を共通適用。 */
+    for(const [b,prev] of before){
+      if(!b||!bullets.includes(b)||!prev)continue;
+      if(!Number.isFinite(b.maxRange)||b.maxRange<=0)continue;
+      const moved=Math.hypot(
+        b.mesh.position.x-prev.x,b.mesh.position.z-prev.z
+      );
+      b.__v86RangeDistance=Number(b.__v86RangeDistance||0)+moved;
+      if(!b.__v86RangeSoftened && b.__v86RangeDistance>=b.maxRange){
+        b.__v86RangeSoftened=true;
+        b.__v86RangeSoftAt=Number(b.age||0);
+        b.velocity.x*=3/50;
+        b.velocity.z*=3/50;
+        b.life=Math.max(Number(b.life)||0,Number(b.age||0)+.38);
+      }
+    }
+
     for(const [b,src] of touched){
       if(bullets.includes(b))b.sourceFighter=src;
     }
