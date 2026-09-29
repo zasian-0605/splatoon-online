@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V88-WALL-CLIMB-ROOT-FIX-2026-09-29';
+  const BUILD_ID='V90-SPECIAL-8TO13-OBSTACLE-FIX-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -12526,6 +12526,363 @@ for(const b of collidableBlocks||[]){if(b.stagePartType==='STAGE_SOLID'){if(b.cl
 window.__V89_WALL_CLIMB_READY=true;window.__V89_WALL_PAINT_READY=true;
 })();
 </script>
+</script>
+<script>
+/* V90: obstacle-top wall launch fix + specials 8-13 implementation.
+   Based on the attached special-weapon guide. Controls are kept as-is and
+   no extra button-help UI is added.
+*/
+(function(){
+'use strict';
+const BUILD='V90-SPECIAL-8TO13-OBSTACLE-FIX-2026-09-29';
+window.__ONLINE_BUILD_ID=BUILD;
+window.__V90_BUILD=BUILD;
+const SPECIALS_V90=new Set(['メガホンレーザー5.1ch','ジェットパック','ウルトラハンコ','カニタンク','エナジースタンド','サメライド']);
+
+/* Obstacle-top fix: if the fighter is actually standing on a platform,
+   never let a taller neighbouring wall win the attachment search. */
+const v90MoveBase=tryMoveWithCollision;
+function v90OnSolidTop(f){
+  if(!f||!f.pos)return false;
+  let support=0;
+  try{support=getSupportHeight(f.pos.x,f.pos.z,f.pos.y+3);}catch(_){}
+  return support>0 && Math.abs(f.pos.y-support)<0.32;
+}
+tryMoveWithCollision=function(f,v,dt,isSquid){
+  if(f&&v90OnSolidTop(f)){
+    if(f.__v89WallClimbing){
+      f.__v89WallClimbing=false;f.__v89Wall=null;f.__v89WallFace=null;
+    }
+    return v90MoveBase(f,v,dt,false);
+  }
+  return v90MoveBase(f,v,dt,isSquid);
+};
+window.tryMoveWithCollision=tryMoveWithCollision;
+
+function tNow(){return performance.now();}
+function facingOf(f){
+  const d=new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+  return d.lengthSq()>.001?d.normalize():new THREE.Vector3(0,0,1);
+}
+function colorOf(f){return getFighterInkHex(f);}
+function moveInputDir(){
+  let x=(keys.d?1:0)-(keys.a?1:0),z=(keys.s?1:0)-(keys.w?1:0);
+  if(x===0&&z===0)return null;
+  const l=Math.hypot(x,z)||1;x/=l;z/=l;
+  const yy=playerFighter?.root?.rotation?.y ?? yaw;
+  return new THREE.Vector3(x*Math.cos(yy)+z*Math.sin(yy),0,-x*Math.sin(yy)+z*Math.cos(yy)).normalize();
+}
+function removeObj(o){
+  if(!o)return;
+  if(o.parent)o.parent.remove(o);
+  o.traverse?.(n=>{n.geometry?.dispose?.();if(n.material){const a=Array.isArray(n.material)?n.material:[n.material];a.forEach(m=>m?.dispose?.());}});
+}
+function basicMat(c,o=1){return new THREE.MeshBasicMaterial({color:c,transparent:o<1,opacity:o,depthWrite:false});}
+function makeLine(c,o=.7){
+  const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+  const m=new THREE.LineBasicMaterial({color:c,transparent:true,opacity:o,depthTest:false,depthWrite:false});
+  const l=new THREE.Line(g,m);l.renderOrder=9998;scene.add(l);return l;
+}
+function setLine(l,a,b){l?.geometry?.setFromPoints([a,b]);}
+function setHuman(f,on){
+  if(f.human)f.human.visible=on;
+  if(f.squid)f.squid.visible=!on;
+}
+
+/* 8. メガホンレーザー5.1ch */
+function makeMegaVisual(f){
+  const g=new THREE.Group();g.name='V90_Megaphone';
+  for(let i=0;i<6;i++){
+    const h=new THREE.Mesh(new THREE.CylinderGeometry(.08,.30,.58,10,1,true),basicMat(0xffdf66,.95));
+    const a=(i-2.5)*.34;h.rotation.z=Math.PI*.5;h.rotation.y=a;h.position.set(Math.sin(a)*.65,1.7,Math.cos(a)*.65);g.add(h);
+  }
+  f.root.add(g);return g;
+}
+function megaTargets(f){
+  const aim=facingOf(f);
+  if(f.isPlayer&&camera){camera.getWorldDirection(aim);aim.y=0;if(aim.lengthSq()<.01)aim.set(0,0,1);aim.normalize();}
+  const a=[];
+  for(const o of fighters||[]){
+    if(!o?.alive||o.team===f.team)continue;
+    const d=o.pos.clone().sub(f.pos);d.y=0;const dist=d.length();if(dist<.01||dist>45)continue;d.normalize();
+    const ang=Math.acos(Math.max(-1,Math.min(1,d.dot(aim))));
+    a.push({o,score:ang*18+dist*.025,ang});
+  }
+  a.sort((x,y)=>x.score-y.score);
+  return a.filter(v=>v.ang<Math.PI*.52).slice(0,3).map(v=>v.o);
+}
+function stopMega(f){const s=f?.__v90Mega;if(!s)return;(s.lines||[]).forEach(removeObj);removeObj(s.visual);f.__v90Mega=null;}
+function startMega(f){
+  stopMega(f);
+  f.__v90Mega={until:tNow()+3000,targets:megaTargets(f),lines:[],lastRetarget:0,lastHit:new Map(),visual:makeMegaVisual(f)};
+  for(let i=0;i<6;i++)f.__v90Mega.lines.push(makeLine(colorOf(f),.62));
+}
+
+/* 9. ジェットパック */
+function makeJetVisual(f){
+  const g=new THREE.Group();g.name='V90_Jetpack';
+  for(const x of [-.34,.34]){
+    const tank=new THREE.Mesh(new THREE.CylinderGeometry(.15,.19,.66,10),basicMat(0x66ddff,.9));tank.position.set(x,1.0,0);g.add(tank);
+    const flame=new THREE.Mesh(new THREE.ConeGeometry(.13,.55,8),basicMat(0xff9944,.9));flame.rotation.x=Math.PI;flame.position.set(x,.47,0);g.add(flame);
+  }
+  const core=new THREE.Mesh(new THREE.SphereGeometry(.24,10,10),basicMat(0x66ddff,.75));core.position.y=1.25;g.add(core);
+  f.root.add(g);return g;
+}
+function stopJet(f){const s=f?.__v90Jet;if(!s)return;removeObj(s.visual);f.__v90Jet=null;}
+function startJet(f){
+  stopJet(f);
+  const n=tNow(),home=f.pos.clone();
+  f.__v90Jet={until:n+7500,home,baseY:home.y+3.1,vy:0,visual:makeJetVisual(f)};
+  f.v60InkjetUntil=f.__v90Jet.until;
+  f.v60InkjetHome=home.clone();
+  f.invulnUntil=Math.max(f.invulnUntil||0,n+300);
+}
+
+/* 10. ウルトラハンコ */
+function makeHammerVisual(f){
+  const g=new THREE.Group();g.name='V90_UltraStamp';
+  const h=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,1.8,8),basicMat(0x444444));h.position.y=1.35;
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.98,.58,.42),basicMat(0x9b59ff));head.position.set(0,2.06,.16);
+  const plate=new THREE.Mesh(new THREE.BoxGeometry(1.08,.11,.47),basicMat(0xe7ddff));plate.position.set(0,1.78,.16);
+  g.add(h,head,plate);f.root.add(g);return g;
+}
+function stopStamp(f){const s=f?.__v90Stamp;if(!s)return;removeObj(s.visual);f.__v90Stamp=null;}
+function startStamp(f){
+  stopStamp(f);const n=tNow();
+  f.__v90Stamp={until:n+9000,visual:makeHammerVisual(f),lastSmash:0,lastSpace:false};
+  f.v60UltraStampUntil=f.__v90Stamp.until;f.v60StampLast=0;
+  f.invulnUntil=Math.max(f.invulnUntil||0,n+9000);
+}
+
+/* 11. カニタンク */
+function makeCrabVisual(f){
+  const g=new THREE.Group();g.name='V90_CrabTank';
+  const body=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),basicMat(0x66bbcc,.92));body.scale.set(1.25,.72,1.25);body.position.y=.9;g.add(body);
+  for(const x of [-.42,.42]){const leg=new THREE.Mesh(new THREE.CylinderGeometry(.11,.16,.85,8),basicMat(0x335f72,.95));leg.rotation.z=x<0?-0.35:.35;leg.position.set(x,.2,0);g.add(leg);}
+  for(const x of [-.38,.38]){const gun=new THREE.Mesh(new THREE.CylinderGeometry(.12,.18,.95,8),basicMat(0x223344,.95));gun.rotation.x=Math.PI*.5;gun.position.set(x,1.05,.88);g.add(gun);}
+  f.root.add(g);return g;
+}
+function stopCrab(f){const s=f?.__v90Crab;if(!s)return;removeObj(s.visual);f.__v90Crab=null;}
+function startCrab(f){
+  stopCrab(f);const n=tNow();
+  f.__v90Crab={until:n+9000,lastSpace:false,ball:false,visual:makeCrabVisual(f)};
+  f.v60CrabUntil=f.__v90Crab.until;f.invulnUntil=Math.max(f.invulnUntil||0,n+500);f.speedBoostUntil=n+9000;
+}
+
+/* 12. エナジースタンド */
+function makeStand(st){
+  const g=new THREE.Group();g.name='V90_EnergyStand';
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.15,2.2,.75),basicMat(st.color,.9));body.position.y=1.1;g.add(body);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(1.3,.24,.82),basicMat(0xffffff,.9));top.position.y=2.25;g.add(top);
+  const cans=[];
+  for(let i=0;i<4;i++){const c=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.45,10),basicMat(i%2?0xe3ff00:0xffffff,.95));c.rotation.x=Math.PI*.5;c.position.set((i-1.5)*.28,1.2,.43);g.add(c);cans.push(c);}
+  g.position.copy(st.pos);scene.add(g);return {g,cans};
+}
+function startStand(f){
+  const n=tNow(),st={owner:f,pos:f.pos.clone(),team:f.team,color:colorOf(f),end:n+15000,cans:4,consumed:new Set(),group:null,canMeshes:null};
+  const v=makeStand(st);st.group=v.g;st.canMeshes=v.cans;sp90.stands.push(st);
+}
+
+/* 13. サメライド */
+function makeReefVisual(f){
+  const g=new THREE.Group();g.name='V90_Reefslider';
+  const shark=new THREE.Mesh(new THREE.ConeGeometry(.66,2.3,10),basicMat(0x4ac7ff,.94));shark.rotation.x=Math.PI*.5;shark.position.y=.34;g.add(shark);
+  const fin=new THREE.Mesh(new THREE.ConeGeometry(.25,.75,5),basicMat(0x277ea2,.94));fin.position.y=.80;g.add(fin);
+  f.root.add(g);return g;
+}
+function stopReef(f){const s=f?.__v90Reef;if(!s)return;removeObj(s.visual);f.__v90Reef=null;}
+function startReef(f){
+  stopReef(f);const n=tNow();
+  f.__v90Reef={until:n+1700,dir:facingOf(f),home:f.pos.clone(),visual:makeReefVisual(f),active:true};
+  f.invulnUntil=Math.max(f.invulnUntil||0,n+1600);
+}
+
+const sp90={stands:[]};
+
+function startV90Special(f,name,target,remote){
+  if(!f?.alive)return false;
+  if(name==='メガホンレーザー5.1ch')startMega(f);
+  else if(name==='ジェットパック')startJet(f);
+  else if(name==='ウルトラハンコ')startStamp(f);
+  else if(name==='カニタンク')startCrab(f);
+  else if(name==='エナジースタンド')startStand(f);
+  else if(name==='サメライド')startReef(f);
+  else return false;
+  if(!remote&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+    const p=target||f.pos;
+    try{onlineSocket.send(JSON.stringify({type:'special',specialName:name,x:p.x,y:p.y,z:p.z,extra:{version:BUILD}}));}catch(_){}
+  }
+  return true;
+}
+
+function updateV90Specials(delta){
+  const n=tNow();
+  for(const f of fighters||[]){
+    if(!f)continue;
+
+    const m=f.__v90Mega;
+    if(m){
+      if(!f.alive||n>=m.until){stopMega(f);}
+      else{
+        if(n-m.lastRetarget>160){m.lastRetarget=n;m.targets=megaTargets(f);}
+        const side=new THREE.Vector3(-Math.cos(f.root.rotation.y),0,Math.sin(f.root.rotation.y));
+        let k=0;
+        for(const target of (m.targets||[]).slice(0,3)){
+          if(!target?.alive)continue;
+          const a0=f.pos.clone();a0.y+=1.55;const b0=target.pos.clone();b0.y+=1;
+          for(const s of [-1,1]){
+            const a=a0.clone().addScaledVector(side,.18*s),b=b0.clone().addScaledVector(side,.18*s);
+            setLine(m.lines[k++],a,b);
+            const key=String(target.id),last=m.lastHit.get(key)||0;
+            if(n-last>190){m.lastHit.set(key,n);applyDamage(target,28,f);}
+          }
+        }
+        while(k<m.lines.length){setLine(m.lines[k++],f.pos,f.pos);}
+      }
+    }
+
+    const j=f.__v90Jet;
+    if(j){
+      if(!f.alive||n>=j.until){
+        if(f.alive)f.pos.copy(j.home);
+        f.v60InkjetUntil=0;stopJet(f);
+      }else{
+        const targetY=j.baseY+(keys.space?3.0:0)-(keys.shift?2.0:0);
+        j.vy+=(targetY-f.pos.y)*9*delta;j.vy*=Math.pow(.02,delta);
+        f.pos.y+=j.vy*delta;f.pos.y=Math.max(1.5,Math.min(14,f.pos.y));
+        if(j.visual)j.visual.rotation.y+=delta*2.5;
+        setHuman(f,true);
+      }
+    }
+
+    const u=f.__v90Stamp;
+    if(u){
+      if(!f.alive||n>=u.until){f.v60UltraStampUntil=0;f.invulnUntil=0;stopStamp(f);}
+      else{
+        if(u.visual){u.visual.rotation.y=f.root.rotation.y;u.visual.position.z=isShooting?.20:0;u.visual.rotation.x=isShooting?-.08:0;}
+        if(keys.space&&!u.lastSpace&&!isShooting&&n-u.lastSmash>550){
+          u.lastSmash=n;const p=f.pos.clone();p.y+=.15;
+          explodeAt(p,3.4,120,f.team,{paintRadius:3.8,colorHex:colorOf(f),sourceFighter:f});
+        }
+        u.lastSpace=!!keys.space;
+      }
+    }
+
+    const c=f.__v90Crab;
+    if(c){
+      if(!f.alive||n>=c.until){f.v60CrabUntil=0;f.invulnUntil=0;stopCrab(f);}
+      else{
+        const dir=moveInputDir();c.ball=!!keys.shift;
+        if(dir){const v=dir.clone().multiplyScalar(c.ball?13:5.5);tryMoveWithCollision(f,v,delta,false);f.root.rotation.y=Math.atan2(v.x,v.z);}
+        if(c.visual)c.visual.scale.setScalar(c.ball?1.15:1);
+        if(keys.space&&!c.lastSpace){
+          const d=facingOf(f),o=f.pos.clone();o.y+=1.2;
+          const b=spawnBulletV60(f,d,{speed:44,damage:60,gravity:12,radius:.25,paintRadius:2.2,life:1.9,explosive:true,explosionRadius:2.8,splashDamage:35,kind:'crabCannon'});
+          b.paintTrail=true;
+        }
+        c.lastSpace=!!keys.space;setHuman(f,true);
+      }
+    }
+
+    const r=f.__v90Reef;
+    if(r){
+      if(!f.alive||n>=r.until||!r.active){
+        if(f.alive)explodeAt(f.pos.clone(),3.5,220,f.team,{paintRadius:5,colorHex:colorOf(f),sourceFighter:f});
+        stopReef(f);
+      }else{
+        const before=f.pos.clone(),v=r.dir.clone().multiplyScalar(26*delta);
+        const ok=tryMoveWithCollision(f,v,delta,false);
+        if(!ok){f.pos.copy(before);r.active=false;continue;}
+        paintGround(f.pos.x,f.pos.z,1.6,colorOf(f),{noNetwork:false});
+        for(const o of fighters||[])if(o.alive&&o.team!==f.team&&o.pos.distanceTo(f.pos)<2)applyDamage(o,180,f);
+        if(r.visual){r.visual.rotation.y=Math.atan2(r.dir.x,r.dir.z);r.visual.rotation.z=Math.sin(n*.03)*.08;}
+        setHuman(f,true);
+      }
+    }
+  }
+
+  for(let i=sp90.stands.length-1;i>=0;i--){
+    const st=sp90.stands[i];
+    if(n>=st.end||st.cans<=0){removeObj(st.group);sp90.stands.splice(i,1);continue;}
+    if(st.group)st.group.rotation.y+=delta*.6;
+    for(const ally of fighters||[]){
+      if(!ally.alive||ally.team!==st.team||st.consumed.has(String(ally.id)))continue;
+      if(ally.pos.distanceTo(st.pos)>2.5)continue;
+      st.consumed.add(String(ally.id));st.cans--;
+      const until=n+17000;
+      ally.__v90EnergyUntil=until;ally.speedBoostUntil=Math.max(ally.speedBoostUntil||0,until);
+      ally.ink=Math.min(100,ally.ink+35);ally.v90InkResistUntil=until;ally.v90RespawnBoostUntil=until;
+      const can=st.canMeshes?.find(x=>x.visible);if(can)can.visible=false;
+    }
+  }
+}
+
+function cleanupV90(f){
+  stopMega(f);stopJet(f);stopStamp(f);stopCrab(f);stopReef(f);
+  for(let i=sp90.stands.length-1;i>=0;i--){
+    if(sp90.stands[i].owner===f){removeObj(sp90.stands[i].group);sp90.stands.splice(i,1);}
+  }
+}
+
+/* Special activation */
+const fireSpecialV90Base=fireSpecial;
+fireSpecial=function(f){
+  if(!f?.alive)return;
+  const name=f.weapon?.special;
+  if(SPECIALS_V90.has(name)){
+    if(f.specialGauge<100){if(f.isPlayer)showToast('スペシャルゲージをためてください');return;}
+    f.specialGauge=0;f.ink=100;
+    const target=f.pos.clone().addScaledVector(facingOf(f),18);
+    if(f.isPlayer&&camera){const d=new THREE.Vector3();camera.getWorldDirection(d);d.y=0;if(d.lengthSq()>.01)target.copy(f.pos).addScaledVector(d.normalize(),18);}
+    startV90Special(f,name,target,false);try{sfx('special');}catch(_){}
+    return;
+  }
+  return fireSpecialV90Base(f);
+};
+window.fireSpecial=fireSpecial;
+
+/* Remote special events use the exact same six implementations. */
+const receiveSpecialV90Base=window.__receiveOriginalSpecial;
+window.__receiveOriginalSpecial=function(f,name,p,extra){
+  if(SPECIALS_V90.has(name)){startV90Special(f,name,p,true);return;}
+  return receiveSpecialV90Base?.(f,name,p,extra);
+};
+
+/* Special movement never enters the wall-climb path. */
+const movementV90Base=updatePlayerMovement;
+updatePlayerMovement=function(delta){
+  const f=playerFighter;
+  if(!f?.alive)return movementV90Base(delta);
+  if(f.__v90Jet){
+    const old=keys.shift;keys.shift=false;movementV90Base(delta);keys.shift=old;return;
+  }
+  if(f.__v90Crab||f.__v90Reef||f.__v90Stamp)return;
+  return movementV90Base(delta);
+};
+window.updatePlayerMovement=updatePlayerMovement;
+
+/* Make the requested 8-13 names actually selectable in the existing roster. */
+for(const w of weaponList||[])if(w.special==='スカイパック')w.special='ジェットパック';
+const assign={'ジェットパック':4,'ウルトラハンコ':26,'カニタンク':24,'エナジースタンド':27,'メガホンレーザー5.1ch':37,'サメライド':25};
+for(const [name,id] of Object.entries(assign)){const w=weaponList.find(x=>x.id===id);if(w)w.special=name;}
+
+const killV90Base=killFighter;
+killFighter=function(f){
+  cleanupV90(f);f.v60InkjetUntil=0;f.v60CrabUntil=0;f.v60UltraStampUntil=0;
+  return killV90Base(f);
+};
+
+const updateOngoingV90Base=window.updateOngoingEffects;
+window.updateOngoingEffects=function(delta){
+  try{updateOngoingV90Base?.(delta);}catch(e){console.warn('[V90 ongoing]',e);}
+  updateV90Specials(delta);
+};
+try{updateOngoingEffects=window.updateOngoingEffects;}catch(_){}
+
+window.__V90_SPECIALS_READY=true;
+window.__V90_OBSTACLE_TOP_FIX=true;
+console.log('[SPLATOON ONLINE]['+BUILD+'] ready');
+})();
 </script>
 </body>
 </html>
