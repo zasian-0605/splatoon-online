@@ -7,7 +7,7 @@
 <script>
 /* V49: browser-side online diagnostics */
 (function(){
-  const BUILD_ID='V86-WALL-CLIMB-ALL-RANGE-2026-09-29';
+  const BUILD_ID='V87-PERSIST-NAMES-SENSOR-2026-09-29';
   window.__ONLINE_BUILD_ID=BUILD_ID;
   window.__onlineLog=function(tag,data){
     try{
@@ -4981,6 +4981,35 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           }
           return;
         }
+        if(m.type==='sensorMark'){
+          const targetId=String(m.targetId||'');
+          const until=Number(m.until)||0;
+          let target=fighters.find(f=>String(f.id)===targetId);
+          if(!target && targetId!==String(onlinePlayerId||'')){
+            target=ensureRemoteFighter({
+              id:targetId,name:m.targetName,team:m.targetTeam,
+              weaponId:Number(m.weaponId)||0,
+              spawn:{x:Number(m.x)||0,z:Number(m.z)||0},
+              config:m.config||{}
+            });
+          }
+          if(target && targetId!==String(onlinePlayerId||'')){
+            target.displayName=String(m.targetName||target.displayName||target.id);
+            target.revealedUntil=Math.max(Number(target.revealedUntil)||0,until);
+            target._sensorViewerUntil=until;
+            target._sensorViewerSpecial=String(m.specialName||'');
+          }
+          return;
+        }
+        if(m.type==='sensorTagged'){
+          if(String(m.targetId||'')===String(onlinePlayerId||'')){
+            const until=Number(m.until)||0;
+            playerFighter._sensorTaggedUntil=Math.max(Number(playerFighter._sensorTaggedUntil)||0,until);
+            playerFighter._sensorTaggedSpecial=String(m.specialName||'');
+            playerFighter._sensorTaggedBy=String(m.sourceName||'');
+          }
+          return;
+        }
         if(m.type==='state'){applyRemoteState(m);return;}
         if(m.type==='paint'){
           const x2=Number(m.x2), z2=Number(m.z2);
@@ -5074,11 +5103,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     };
     const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
     rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;
+    rf.displayName=String(p.name||p.accountName||p.id);
     remoteMap.set(p.id,rf);fighters.push(rf);return rf;
   }
   function applyRemoteState(m){
     if(m.id===onlinePlayerId)return;
     const p=ensureRemoteFighter(m);if(!p)return;
+    p.displayName=String(m.name||p.displayName||p.id);
     const wasAlive=p.alive;p.pos.lerp(new THREE.Vector3(m.x,m.y||0,m.z),.55);p.root.rotation.y=m.yaw||0;p.root.visible=m.alive!==false;p.alive=m.alive!==false;p.hp=m.hp??p.hp;p.ink=m.ink??p.ink;p.squid_mode=!!m.squid;p.weapon=weaponList[m.weaponId]||p.weapon;
     updateFighterAnimation(p,!!m.moving,p.squid_mode);
     if(wasAlive&&!p.alive) addKillFeed(`${m.name||p.id} がやられた`,'dead');
@@ -5734,10 +5765,47 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     else window.showAccountScreen();
   };
 
-  // V43: require an explicit login on every page load.
-  // Stored tokens/profiles are intentionally not auto-restored.
+  // V43/V87: restore the authenticated account after a normal page reload.
   window.__accountReady=false;
   window.playerAccount={token:null,profile:null,online:false};
+
+  (async function autoRestoreAccountV87(){
+    const token=localStorage.getItem('splatoonAccountToken');
+    const cached=localStorage.getItem('splatoonAccountProfile');
+    if(cached){
+      try{
+        const cp=JSON.parse(cached);
+        if(cp&&cp.name&&typeof window.updateAccountProfileUI==='function'){
+          window.updateAccountProfileUI(cp);
+        }
+      }catch(_){}
+    }
+    if(!token||location.protocol==='file:')return;
+    try{
+      let origin=(typeof getOnlineServerOrigin==='function'
+        ? getOnlineServerOrigin()
+        : location.origin)||'';
+      if(origin.endsWith('/'))origin=origin.slice(0,-1);
+      const r=await fetch(origin+'/api/account/me',{
+        method:'GET',cache:'no-store',
+        headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}
+      });
+      const d=await r.json().catch(()=>null);
+      if(!r.ok||!d||!d.ok||!d.profile)throw new Error('session invalid');
+
+      window.__accountReady=true;
+      window.playerAccount={token:token,profile:d.profile,online:true};
+      localStorage.setItem('splatoonAccountProfile',JSON.stringify(d.profile));
+      if(typeof window.updateAccountProfileUI==='function')window.updateAccountProfileUI(d.profile);
+      const screen=document.getElementById('account-screen');
+      if(screen)screen.style.display='none';
+      if(typeof window.__startCustomizeBase==='function'){
+        setTimeout(()=>window.__startCustomizeBase(),0);
+      }
+    }catch(_){
+      /* キャッシュは残し、トークンが無効なときだけ通常ログイン画面を使う。 */
+    }
+  })();
 
   // ---------------------------------------------------------
   // v37 safe squid system
@@ -12251,6 +12319,96 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
   };
 
   window.__V82_PHYSICS_READY=true;
+})();
+</script>
+
+<script>
+/* V87: teammate names + sensor line/marker, visible through walls. */
+(function(){
+  'use strict';
+
+  function makeV87Sprite(text,fill,width,height){
+    const c=document.createElement('canvas');c.width=640;c.height=128;
+    const x=c.getContext('2d');
+    x.clearRect(0,0,c.width,c.height);
+    x.font='900 52px Arial Black,Meiryo,sans-serif';
+    x.textAlign='center';x.textBaseline='middle';
+    x.lineWidth=10;x.strokeStyle='rgba(0,0,0,.92)';x.strokeText(text,320,64);
+    x.fillStyle=fill||'#fff';x.fillText(text,320,64);
+    const tex=new THREE.CanvasTexture(c);
+    const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false});
+    const spr=new THREE.Sprite(mat);
+    spr.scale.set(width||4.4,height||.8,1);
+    spr.renderOrder=10000;
+    spr.userData.v87Text=text;
+    return spr;
+  }
+
+  function teammateTag(f){
+    if(!f||!f.remote)return;
+    const t=String(f.displayName||f.id||'味方');
+    if(f._v87NameTag&&f._v87NameTag.userData.v87Text===t)return;
+    if(f._v87NameTag?.parent)f._v87NameTag.parent.remove(f._v87NameTag);
+    const tag=makeV87Sprite('★ '+t,'#fff',4.8,.84);
+    tag.position.set(0,2.45,0);
+    f.root.add(tag);f._v87NameTag=tag;
+  }
+
+  function sensorLine(f){
+    if(f._v87SensorLine)return f._v87SensorLine;
+    const geo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+    const mat=new THREE.LineBasicMaterial({color:f.team==='A'?0xe3ff00:0xff2255,transparent:true,opacity:.58,depthTest:false,depthWrite:false});
+    const line=new THREE.Line(geo,mat);
+    line.renderOrder=9999;scene.add(line);f._v87SensorLine=line;return line;
+  }
+
+  function sensorTargetTag(f){
+    if(f._v87SensorTargetTag)return f._v87SensorTargetTag;
+    const tag=makeV87Sprite('◎ '+String(f.displayName||f.id),'#ffe36e',4.7,.82);
+    tag.position.set(0,3.05,0);f.root.add(tag);f._v87SensorTargetTag=tag;return tag;
+  }
+
+  function sensorWarningTag(f){
+    if(f._v87SensorWarning)return f._v87SensorWarning;
+    const tag=makeV87Sprite('⚠ SENSOR','#ffe36e',3.8,.72);
+    tag.position.set(0,3.1,0);f.root.add(tag);f._v87SensorWarning=tag;return tag;
+  }
+
+  function updateV87(){
+    const now=performance.now();
+    for(const f of fighters||[]){
+      if(!f)continue;
+      if(f.remote&&f.team===onlineTeam){
+        teammateTag(f);
+        if(f._v87NameTag)f._v87NameTag.visible=!!f.alive;
+      }else if(f._v87NameTag){
+        f._v87NameTag.visible=false;
+      }
+
+      const until=Number(f._sensorViewerUntil)||0;
+      if(f.remote&&f.team!==onlineTeam&&until>now&&f.alive&&playerFighter){
+        const line=sensorLine(f);
+        const a=playerFighter.pos.clone();const b=f.pos.clone();a.y+=1;b.y+=1;
+        line.geometry.setFromPoints([a,b]);line.visible=true;
+        const tag=sensorTargetTag(f);tag.visible=true;
+      }else{
+        if(f._v87SensorLine)f._v87SensorLine.visible=false;
+        if(f._v87SensorTargetTag)f._v87SensorTargetTag.visible=false;
+      }
+
+      if(Number(f._sensorTaggedUntil)||0>now){
+        const warning=sensorWarningTag(f);warning.visible=true;
+      }else if(f._v87SensorWarning){
+        f._v87SensorWarning.visible=false;
+      }
+    }
+    if(playerFighter){
+      if((Number(playerFighter._sensorTaggedUntil)||0)>now){sensorWarningTag(playerFighter).visible=true;}
+      else if(playerFighter._v87SensorWarning)playerFighter._v87SensorWarning.visible=false;
+    }
+    requestAnimationFrame(updateV87);
+  }
+  requestAnimationFrame(updateV87);
 })();
 </script>
 </body>
