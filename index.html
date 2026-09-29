@@ -11495,7 +11495,8 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 */
 (function(){
   'use strict';
-  const V82_BUILD='V82-INK-PHYSICS-IMPACT-SURFACES-MOVING-STAGE-2026-09-29';
+  const V83_BUILD='V83-INK-DROPLET-TRAIL-SURFACES-2026-09-29';
+  const V82_BUILD=V83_BUILD;
   window.__V82_BUILD=V82_BUILD;
 
   const baseGroundV82=window.paintGround;
@@ -11504,6 +11505,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
   const v82Bullets=[];
   const v82SurfaceVisuals=[];
   const v82WallVisuals=[];
+  const V82_MAX_SURFACE_MARKS=2600;
   const UP=new THREE.Vector3(0,1,0);
   const ZN=new THREE.Vector3(0,0,1);
 
@@ -11555,6 +11557,11 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     mesh.userData.v82SurfaceInk=true;
     block.mesh.add(mesh);
     v82SurfaceVisuals.push(mesh);
+    if(v82SurfaceVisuals.length>V82_MAX_SURFACE_MARKS){
+      const old=v82SurfaceVisuals.shift();
+      if(old?.parent)old.parent.remove(old);
+      try{old.geometry.dispose();old.material.dispose();}catch(_){}
+    }
   }
 
   function faceFor(block,point){
@@ -11796,6 +11803,48 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     }
   }
 
+  function v82PaintTravelDrop(b,p,force=false){
+    if(!b||!b.sourceFighter||!p)return;
+    const kind=String(b.kind||'shooter');
+    /* 連続線ではなく、弾道に沿った「飛沫」を一定間隔で落とす。 */
+    const spacing =
+      kind==='blaster' ? 2.7 :
+      kind==='slosher' ? 1.35 :
+      kind==='charger' ? 2.4 :
+      kind==='brella' ? 1.55 :
+      kind==='dualies' ? 1.45 :
+      kind==='splatling' ? 1.55 : 1.55;
+    const radius =
+      kind==='blaster' ? .28 :
+      kind==='slosher' ? .42 :
+      kind==='charger' ? .34 :
+      kind==='brella' ? .28 : .30;
+
+    b.__v82PaintDistance=num(b.__v82PaintDistance,0);
+    b.__v82PaintDistance += force ? spacing : 0;
+    if(!force && b.__v82PaintDistance<spacing)return;
+
+    const surface=getSupportHeight(
+      p.x,p.z,p.y+1.65
+    );
+    const verticalGap=p.y-surface;
+    /* 空中のかなり高いところには塗らず、弾の飛沫が届く高さだけ塗る。 */
+    if(verticalGap<-.05||verticalGap>1.65)return;
+
+    b.__v82PaintDistance=0;
+    const jitter=.16;
+    const px=p.x+(Math.random()-.5)*jitter;
+    const pz=p.z+(Math.random()-.5)*jitter;
+    paintGroundV82(
+      px,pz,radius,b.colorHex,{
+        surfaceY:surface,
+        yHint:p.y+1.65,
+        team:b.team,
+        sourceFighter:b.sourceFighter
+      }
+    );
+  }
+
   function updateV82(dt){
     for(let i=v82Bullets.length-1;i>=0;i--){
       const b=v82Bullets[i],prev=b.mesh.position.clone();
@@ -11810,9 +11859,14 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
         b.velocity.y-=b.gravity*dt;
         b.mesh.position.addScaledVector(b.velocity,dt);
       }
-      b.travelled+=Math.hypot(
+      const stepXZ=Math.hypot(
         b.mesh.position.x-prev.x,b.mesh.position.z-prev.z
       );
+      b.travelled+=stepXZ;
+      b.__v82PaintDistance=num(b.__v82PaintDistance,0)+stepXZ;
+
+      /* 弾道の実際の位置から、低い範囲だけ小さな飛沫を落とす。 */
+      v82PaintTravelDrop(b,b.mesh.position,false);
 
       let hitFighter=null,hitPoint=null,bestT=Infinity;
       for(const f of fighters||[]){
@@ -11866,6 +11920,8 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
         paintWallSurface(
           wallHit.block,wallHit.point,b.colorHex,b.team,b.paintRadius
         );
+        /* 壁への着弾では、最後の一滴だけを確実に壁へ残す。 */
+        b.__v82PaintDistance=0;
         scene.remove(b.mesh);
         v82Bullets.splice(i,1);
         continue;
@@ -11874,6 +11930,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
       if(crossed||b.mesh.position.y<=ground+.01||rangeDone||b.age>b.life){
         const p=b.mesh.position.clone();
         p.y=Math.max(p.y,ground+.02);
+        v82PaintTravelDrop(b,p,true);
         impactV82(b,p);
         scene.remove(b.mesh);
         v82Bullets.splice(i,1);
