@@ -174,6 +174,8 @@
     switch(m.type){
       case 'hello': {
         log('HELLO',{id:m.id});
+        state.playerId=String(m.id||'');
+        setVars();
         const token=localStorage.getItem('splatoonAccountToken');
         if(token)rawSend('bindAccount',{token});else join();
         break;
@@ -286,7 +288,7 @@
     if(panel){panel.style.display='flex';panel.style.visibility='visible';panel.style.opacity='1';}
     try{window.showGlobalOnlineHud?.(true);}catch(_){}
     if(!state.socket||state.socket.readyState===WebSocket.CLOSED)connect();
-    else if(state.phase==='disconnected'||state.phase==='closing')connect();
+    else if(state.phase==='disconnected'||state.phase==='closing')join();
     else if(state.phase==='room')setStatus('参加者を確認しています');
     else setStatus(state.phase==='in_match'?'対戦中':'オンライン接続中');
     return true;
