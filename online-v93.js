@@ -71,6 +71,16 @@
     const msg=Object.assign({type:String(type||''),_v93:true,clientSeq:++state.seq},payload||{});
     try{ws.send(JSON.stringify(msg));return true;}catch(e){log('SEND_ERROR',{type,error:String(e)});return false;}
   }
+
+  function sendOnlineShot(packet){
+    if(!packet||typeof packet!=='object')return false;
+    const out=Object.assign({},packet);
+    delete out.type;
+    delete out.roomId;
+    delete out.team;
+    return rawSend('shot',out);
+  }
+  window.__v93SendShot=sendOnlineShot;
   function forwardLegacy(data){
     let m;try{m=typeof data==='string'?JSON.parse(data):data;}catch(_){return false;}
     if(!m||typeof m!=='object'||typeof m.type!=='string')return false;
