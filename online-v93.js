@@ -274,7 +274,6 @@
     state.phase='connecting';
     const cfg=Object.assign({},getConfig()),f=getPlayer();
     const weapon=Number(f?.weapon?.id??cfg.weapon??0);
-    try{const palette=window.inkColorPalette;if(Array.isArray(palette)&&Number.isFinite(Number(cfg.color)))cfg.inkColorHex=palette[Number(cfg.color)]||0;}catch(_){}
     setStatus('ルームを検索中');return rawSend('joinQueue',{weaponId:weapon,config:cfg});
   }
   function disconnect(reason){
