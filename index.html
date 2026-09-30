@@ -5006,12 +5006,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(wasAlive&&!p.alive) addKillFeed(`${m.name||p.id} がやられた`,'dead');
   }
   /* Legacy state publisher removed. V93 is the only client state publisher. */
-  function reportOnlineResult(winnerTeam){
-    if(onlineResultSent||!onlineSocket||onlineSocket.readyState!==1||!onlineStarted)return;
-    onlineResultSent=true;
-    /* V66: server decides the result from server-side ink coverage. */
-    try{onlineSocket.send(JSON.stringify({type:'matchResult',winnerTeam,clientHint:true}));}catch{}
-  }
+  /* Client-side matchResult was removed. The server is authoritative. */
   /* Legacy online-start / online-ready click handlers removed.
      V93 owns matchmaking and ready-state messages exclusively. */
   const onlineCancelButton=document.getElementById('online-cancel');
@@ -5130,7 +5125,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   window.ensureRemoteFighter = ensureRemoteFighter;
   window.applyRemoteState = applyRemoteState;
   window.sendOnlineState = sendOnlineState;
-  window.reportOnlineResult = reportOnlineResult;
   window.renderOnlineRoom = renderOnlineRoom;
   window.showOnlineProfile = showOnlineProfile;
 
@@ -5990,13 +5984,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     computeTurf();
     const winA=turfPct.a>=turfPct.b;
     const winner=playerFighter?.team==='A' ? (winA?'A':'B') : (winA?'B':'A');
-    if(window.__v36OnlineReport && onlineActive && onlineStarted && !onlineResultSent){
-      window.__v36OnlineReport(winner);
-    }
     if(!onlineActive && !window.__onlineMatchEnded && window.__v36LocalRecordResult) window.__v36LocalRecordResult(winner);
     baseEndBattleForV36();
   };
-  window.__v36OnlineReport=reportOnlineResult;
 
   /* Legacy 50ms state timer removed. */
   let __onlineKeepaliveTimer=setInterval(()=>{
