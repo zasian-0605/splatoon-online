@@ -5005,19 +5005,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     updateFighterAnimation(p,!!m.moving,p.squid_mode);
     if(wasAlive&&!p.alive) addKillFeed(`${m.name||p.id} がやられた`,'dead');
   }
-  function sendOnlineState(){
-    if(!onlineSocket||onlineSocket.readyState!==1||!onlineStarted||!playerFighter)return;
-    try{
-      const jump=!!window.__V11?.getJumpState?.();
-      onlineSocket.send(JSON.stringify({
-        type:'state',
-        x:playerFighter.pos.x,y:playerFighter.pos.y,z:playerFighter.pos.z,
-        yaw:playerFighter.root.rotation.y,hp:playerFighter.hp,ink:playerFighter.ink,
-        alive:playerFighter.alive,squid:!!playerFighter.squid_mode,weaponId:playerFighter.weapon.id,
-        moving:!!playerFighter._moving,superJump:jump,colorHex:getFighterInkHex(playerFighter)
-      }));
-    }catch{}
-  }
+  /* Legacy state publisher removed. V93 is the only client state publisher. */
   function reportOnlineResult(winnerTeam){
     if(onlineResultSent||!onlineSocket||onlineSocket.readyState!==1||!onlineStarted)return;
     onlineResultSent=true;
@@ -6010,12 +5998,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
   window.__v36OnlineReport=reportOnlineResult;
 
-  let __onlineStateTimer=setInterval(()=>{
-    if(onlineStarted && onlineActive){
-      try{sendOnlineState();}catch(e){}
-    }
-  },50);
-
+  /* Legacy 50ms state timer removed. */
   let __onlineKeepaliveTimer=setInterval(()=>{
     const ws=onlineSocket;
     if(!ws||ws.readyState!==1)return;
