@@ -349,6 +349,12 @@
   window.__runOnlineDiagnostic=runProbe;
 
   setInterval(()=>syncPlayerState(false),50);
+  setInterval(()=>{
+    if(state.phase!=='in_match')return;
+    const ws=state.socket;
+    if(!ws||ws.readyState!==WebSocket.OPEN)return;
+    rawSend('keepalive',{at:Date.now()});
+  },20000);
 
   const oldStart=window.startOnlineBattle;
   if(typeof oldStart==='function'){
