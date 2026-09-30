@@ -8058,7 +8058,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       f.pos.addScaledVector(d,2.0);
       explodeAt(f.pos,2.2,60,f.team,{paintRadius:2.8,colorHex:getFighterInkHex(f),sourceFighter:f});
       if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+0.8,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,mode:'kraken'});}catch(_){
+        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+0.8,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,mode:'kraken'});}catch(_){}
       }
       return;
     }
