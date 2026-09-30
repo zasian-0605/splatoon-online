@@ -4814,13 +4814,26 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function showOnlineProfile(profile){
     const e=document.getElementById('online-profile');if(e&&profile)e.innerHTML=`${profile.name}　<span class="rank-badge">${profile.rank}</span>　レート ${profile.rating}　｜ 勝 ${profile.wins} / 負 ${profile.losses}`;
   }
+  function disposeV87SensorLine(f){
+    const line=f?._v87SensorLine;
+    if(!line)return;
+    try{scene.remove(line);}catch{}
+    try{line.geometry?.dispose?.();}catch{}
+    try{line.material?.dispose?.();}catch{}
+    f._v87SensorLine=null;
+  }
   function clearRemoteFighters(){
-    for(const rf of remoteMap.values()){try{scene.remove(rf.root);}catch{}}
+    for(const rf of remoteMap.values()){
+      disposeV87SensorLine(rf);
+      try{scene.remove(rf.root);}catch{}
+    }
     remoteMap.clear();
     const kept=[];
     for(const f of fighters){
-      if(f?.remote){try{scene.remove(f.root);}catch{}}
-      else kept.push(f);
+      if(f?.remote){
+        disposeV87SensorLine(f);
+        try{scene.remove(f.root);}catch{}
+      }else kept.push(f);
     }
     fighters=kept;
   }
@@ -4828,10 +4841,17 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const key=String(id||'');
     if(!key)return;
     const known=remoteMap.get(key);
-    if(known){try{scene.remove(known.root);}catch{}}
+    if(known){
+      disposeV87SensorLine(known);
+      try{scene.remove(known.root);}catch{}
+    }
     remoteMap.delete(key);
     fighters=fighters.filter(f=>{
-      if(f?.remote&&String(f.id)===key){try{scene.remove(f.root);}catch{};return false;}
+      if(f?.remote&&String(f.id)===key){
+        disposeV87SensorLine(f);
+        try{scene.remove(f.root);}catch{}
+        return false;
+      }
       return true;
     });
   }
@@ -5123,7 +5143,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
     // Defensive cleanup for stale/duplicate remote entries from older builds.
     for(const f of fighters.slice()){
-      if(f?.remote&&String(f.id)===id){try{scene.remove(f.root);}catch{};fighters=fighters.filter(x=>x!==f);}
+      if(f?.remote&&String(f.id)===id){
+        disposeV87SensorLine(f);
+        try{scene.remove(f.root);}catch{}
+        fighters=fighters.filter(x=>x!==f);
+      }
     }
 
     const src=p.config||p.cfg||{};
