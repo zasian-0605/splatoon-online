@@ -81,7 +81,7 @@ function attack(f,t,now,a){
       a.nextShot=now+650;
       const frac=Math.max(.45,Math.min(.98,(now-a.charge)/(w.chargeTime||800)));
       try{(window.fireChargerShot||window.fireChargerShotV60)?.(f,d,frac);}catch(_){}
-      onlineAIShot(f,'charger',frac);a.charge=0;
+      a.charge=0;
     }
     return;
   }
@@ -91,7 +91,7 @@ function attack(f,t,now,a){
       a.nextShot=now+430;
       const frac=Math.max(.45,Math.min(1,(now-a.charge)/(w.chargeTime||600)));
       try{window.fireBladeSlashV60?.(f,frac,d);}catch(_){}
-      onlineAIShot(f,'wiper',frac);a.charge=0;
+      a.charge=0;
     }
     return;
   }
