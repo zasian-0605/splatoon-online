@@ -8008,8 +8008,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       b.mesh.position.x+=-dir.z*off*side;
       b.mesh.position.z+=dir.x*off*side;
     });
-    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'dualies'}));}catch{}
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'dualies'});}catch(_){}
     }
     f.specialGauge=Math.min(100,f.specialGauge+1.0);
   }
