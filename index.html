@@ -6951,12 +6951,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   // Replace the active function used by the main loop.
   endBattle=window.__forceEndBattleV38;
 
-  // Independent timeout fallback.
-  setInterval(()=>{
-    if(battleActive && currentPhase===2 && window.__battleDeadline && Date.now()>=window.__battleDeadline){
-      window.__forceEndBattleV38();
-    }
-  },250);
+  // Result timing is monitored by the shared V36 battle watchdog.
 })();
 </script>
 
