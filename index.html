@@ -4536,39 +4536,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     doRollerAction(f,now,!!f._moving);
   };
 
-  /* ---------- Replace normal shooting with ink-aware shooting ---------- */
-  tryShoot = function(fighter,aimDir,now){
-    const wp=fighter.weapon;
-    if(wp.category==="charger"||wp.category==="roller"||wp.category==="wiper") return;
-    if(now-fighter.lastShot < wp.rate) return;
-    const cost=inkCost(fighter,wp.inkCost);
-    if(!consumeInk(fighter,cost)) return;
-    fighter.lastShot=now;
-    const spread=wp.spread||.05;
-    const dir=getLaunchDirection35(aimDir,spread,fighter.root?.rotation.y||0);
-    let networkDir=dir.clone();
-    if(wp.category==="blaster"){
-      spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:16,radius:.22,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.splashDamage,paintRadius:wp.paintRadius*1.18});
-    }else if(wp.category==="slosher"){
-      spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:26,radius:.3,life:wp.life,explosive:true,explosionRadius:wp.explosionRadius,splashDamage:wp.damage*.5,paintRadius:wp.paintRadius*1.25});
-    }else{
-      spawnBullet(fighter,networkDir,{speed:wp.speed,damage:wp.damage,gravity:18,radius:.14,life:wp.life,paintRadius:wp.paintRadius*1.18});
-    }
-    if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1&&fighter.isPlayer){
-      try{onlineSocket.send(JSON.stringify({
-        type:'shot',
-        x:fighter.pos.x,y:fighter.pos.y+1.2,z:fighter.pos.z,
-        dx:networkDir.x,dy:networkDir.y,dz:networkDir.z,
-        weaponId:weaponList.indexOf(wp)
-      }));}catch{}
-    }
-    // Immediate paint mark guarantees the tank/paint loop is visible even before the projectile lands.
-    const paintDist=wp.category==='blaster'?4.2:wp.category==='slosher'?3.5:6.0;
-    paintGround(fighter.pos.x+dir.x*paintDist,fighter.pos.z+dir.z*paintDist,Math.max(.7,(wp.paintRadius||1)*.75),getFighterInkHex(fighter),{noNetwork:true});
-    fighter.specialGauge=Math.min(100,fighter.specialGauge+.9*(fighter.gearProfile?.specialGain||1));
-    sfx("shoot");
-  };
-
   /* ---------- Sub ink cost ---------- */
   tryThrowSub = function(fighter,aimDir,now){
     const wp=fighter.weapon, def=subDefs[wp.sub];
