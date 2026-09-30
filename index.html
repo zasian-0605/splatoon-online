@@ -8155,8 +8155,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           if(dist<(w.swingRange||3)&&dist>.05&&rel.normalize().dot(facing)>.1)applyDamage(o,w.swingDamage||75,f);
         }
       });
-      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.0,z:f.pos.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,mode:'rollerFlick'}));}catch{}
+      if(f.isPlayer&&onlineActive&&onlineStarted){
+        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.0,z:f.pos.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,mode:'rollerFlick'});}catch(_){}
       }
     }
     f.specialGauge=Math.min(100,f.specialGauge+2.2*(f.gearProfile?.specialGain||1));
