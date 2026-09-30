@@ -7992,8 +7992,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }
       paintSegment(prev,landing,(w.paintRadius||1.4)*.48,color,false);
     }
-    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id,mode:'slosher'}));}catch{}
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id,mode:'slosher'});}catch(_){}
     }
     f.specialGauge=Math.min(100,f.specialGauge+2.1*count);
     sfx('shoot');
