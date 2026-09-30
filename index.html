@@ -4973,7 +4973,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
     rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;
     rf.displayName=String(p.name||p.accountName||p.id);
-    remoteMap.set(p.id,rf);fighters.push(rf);return rf;
+    remoteMap.set(id,rf);fighters.push(rf);return rf;
   }
   function applyRemoteState(m){
     const id=String(m?.id||'');
