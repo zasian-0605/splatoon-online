@@ -8016,8 +8016,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const color=getFighterInkHex(f);
       const b=spawnBulletV60(f,aimDir,{speed:48,damage:220,gravity:5,radius:.3,paintRadius:2.2,life:1.5,explosive:true,explosionRadius:3.0,splashDamage:53,kind:'trizooka'});
       b.paintTrail=false;
-      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aimDir.x,dy:aimDir.y,dz:aimDir.z,weaponId:w.id}));}catch{}
+      if(f.isPlayer&&onlineActive&&onlineStarted){
+        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aimDir.x,dy:aimDir.y,dz:aimDir.z,weaponId:w.id,mode:'trizooka'});}catch(_){}
       }
       f.v60Trizooka.shots--;
       if(f.v60Trizooka.shots<=0)f.v60Trizooka=null;
