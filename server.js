@@ -569,7 +569,6 @@ function assignTeamsAndStart(room) {
   if (!ps.every(p => p.ready)) return;
   ps.forEach((p, i) => {
     p.team = i % 2 === 0 ? 'A' : 'B';
-    p.startedWeaponId = p.weaponId;
     const slot = Math.floor(i / 2);
     const x = ((slot % 4) - 1.5) * 3.2;
     p.spawn = p.team === 'A' ? { x, y: 0, z: -64 } : { x, y: 0, z: 64 };
