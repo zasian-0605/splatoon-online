@@ -4893,6 +4893,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     });
   }
   function openOnlinePanel(){
+    // 既に接続中/対戦中なら同じSocketを再利用する。P/3の再入力で自分の通信を切らない。
+    if(onlineSocket && (onlineSocket.readyState===WebSocket.OPEN || onlineSocket.readyState===WebSocket.CONNECTING)){
+      document.getElementById('online-panel').style.display='flex';
+      showGlobalOnlineHud(true);
+      try{ window.__V10?.releaseLock?.(); }catch(e){}
+      return;
+    }
     // オンライン画面ではマウスを自由に動かせるよう、最初に確実にロック解除。
     try{ window.__V10?.releaseLock?.(); }catch(e){}
     document.getElementById('online-panel').style.display='flex';
@@ -5240,7 +5247,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       weapon:Number.isFinite(Number(p.weaponId))?Number(p.weaponId):Number(src.weapon)||0,
       gear:Number.isFinite(Number(src.gear))?Number(src.gear):0,
       device:'pc',
-      inkColorHex:Number.isFinite(Number(src.inkColorHex))?Number(src.inkColorHex):(inkColorPalette[Math.max(0,Math.min(3,Number(src.color)||0))]||teamBHex)
+      inkColorHex:Number.isFinite(Number(src.inkColorHex))
+        ? Math.max(0,Math.min(0xffffff,Math.floor(Number(src.inkColorHex))))
+        : (inkColorPalette[Math.max(0,Math.min(3,Number(src.color)||0))]||teamBHex)
     };
     const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
     rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;
@@ -5269,6 +5278,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     p.alive=m.alive!==false;
     p.hp=Number.isFinite(Number(m.hp))?Number(m.hp):p.hp;
     p.ink=Number.isFinite(Number(m.ink))?Number(m.ink):p.ink;
+    if(Number.isFinite(Number(m.colorHex))){
+      p.cfg.inkColorHex=Math.max(0,Math.min(0xffffff,Math.floor(Number(m.colorHex))));
+    }
     p.squid_mode=!!m.squid;
     p.weapon=weaponList[m.weaponId]||p.weapon;
     updateFighterAnimation(p,!!m.moving,p.squid_mode);
@@ -5276,7 +5288,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
   function sendOnlineState(){
     if(!onlineSocket||onlineSocket.readyState!==1||!onlineStarted||!playerFighter)return;
-    try{onlineSocket.send(JSON.stringify({type:'state',x:playerFighter.pos.x,y:playerFighter.pos.y,z:playerFighter.pos.z,yaw:playerFighter.root.rotation.y,hp:playerFighter.hp,ink:playerFighter.ink,alive:playerFighter.alive,squid:!!playerFighter.squid_mode,weaponId:playerFighter.weapon.id,moving:!!playerFighter._moving}));}catch{}
+    try{
+      const jump=!!window.__V11?.getJumpState?.();
+      onlineSocket.send(JSON.stringify({
+        type:'state',
+        x:playerFighter.pos.x,y:playerFighter.pos.y,z:playerFighter.pos.z,
+        yaw:playerFighter.root.rotation.y,hp:playerFighter.hp,ink:playerFighter.ink,
+        alive:playerFighter.alive,squid:!!playerFighter.squid_mode,weaponId:playerFighter.weapon.id,
+        moving:!!playerFighter._moving,superJump:jump,colorHex:getFighterInkHex(playerFighter)
+      }));
+    }catch{}
   }
   function reportOnlineResult(winnerTeam){
     if(onlineResultSent||!onlineSocket||onlineSocket.readyState!==1||!onlineStarted)return;
