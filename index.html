@@ -5075,6 +5075,20 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           }
           return;
         }
+        if(m.type==='serverInk'){
+          if(playerFighter&&onlineActive&&onlineStarted&&Number.isFinite(Number(m.ink))){
+            playerFighter.ink=Math.max(0,Math.min(100,Number(m.ink)));
+          }
+          return;
+        }
+        if(m.type==='antiCheatWarning'){
+          showToast(String(m.reason||'通信に異常が検知されました'));
+          return;
+        }
+        if(m.type==='serverTick'){
+          window.__onlineLastServerTick=Date.now();
+          return;
+        }
         if(m.type==='serverToast'){showToast(m.text);return;}
         if(m.type==='matchTimeout'){
           if(onlineActive && !onlineResultSent) reportOnlineResult('DRAW');
