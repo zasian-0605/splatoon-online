@@ -592,19 +592,38 @@ function joinRoom(player) {
 }
 function leaveRoom(player) {
   const room = player.roomId ? rooms.get(player.roomId) : null;
-  if (!room) { player.roomId = null; return; }
-  room.players.delete(player.id); player.roomId = null; player.team = null; player.ready = false;
-  if (!room.started) {
-    const players = roster(room);
-    const payload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
-    const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
-    for (const p of room.players.values()) {
-      send(p.ws, payload);
-      send(p.ws, queuePayload);
+  if (!room) { player.roomId = null; player.team = null; player.ready = false; return; }
+
+  const leavingId = player.id;
+  const leavingName = player.accountName || player.id;
+  const wasStarted = !!room.started;
+
+  // Map.delete makes a leave idempotent: duplicate close/leave events cannot
+  // remove somebody else or broadcast the same player twice.
+  room.players.delete(leavingId);
+  player.roomId = null;
+  player.team = null;
+  player.ready = false;
+
+  if (wasStarted) {
+    // Existing players must immediately remove the disconnected fighter.
+    // Previously a started room only cleaned itself when empty, leaving
+    // ghost/duplicate fighters on every remaining client.
+    if (room.players.size > 0) {
+      broadcast(room, { type: 'playerLeft', id: leavingId, name: leavingName });
     }
     if (room.players.size === 0) rooms.delete(room.id);
+    return;
   }
-  else if (room.players.size === 0) rooms.delete(room.id);
+
+  const players = roster(room);
+  const payload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+  const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
+  for (const p of room.players.values()) {
+    send(p.ws, payload);
+    send(p.ws, queuePayload);
+  }
+  if (room.players.size === 0) rooms.delete(room.id);
 }
 function updateAccountResult(player, winnerTeam) {
   const a = accounts[player.accountName]; if (!a) return null;
@@ -756,6 +775,16 @@ wss.on('connection', ws => {
       const token = String(m.token || '');
       const s = sessionForToken(token);
       if (s && accounts[s.name]) {
+        // One live socket per account. A reconnect/login from the same account
+        // replaces the old socket before joining a room, preventing duplicate
+        // fighters and split room membership across tabs/reconnections.
+        for (const other of sockets.values()) {
+          if (other === player || other.accountName !== s.name) continue;
+          console.log(`[WS REPLACE DUPLICATE] old=${other.id} new=${player.id} account=${s.name}`);
+          leaveRoom(other);
+          sockets.delete(other.ws);
+          try { other.ws.close(4001, 'replaced by newer connection'); } catch {}
+        }
         player.accountName = s.name;
         player.accountToken = token;
         console.log(`[WS BIND] ${player.id} account=${player.accountName}`);
