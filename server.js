@@ -850,10 +850,6 @@ wss.on('connection', ws => {
       send(ws,{type:'probeAck',at:Date.now(),build:'V93-ONLINE-UNIFIED'});
       return;
     }
-    if (m.type === 'keepalive') {
-      send(ws,{type:'keepaliveAck',at:m.at||Date.now()});
-      return;
-    }
     if (m.type === 'leaveQueue') {
       console.log(`[WS LEAVE REQUEST] ${player.id} room=${player.roomId || '-'} account=${player.accountName || '-'}`);
       leaveRoom(player);
