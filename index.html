@@ -5320,14 +5320,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
   }
 
-  /* ---------- Matchmaking panel count */
-  function setQueueCount(n){
-    const status=document.getElementById('online-status');
-    const room=document.getElementById('online-room');
-    if(status)status.textContent=`マッチング中… ${Math.max(0,Math.min(8,n))}/8人`;
-    if(room)room.textContent=`8人揃うまで待機中… 現在 ${Math.max(0,Math.min(8,n))}/8人`;
-  }
-
   /* Patch existing online socket message handler by wrapping openOnlinePanel. */
   const _oldOpenOnline=openOnlinePanel;
   openOnlinePanel=function(){
