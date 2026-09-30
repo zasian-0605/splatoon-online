@@ -777,6 +777,7 @@ wss.on('connection', ws => {
     accountName: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
+    lastClientSeq: 0,
     serverHp:100, serverAlive:true, serverPos:null, serverRespawnAt:0,
     lastHazardAt:0, lastShotAt:0, lastSubAt:0,
     msgRateDrops:0, speedViolations:0, lastSpeedStrikeAt:0
@@ -788,6 +789,11 @@ wss.on('connection', ws => {
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
     if(!m || typeof m!=='object' || typeof m.type!=='string') return;
+    const clientSeq=Number(m.clientSeq);
+    if(Number.isInteger(clientSeq)){
+      if(clientSeq<=player.lastClientSeq)return;
+      player.lastClientSeq=clientSeq;
+    }
     if(!messageBudget(player)){
       if((player.msgRateDrops||0)===1)console.warn('[WS RATE DROP] '+player.id+' account='+(player.accountName||'-'));
       return;
