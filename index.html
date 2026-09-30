@@ -7930,8 +7930,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         fireLineShot(f,d,w,{kind:'splatling',paintMult:.82,noNetwork:true});
       },i*(w.rate||60));
     }
-    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id,charge:frac,mode:'splatling'}));}catch{}
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:aim.x,dy:aim.y,dz:aim.z,weaponId:w.id,charge:frac,mode:'splatling'});}catch(_){}
     }
     f.specialGauge=Math.min(100,f.specialGauge+count*.45);
     sfx('shoot');
