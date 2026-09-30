@@ -75,9 +75,11 @@
     let m;try{m=typeof data==='string'?JSON.parse(data):data;}catch(_){return false;}
     if(!m||typeof m!=='object'||typeof m.type!=='string')return false;
     if(m.type==='leaveQueue'){disconnect('legacy-leave');return true;}
+    if(m.type==='state')return true;
     if(m.type==='joinQueue'){if(state.phase==='disconnected'||state.phase==='connecting')join();return true;}
     if(m.type==='bindAccount')return rawSend('bindAccount',{token:String(m.token||'')});
     if(state.phase!=='in_match'&&!['ready','keepalive'].includes(m.type))return false;
+    // V93 owns the periodic state stream; legacy state sends are dropped here. Other gameplay packets still use this single transport.
     const sig=signature(m),now=performance.now();
     if(sig){
       const prev=state.lastSig.get(sig)||0;
@@ -237,7 +239,7 @@
           }
           window.endBattle?.();
         }catch(_){}
-        state.phase='disconnected';state.roomId='';state.playerId='';state.team='';state.ready=false;setVars();break;
+        state.phase='room';state.roomId='';state.playerId='';state.team='';state.ready=false;setVars();break;
       default:break;
     }
   }
@@ -284,6 +286,8 @@
     if(panel){panel.style.display='flex';panel.style.visibility='visible';panel.style.opacity='1';}
     try{window.showGlobalOnlineHud?.(true);}catch(_){}
     if(!state.socket||state.socket.readyState===WebSocket.CLOSED)connect();
+    else if(state.phase==='disconnected'||state.phase==='closing')connect();
+    else if(state.phase==='room')setStatus('参加者を確認しています');
     else setStatus(state.phase==='in_match'?'対戦中':'オンライン接続中');
     return true;
   }
@@ -328,7 +332,6 @@
   intercept('online-ready',()=>{
     if(state.phase!=='room'||!state.socket||state.socket.readyState!==WebSocket.OPEN||!state.roomId)return;
     state.ready=!state.ready;setVars();
-    send=''; // no-op marker to avoid shadowing
     rawSend('ready',{ready:state.ready,weaponId:Number(getConfig().weapon||0),config:Object.assign({},getConfig())});
   });
   intercept('online-start',join);
