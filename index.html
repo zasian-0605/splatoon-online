@@ -13519,5 +13519,419 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 })();
 </script>
 
+
+<script>
+/* V93: Adaptive Tactical CPU Brain
+   Utility-based decisions + role behavior + predictive aim + aggressive objective control.
+   This is the final AI layer: no older AI wrapper is used for CPU decisions.
+*/
+(function(){
+  'use strict';
+
+  const brains=new WeakMap();
+  const YAXIS=new THREE.Vector3(0,1,0);
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function dist2D(a,b){return Math.hypot(a.x-b.x,a.z-b.z);}
+  function vecTo(a,b){
+    const d=new THREE.Vector3(b.x-a.x,0,b.z-a.z);
+    if(d.lengthSq()<.0001)return new THREE.Vector3(0,0,1);
+    return d.normalize();
+  }
+  function enemyOf(f,o){return o&&o!==f&&o.alive&&o.team!==f.team;}
+  function aliveEnemies(f){
+    return (fighters||[]).filter(o=>enemyOf(f,o));
+  }
+  function friendlyInk(f){
+    try{return typeof onFighterInk==='function'&&onFighterInk(f);}
+    catch(_){return false;}
+  }
+  function enemyInk(f){
+    try{return typeof isEnemyInkAt==='function'&&isEnemyInkAt(f);}
+    catch(_){return false;}
+  }
+
+  function roleFor(w){
+    const c=w?.category;
+    if(c==='charger'||c==='spinner')return 'anchor';
+    if(c==='roller'||c==='wiper'||w?.brush)return 'slayer';
+    if(c==='blaster'||c==='slosher')return 'skirmisher';
+    if(c==='brella')return 'support';
+    return 'fighter';
+  }
+
+  function brainFor(f,now){
+    let a=brains.get(f);
+    if(!a){
+      a={
+        role:roleFor(f.weapon),
+        state:'advance',
+        target:null,
+        objective:null,
+        nextDecision:now+Math.random()*200,
+        nextAttack:0,
+        nextSub:0,
+        nextSpecial:0,
+        strafe:Math.random()<.5?-1:1,
+        lastPos:f.pos.clone(),
+        lastMoved:now,
+        stuck:0,
+        swimUntil:0,
+        lastTargetPos:null,
+        targetVel:new THREE.Vector3(),
+        aimJitter:0
+      };
+      brains.set(f,a);
+    }
+    if(a.role!==roleFor(f.weapon))a.role=roleFor(f.weapon);
+    return a;
+  }
+
+  function targetScore(f,o){
+    if(!enemyOf(f,o))return Infinity;
+    const d=dist2D(f.pos,o.pos);
+    let s=d;
+    if(o.isPlayer)s-=8;
+    if(o.squid_mode && !(o.revealedUntil&&performance.now()<o.revealedUntil))s+=6;
+    if(o.hp<=30)s-=4;
+    if(d<10)s-=3;
+    return s;
+  }
+
+  function chooseTarget(f,a){
+    const enemies=aliveEnemies(f);
+    if(!enemies.length)return null;
+    let best=null,bestS=Infinity;
+    for(const o of enemies){
+      const s=targetScore(f,o);
+      if(s<bestS){bestS=s;best=o;}
+    }
+    return best;
+  }
+
+  function teamFrontZ(f){
+    const sign=f.team==='A'?-1:1;
+    return sign*18;
+  }
+
+  function objectiveCandidates(f,a){
+    const sign=f.team==='A'?-1:1;
+    const enemySpawn=sign*52;
+    const center={x:0,z:0};
+    const enemyFront={x:0,z:sign*30};
+    const side1={x:-18,z:sign*24};
+    const side2={x:18,z:sign*24};
+    const home={x:sign*0,z:sign*34};
+    const arr=[];
+    arr.push({x:center.x,z:center.z,kind:'center',score:9});
+    arr.push({x:enemyFront.x,z:enemyFront.z,kind:'front',score:a.role==='slayer'?10:7});
+    arr.push({x:side1.x,z:side1.z,kind:'side',score:6});
+    arr.push({x:side2.x,z:side2.z,kind:'side',score:6});
+    if(a.role==='anchor')arr.push({x:center.x,z:sign*10,kind:'anchor',score:10});
+    if(a.role==='support')arr.push({x:0,z:sign*20,kind:'support',score:9});
+    if(f.pos.z*sign<-22)arr.push({x:0,z:teamFrontZ(f),kind:'recover-front',score:11});
+    if(enemyInk(f))arr.push({x:f.pos.x,z:f.pos.z+sign*5,kind:'clear-ink',score:10});
+    for(const o of aliveEnemies(f)){
+      const d=dist2D(f.pos,o.pos);
+      if(d<24)arr.push({x:o.pos.x,z:o.pos.z,kind:'enemy',score:12+(o.isPlayer?3:0)});
+    }
+    return arr;
+  }
+
+  function chooseObjective(f,a,target){
+    const cs=objectiveCandidates(f,a);
+    let best=null,bestScore=-Infinity;
+    for(const c of cs){
+      const d=Math.hypot(c.x-f.pos.x,c.z-f.pos.z);
+      let score=c.score-d*.075;
+      if(target&&c.kind==='enemy')score+=10;
+      if(a.role==='anchor'&&c.z*(f.team==='A'?-1:1)<-5)score-=8;
+      if(score>bestScore){bestScore=score;best=c;}
+    }
+    return best;
+  }
+
+  function predictedAim(f,target,now){
+    const a=brainFor(f,now);
+    const last=a.lastTargetPos;
+    let vx=0,vz=0;
+    if(last){
+      const dt=Math.max(.016,(now-a.lastTargetAt||now)/1000);
+      vx=(target.pos.x-last.x)/dt;
+      vz=(target.pos.z-last.z)/dt;
+      const len=Math.hypot(vx,vz);
+      if(len>20){vx*=20/len;vz*=20/len;}
+      a.targetVel.set(vx,0,vz);
+    }
+    a.lastTargetPos={x:target.pos.x,z:target.pos.z};
+    a.lastTargetAt=now;
+
+    const w=f.weapon||{};
+    const speed=Number(w.speedShot||w.speed||45);
+    const d=dist2D(f.pos,target.pos);
+    const lead=clamp(d/Math.max(18,speed),.04,.34);
+    const aim=new THREE.Vector3(
+      target.pos.x+a.targetVel.x*lead,
+      target.pos.y+1.0,
+      target.pos.z+a.targetVel.z*lead
+    );
+    const jitter=(w.category==='charger'?.025:.055);
+    aim.x+=(Math.random()-.5)*jitter;
+    aim.z+=(Math.random()-.5)*jitter;
+    return aim;
+  }
+
+  function canShootAt(f,target,now){
+    if(!target||!target.alive)return false;
+    const w=f.weapon||{};
+    const d=dist2D(f.pos,target.pos);
+    const max=w.category==='charger'?40:w.category==='spinner'?30:w.category==='roller'?7:w.category==='wiper'?9:24;
+    return d<=max;
+  }
+
+  function moveSmart(f,dest,delta,squid){
+    const d=vecTo(f.pos,dest);
+    const speed=(squid?12.6:5.8)*(f.gearProfile?.[squid?'swim':'move']||1);
+    const before=f.pos.clone();
+    try{tryMoveWithCollision(f,d.clone().multiplyScalar(speed),delta,squid);}
+    catch(_){}
+    let moved=before.distanceTo(f.pos);
+    if(moved>.02)return true;
+
+    // Local obstacle avoidance: turn toward the side with more space.
+    const choices=[
+      d.clone().applyAxisAngle(YAXIS,.75),
+      d.clone().applyAxisAngle(YAXIS,-.75),
+      d.clone().applyAxisAngle(YAXIS,1.35),
+      d.clone().applyAxisAngle(YAXIS,-1.35)
+    ];
+    let best=choices[0],bestClear=-Infinity;
+    for(const q of choices){
+      const t=clampStageXY(f.pos.x+q.x*2.0,f.pos.z+q.z*2.0);
+      const blocked=getBlockingWall(t.x,t.z,f.pos.y);
+      const centerBias=-(Math.hypot(t.x,t.z)*.01);
+      const score=(blocked? -99:1)+centerBias+(q.dot(d)*.8);
+      if(score>bestClear){bestClear=score;best=q;}
+    }
+    try{tryMoveWithCollision(f,best.multiplyScalar(speed),delta,false);}catch(_){}
+    moved=before.distanceTo(f.pos);
+    return moved>.02;
+  }
+
+  function smartAttack(f,target,now){
+    if(!target)return;
+    const w=f.weapon||weaponList[0];
+    const aim=predictedAim(f,target,now);
+    let d=new THREE.Vector3().subVectors(aim,f.pos).setY(0);
+    if(d.lengthSq()<.001)d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
+    d.normalize();
+    f.human.rotation.y=Math.atan2(d.x,d.z);
+    f.root.rotation.y=f.human.rotation.y;
+
+    try{
+      if(w.brush&&typeof doBrushAction==='function'){doBrushAction(f,now,true);return;}
+      if(w.category==='roller'&&typeof performRollerSwing==='function'){performRollerSwing(f,now);return;}
+      if(w.category==='charger'){
+        if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+        const need=Math.max(300,(w.chargeTime||800)*.68);
+        if(now-f.ai.chargeStarted>=need&&now>(f.ai.nextShot||0)){
+          f.ai.nextShot=now+850;
+          const frac=clamp((now-f.ai.chargeStarted)/(w.chargeTime||800),.45,.95);
+          if(typeof fireStringerShot==='function'&&w.kind==='stringer')fireStringerShot(f,d,frac);
+          else if(typeof fireChargerShotV60==='function')fireChargerShotV60(f,d,frac);
+          else if(typeof fireChargerShot==='function')fireChargerShot(f,d,frac);
+          f.ai.chargeStarted=0;
+        }
+        return;
+      }
+      if(w.category==='spinner'){
+        if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+        const need=Math.max(240,(w.chargeTime||650)*.55);
+        if(now-f.ai.chargeStarted>=need){
+          const frac=clamp((now-f.ai.chargeStarted)/(w.chargeTime||650),.5,1);
+          if(typeof fireSplatlingBurst==='function')fireSplatlingBurst(f,frac,d);
+          else tryShoot(f,d,now);
+          f.ai.chargeStarted=0;
+        }
+        return;
+      }
+      if(w.category==='wiper'){
+        if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+        const need=Math.max(240,(w.chargeTime||600)*.48);
+        if(now-f.ai.chargeStarted>=need){
+          const frac=clamp((now-f.ai.chargeStarted)/(w.chargeTime||600),.35,1);
+          if(typeof fireBladeSlashV60==='function')fireBladeSlashV60(f,frac,d);
+          else if(typeof doWiperSlash==='function')doWiperSlash(f,frac);
+          f.ai.chargeStarted=0;
+        }
+        return;
+      }
+      if(typeof tryShoot==='function')tryShoot(f,d,now);
+    }catch(_){}
+  }
+
+  function smartSub(f,target,now,a){
+    if(!target||now<a.nextSub||dist2D(f.pos,target.pos)>20||f.squid_mode)return;
+    if(Math.random()>.34)return;
+    try{
+      if(typeof tryThrowSub==='function'){
+        const d=vecTo(f.pos,predictedAim(f,target,now));
+        tryThrowSub(f,d,now);
+        a.nextSub=now+2200+Math.random()*1800;
+      }
+    }catch(_){}
+  }
+
+  function smartSpecial(f,target,now,a){
+    if(f.specialGauge<100||now<a.nextSpecial||typeof fireSpecial!=='function')return;
+    const enemies=aliveEnemies(f);
+    const nearby=enemies.filter(o=>dist2D(f.pos,o.pos)<10).length;
+    const td=target?dist2D(f.pos,target.pos):Infinity;
+    const shouldUse=(nearby>=2)||(target&&td<20)||(a.role==='anchor'&&td<28);
+    if(!shouldUse)return;
+    try{fireSpecial(f);a.nextSpecial=now+9000+Math.random()*5000;}catch(_){}
+  }
+
+  function decideSwim(f,a,target,objective,now){
+    // Never let a CPU camp in friendly ink as a squid.
+    if(target&&dist2D(f,target)<13)return false;
+    if(enemyInk(f))return false;
+    if(f.hp<28||f.ink<22){
+      return friendlyInk(f)&&(!target||dist2D(f,target)>16);
+    }
+    const far=objective&&dist2D(f,objective)>7;
+    if(!far)return false;
+    if(now<a.swimUntil)return true;
+    if(friendlyInk(f)&&f.ink>40&&Math.random()<.55){
+      a.swimUntil=now+650;
+      return true;
+    }
+    return false;
+  }
+
+  function updateAdaptiveAI(f,delta,now){
+    if(!f||f.isPlayer||f.remote||!f.alive)return;
+    const a=brainFor(f,now);
+    const target=chooseTarget(f,a);
+    a.target=target;
+
+    if(a.respawnAt!==f.respawnAt){
+      a.respawnAt=f.respawnAt;
+      a.nextDecision=now+150;
+      a.nextSub=now+800;
+      a.nextSpecial=now+3500;
+      a.swimUntil=0;
+      a.lastTargetPos=null;
+      f.squid_mode=false;
+      f.human.visible=true;
+      f.squid.visible=false;
+    }
+
+    // Detect stalls and force a new objective.
+    const moved=f.pos.distanceTo(a.lastPos);
+    if(moved>.12){a.lastPos.copy(f.pos);a.lastMoved=now;a.stuck=0;}
+    else if(now-a.lastMoved>.75){
+      a.stuck+=now-a.lastMoved;
+      a.lastMoved=now;
+      a.nextDecision=0;
+      a.strafe=Math.random()<.5?-1:1;
+    }
+
+    if(now>=a.nextDecision||!a.objective){
+      a.objective=chooseObjective(f,a,target);
+      a.nextDecision=now+260+Math.random()*260;
+    }
+
+    let state='advance';
+    let destination=a.objective?{x:a.objective.x,z:a.objective.z}:null;
+
+    if(target){
+      const td=dist2D(f,target);
+      if(f.hp<22||enemyInk(f)){
+        state='retreat';
+        const sign=f.team==='A'?-1:1;
+        destination={x:target.pos.x-sign*10,z:target.pos.z-sign*10};
+      }else if(td<=10){
+        state='duel';
+        destination={x:f.pos.x-(target.pos.x-f.pos.x)*a.strafe*.25,z:f.pos.z-(target.pos.z-f.pos.z)*a.strafe*.25};
+      }else if(td<30){
+        state='pressure';
+        if(a.role==='anchor'&&td>15)destination={x:f.pos.x,z:f.pos.z+(f.team==='A'?-2:2)};
+        else destination={x:target.pos.x,z:target.pos.z};
+      }
+    }
+
+    // Strong forward pressure when nobody is nearby.
+    if(!target&&a.objective){
+      const sign=f.team==='A'?-1:1;
+      if(f.pos.z*sign>26 && a.objective.kind==='front')destination={x:a.objective.x,z:enemySpawnFor(f)};
+    }
+
+    const squid=decideSwim(f,a,target,destination,now);
+    f.squid_mode=!!squid;
+    if(destination){
+      const d=vecTo(f.pos,destination);
+      f._moving=moveSmart(f,destination,delta,squid);
+      if(!squid){
+        f.human.rotation.y=Math.atan2(d.x,d.z);
+        f.root.rotation.y=f.human.rotation.y;
+      }
+    }else{
+      f._moving=false;
+    }
+
+    // Paint while advancing, but don't stop to paint.
+    if(!squid&&(!target||state==='advance'||state==='retreat')){
+      try{
+        const end=f.pos.clone().add(new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y)).multiplyScalar(1.5));
+        paintGround(f.pos.x,f.pos.z,1.0,getFighterInkHex(f),{to:{x:end.x,z:end.z},noNetwork:true});
+        f.ink=Math.max(0,f.ink-1.1*delta);
+      }catch(_){}
+    }
+
+    if(squid){
+      f.ink=Math.min(100,f.ink+30*delta);
+      if(f.hp<f.maxHp)f.hp=Math.min(f.maxHp,f.hp+7*delta);
+    }else{
+      f.ink=Math.max(0,f.ink-delta*(state==='duel'||state==='pressure'?1.15:.35));
+    }
+
+    if(!squid&&target&&canShootAt(f,target,now)){
+      smartAttack(f,target,now);
+      smartSub(f,target,now,a);
+      smartSpecial(f,target,now,a);
+    }else{
+      if(f.weapon?.category==='charger'||f.weapon?.category==='spinner'||f.weapon?.category==='wiper')f.ai.chargeStarted=0;
+      if(target)smartSub(f,target,now,a);
+      smartSpecial(f,target,now,a);
+    }
+
+    if(a.stuck>1.2){
+      const sign=Math.random()<.5?-1:1;
+      const side=new THREE.Vector3(sign,0,0);
+      try{moveSmart(f,f.pos.clone().add(side.multiplyScalar(4)),delta,false);}catch(_){}
+      a.stuck=0;
+    }
+
+    // Hard anti-camp rule.
+    if(f.squid_mode && (!friendlyInk(f)||!destination||dist2D(f,destination)<4||target&&dist2D(f,target)<15)){
+      f.squid_mode=false;
+    }
+
+    updateFighterAnimation(f,!!f._moving,!!f.squid_mode);
+    if(!f.squid_mode&&f._moving)f.root.rotation.y=f.human.rotation.y;
+  }
+
+  function enemySpawnFor(f){return f.team==='A'?52:-52;}
+
+  // Final override: this is now the only CPU brain called by the game loop.
+  window.updateAdaptiveAI=updateAdaptiveAI;
+  updateAI=updateAdaptiveAI;
+  window.updateAI=updateAdaptiveAI;
+  window.__V93_AI='ADAPTIVE-UTILITY-TACTICAL-2026-09-30';
+  console.log('[SPLATOON ONLINE][V93] adaptive tactical AI active');
+})();
+</script>
+
 </body>
 </html>
