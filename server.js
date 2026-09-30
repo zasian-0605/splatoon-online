@@ -767,7 +767,7 @@ wss.on('connection', ws => {
   const player = {
     id, ws, roomId: null, team: null, ready: false, weaponId: 0,
     config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 },
-    lastStateAt: 0, lastStateAlive: true, stateSeq: 0,
+    lastStateAt: 0, stateSeq: 0,
     accountName: null, accountToken: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
