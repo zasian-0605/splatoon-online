@@ -790,6 +790,8 @@ wss.on('connection', ws => {
       return;
     }
     if (m.type === 'bindAccount') {
+      const boundRoom = player.roomId ? rooms.get(player.roomId) : null;
+      if (boundRoom?.started) return;
       const token = String(m.token || '');
       const s = sessionForToken(token);
       if (s && accounts[s.name]) {
