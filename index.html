@@ -8179,8 +8179,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         paintSegment(f.pos,f.pos.clone().addScaledVector(d,2.0),w.paintFan*.38,color,true);
       }
       fighters.forEach(o=>{if(o.alive&&o.team!==f.team&&o.pos.distanceTo(f.pos)<(w.swingRange||2.2))applyDamage(o,w.swingDamage||40,f);});
-      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.0,z:f.pos.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,mode:'brushFlick'}));}catch{}
+      if(f.isPlayer&&onlineActive&&onlineStarted){
+        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.0,z:f.pos.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,mode:'brushFlick'});}catch(_){}
       }
     }
     f.specialGauge=Math.min(100,f.specialGauge+2.0);
