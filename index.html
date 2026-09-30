@@ -5284,22 +5284,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     paintGround(m.x,m.z,m.radius,displayColorForPlayer(m.id),{mult:m.mult||1,remote:true});
   });
 
-  /* Existing onmessage is closed over inside openOnlinePanel, so intercept WebSocket constructor messages. */
-  const NativeWS=window.WebSocket;
-  window.WebSocket=function(url, protocols){
-    const ws=protocols?new NativeWS(url,protocols):new NativeWS(url);
-    const oldAdd=ws.addEventListener.bind(ws);
-    ws.addEventListener=function(type,listener,opts){
-      if(type==='message'){
-        const wrapped=function(ev){
-          try{ const m=JSON.parse(ev.data); if(m.type==='queue'){setQueueCount(m.count||0);} if(m.type==='matchFound'){setQueueCount(8);} if(m.type==='paint'&&m.id){ev=new MessageEvent('message',{data:JSON.stringify(Object.assign({},m,{colorHex:displayColorForPlayer(m.id)}))});} }catch{} listener.call(ws,ev); };
-        return oldAdd(type,wrapped,opts);
-      }
-      return oldAdd(type,listener,opts);
-    };
-    return ws;
-  };
-  window.WebSocket.CONNECTING=NativeWS.CONNECTING;window.WebSocket.OPEN=NativeWS.OPEN;window.WebSocket.CLOSING=NativeWS.CLOSING;window.WebSocket.CLOSED=NativeWS.CLOSED;
+  /* Keep the browser's native WebSocket constructor.
+     Online state/paint/count handling is done by the real socket handlers above. */
 
   /* ---------- Better remote creation: own chosen color stays own ---------- */
   const oldEnsureRemote=window.ensureRemoteFighter;
