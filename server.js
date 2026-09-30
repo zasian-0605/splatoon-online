@@ -347,19 +347,19 @@ function serverResolveShot(room,player,m){
     serverApplyAoE(room,center,w.explosion||2.4,w.splash||w.damage||0,player.team,player,'blaster');
     return true;
   }
-  if(w.cat==='slosher'{
+  if(w.cat==='slosher'){
     const center=nearest
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
       : {x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
     serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,'slosher');
     return true;
   }
-  if(w.cat==='charger'{
+  if(w.cat==='charger'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
     if(nearest)serverApplyDamage(room,nearest.target,w.tap+(w.full-w.tap)*frac,player,'charger');
     return true;
   }
-  if(w.cat==='wiper'{
+  if(w.cat==='wiper'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
     const dmg=(w.damage||72)+((w.full||w.damage||72)-(w.damage||72))*frac;
     if(nearest)serverApplyDamage(room,nearest.target,dmg,player,'wiper');
