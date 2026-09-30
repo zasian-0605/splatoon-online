@@ -768,6 +768,8 @@ function messageBudget(player){
 
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
+  ws.isAlive=true;
+  ws.on('pong',()=>{ws.isAlive=true;});
   ws.on('error',err=>console.warn('[WS ERROR]',err?.message||err));
   const id = `Player_${String(nextPlayerNo++).padStart(4, '0')}`;
   const player = {
@@ -837,6 +839,10 @@ wss.on('connection', ws => {
       console.log(`[WS READY] ${player.id} room=${room.id} ready=${player.ready} roomPlayers=${room.players.size}`);
       broadcast(room, { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 });
       assignTeamsAndStart(room); return;
+    }
+    if (m.type === 'keepalive') {
+      send(ws,{type:'keepaliveAck',at:m.at||Date.now()});
+      return;
     }
     if (m.type === 'leaveQueue') {
       console.log(`[WS LEAVE REQUEST] ${player.id} room=${player.roomId || '-'} account=${player.accountName || '-'}`);
@@ -1029,6 +1035,7 @@ wss.on('connection', ws => {
     }
   });
   ws.on('close', (code, reason) => {
+    ws.isAlive=false;
     const beforeRoom = player.roomId || '-';
     const beforeAccount = player.accountName || '-';
     console.log(`[WS CLOSE] ${player.id} account=${beforeAccount} room=${beforeRoom} code=${code} reason=${String(reason || '')} activeSocketsBefore=${sockets.size}`);
@@ -1038,6 +1045,22 @@ wss.on('connection', ws => {
     broadcastGlobalOnlineCount();
   });
 });
+
+const WS_HEARTBEAT=setInterval(()=>{
+  for(const player of sockets.values()){
+    const ws=player.ws;
+    if(ws.readyState!==1)continue;
+    if(ws.isAlive===false){
+      console.warn('[WS HEARTBEAT TIMEOUT] '+player.id);
+      try{ws.terminate();}catch(_){}
+      continue;
+    }
+    ws.isAlive=false;
+    try{ws.ping();}catch(_){}
+  }
+},30000);
+WS_HEARTBEAT.unref?.();
+
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
