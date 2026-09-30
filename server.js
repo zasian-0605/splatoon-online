@@ -373,23 +373,24 @@ function serverResolveShot(room,player,m){
   return true;
 }
 function serverResolveSub(room,player,m){
-  if(!room.started||!player.team||!player.serverAlive)return;
-  const def=SERVER_SUBS[String(m.subType||'')];if(!def)return;
-  const now=Date.now();if(now-(player.lastSubAt||0)<180)return;
+  if(!room.started||!player.team||!player.serverAlive)return false;
+  const def=SERVER_SUBS[String(m.subType||'')];if(!def)return false;
+  const now=Date.now();if(now-(player.lastSubAt||0)<180)return false;
   const subCost=serverSubInkCost(m.subType);
   if(!serverTrySpendInk(player,subCost)){
     send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
-    return;
+    return false;
   }
   player.lastSubAt=now;
   const pos=Object.assign({},player.serverPos||player.spawn),vx=Number(m.vx)||0,vz=Number(m.vz)||0;
   const scale=Math.min(1.8,Math.max(.25,(def.delay||0)/1000)),center={x:pos.x+vx*scale,z:pos.z+vz*scale,y:pos.y||0};
-  if(!serverPointInStage(center.x,center.z))return;
+  if(!serverPointInStage(center.x,center.z))return false;
   setTimeout(()=>{
     // The thrower may have left the room while the fuse was running.
     if(rooms.get(room.id)!==room||!room.started||room.players.get(player.id)!==player||!player.team)return;
     serverApplyAoE(room,center,def.radius||0,def.damage||0,player.team,player,'sub');
   },Math.max(0,def.delay||0));
+  return true;
 }
 function serverSendSensorMark(viewer,target,specialName,durationMs){
   if(!viewer||!target||viewer===target||!viewer.ws||!target.ws)return;
@@ -882,6 +883,8 @@ wss.on('connection', ws => {
       if (speed < 0.01 || speed > 40) return;
       const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
       const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1.4, Number(m.charge))) : 0;
+      const accepted=serverResolveSub(room,player,Object.assign({},m,{subType,vx:nums[3],vy:nums[4],vz:nums[5]}));
+      if(!accepted)return;
       broadcast(room, {
         type: 'sub',
         id: player.id,
@@ -891,7 +894,6 @@ wss.on('connection', ws => {
         subType,
         weaponId, charge
       }, player.id);
-      serverResolveSub(room,player,Object.assign({},m,{subType,vx:nums[3],vy:nums[4],vz:nums[5]}));
       return;
     }
     // Charge Orb has a dedicated two-phase protocol. Only handle that
