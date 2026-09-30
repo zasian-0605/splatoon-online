@@ -488,6 +488,17 @@ function broadcastGlobalOnlineCount() {
   for (const player of sockets.values()) send(player.ws, payload);
 }
 
+const ONLINE_INK_COLORS=[0xe3ff00,0xff2255,0x00d4ff,0x9900ff];
+function canonicalInkColor(config){
+  const c=Number.isFinite(Number(config?.color))?Math.max(0,Math.min(ONLINE_INK_COLORS.length-1,Math.floor(Number(config.color)))):0;
+  return ONLINE_INK_COLORS[c];
+}
+function applyCanonicalPlayerColor(player){
+  if(!player?.config)return ONLINE_INK_COLORS[0];
+  player.config.inkColorHex=canonicalInkColor(player.config);
+  return player.config.inkColorHex;
+}
+
 function sanitizeConfig(cfg, fallbackWeapon=0) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
   return {
@@ -509,7 +520,7 @@ function roster(room) {
     ready: !!p.ready,
     weaponId: p.weaponId,
     spawn: p.spawn,
-    config: p.config || sanitizeConfig(null,p.weaponId)
+    config: Object.assign({}, p.config || sanitizeConfig(null,p.weaponId), {inkColorHex:applyCanonicalPlayerColor(p)})
   }));
 }
 function broadcast(room, obj, exceptId = null) {
@@ -745,14 +756,19 @@ function saneWorldPosition(x,y,z){
 function messageBudget(player){
   const now=Date.now();
   if(!player.msgWindowStart || now-player.msgWindowStart>=1000){
-    player.msgWindowStart=now; player.msgCount=0;
+    player.msgWindowStart=now; player.msgCount=0; player.msgRateDrops=0;
   }
   player.msgCount++;
-  return player.msgCount<=120;
+  if(player.msgCount<=240)return true;
+  // Excess gameplay packets are dropped instead of disconnecting a healthy client.
+  // This avoids false positives when paint + state + action packets overlap.
+  player.msgRateDrops=(player.msgRateDrops||0)+1;
+  return false;
 }
 
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
+  ws.on('error',err=>console.warn('[WS ERROR]',err?.message||err));
   const id = `Player_${String(nextPlayerNo++).padStart(4, '0')}`;
   const player = {
     id, ws, roomId: null, team: null, ready: false, weaponId: 0,
@@ -762,7 +778,8 @@ wss.on('connection', ws => {
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
     serverHp:100, serverAlive:true, serverPos:null, serverRespawnAt:0,
-    lastHazardAt:0, lastShotAt:0, lastSubAt:0
+    lastHazardAt:0, lastShotAt:0, lastSubAt:0,
+    msgRateDrops:0, speedViolations:0, lastSpeedStrikeAt:0
   };
   sockets.set(ws, player);
   console.log(`[WS CONNECT] ${player.id} activeSockets=${sockets.size}`);
@@ -772,23 +789,16 @@ wss.on('connection', ws => {
     let m; try { m = JSON.parse(raw.toString()); } catch { return; }
     if(!m || typeof m!=='object' || typeof m.type!=='string') return;
     if(!messageBudget(player)){
-      securityStrike(player,'message-rate');
+      if((player.msgRateDrops||0)===1)console.warn('[WS RATE DROP] '+player.id+' account='+(player.accountName||'-'));
       return;
     }
     if (m.type === 'bindAccount') {
       const token = String(m.token || '');
       const s = sessionForToken(token);
       if (s && accounts[s.name]) {
-        // One live socket per account. A reconnect/login from the same account
-        // replaces the old socket before joining a room, preventing duplicate
-        // fighters and split room membership across tabs/reconnections.
-        for (const other of sockets.values()) {
-          if (other === player || other.accountName !== s.name) continue;
-          console.log(`[WS REPLACE DUPLICATE] old=${other.id} new=${player.id} account=${s.name}`);
-          leaveRoom(other);
-          sockets.delete(other.ws);
-          try { other.ws.close(4001, 'replaced by newer connection'); } catch {}
-        }
+        // Connections are identified by their WebSocket player id.
+        // The same account may be open on more than one device/tab without
+        // forcibly disconnecting an active match.
         player.accountName = s.name;
         player.accountToken = token;
         console.log(`[WS BIND] ${player.id} account=${player.accountName}`);
@@ -801,6 +811,7 @@ wss.on('connection', ws => {
     }
     if (m.type === 'joinQueue') {
       if (m.config && typeof m.config === 'object') player.config = sanitizeConfig(m.config, player.weaponId);
+      applyCanonicalPlayerColor(player);
       if (Number.isFinite(Number(m.weaponId))) player.weaponId = Math.max(0, Math.min(200, Math.floor(Number(m.weaponId))));
       player.config.weapon = player.weaponId;
       // Online battles can also use Render without a WEB ID.
@@ -821,6 +832,7 @@ wss.on('connection', ws => {
       player.ready = !!m.ready;
       player.weaponId = Number.isFinite(m.weaponId) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
       if(m.config && typeof m.config === 'object') player.config=sanitizeConfig(m.config,player.weaponId);
+      applyCanonicalPlayerColor(player);
       player.config.weapon=player.weaponId;
       console.log(`[WS READY] ${player.id} room=${room.id} ready=${player.ready} roomPlayers=${room.players.size}`);
       broadcast(room, { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 });
@@ -953,8 +965,20 @@ wss.on('connection', ws => {
       if(player.serverHp==null)player.serverHp=100; if(player.serverAlive==null)player.serverAlive=true; if(player.serverInk==null)player.serverInk=100;
       if(player.serverAlive){
         if(player.serverPos){
-          const dt=Math.max(.028,(now-player.lastStateAt)/1000),d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z),maxStep=Math.min(2.35,.82+dt*36);
-          if(d>maxStep){securityStrike(player,'server-speed='+d.toFixed(2)+' max='+maxStep.toFixed(2));return;}
+          const dt=Math.max(.028,(now-player.lastStateAt)/1000),d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z);
+          // Super-jump is a legitimate large 2D displacement over ~1 second.
+          // Normal movement keeps the strict speed gate; a flagged super-jump gets
+          // a larger temporary allowance instead of being disconnected.
+          const maxStep=m.superJump ? Math.min(12,.82+dt*150) : Math.min(2.8,.82+dt*42);
+          if(d>maxStep){
+            player.speedViolations=(player.speedViolations||0)+1;
+            if(player.speedViolations>3&&now-(player.lastSpeedStrikeAt||0)>1200){
+              player.lastSpeedStrikeAt=now;
+              securityStrike(player,'server-speed='+d.toFixed(2)+' max='+maxStep.toFixed(2));
+            }
+            return;
+          }
+          player.speedViolations=0;
         }
         player.serverPos={x,y,z}; player.lastStatePos={x,z,y}; player.lastStateAt=now;
       }
@@ -971,7 +995,7 @@ wss.on('connection', ws => {
       const serverPos=player.serverPos||player.spawn,enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
       player.serverSquid=!!m.squid&&!enemyInk;
       const packet={type:'state',id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
-        hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId};
+        hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId,colorHex:applyCanonicalPlayerColor(player)};
       broadcast(room,packet,player.id); send(player.ws,packet); return;
     }
 
@@ -983,7 +1007,7 @@ wss.on('connection', ws => {
       if(now-(player.lastPaintAt||0)<28)return;
       player.lastPaintAt=now;
       const serverPos=player.serverPos||player.spawn,y=Number.isFinite(Number(m.y))?Number(m.y):Number(serverPos.y)||0;
-      const colorHex=Number.isFinite(Number(player.config?.inkColorHex))?Number(player.config.inkColorHex):(player.team==='A'?0xe3ff00:0xff2255);
+      const colorHex=applyCanonicalPlayerColor(player);
       const x2=Number(m.x2),z2=Number(m.z2);
       markServerPaint(room,x,z,radius,player.team,y,
         Number.isFinite(x2)&&Number.isFinite(z2)&&serverPointInStage(x2,z2)?x2:undefined,
