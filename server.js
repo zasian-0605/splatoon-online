@@ -889,7 +889,7 @@ wss.on('connection', ws => {
       if (!allowed.includes(subType)) return;
       const speed = Math.hypot(nums[3], nums[4], nums[5]);
       if (speed < 0.01 || speed > 40) return;
-      const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      const weaponId = player.weaponId;
       const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1.4, Number(m.charge))) : 0;
       const accepted=serverResolveSub(room,player,Object.assign({},m,{subType,vx:nums[3],vy:nums[4],vz:nums[5]}));
       if(!accepted)return;
