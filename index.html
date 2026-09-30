@@ -4880,6 +4880,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(serverInput) serverInput.value=DEFAULT_ONLINE_SERVER;
     setOnlineStatus('Renderオンラインサーバーへ接続します…');
     onlineReady=false;onlineActive=false;onlineStarted=false;onlineResultSent=false;
+    onlineRoomId='';onlinePlayerId='';onlineTeam='';
+    const roomView=document.getElementById('online-room');
+    if(roomView) roomView.textContent='ルーム接続中…';
     if(onlineSocket){try{onlineSocket.close();}catch{} onlineSocket=null;}
     const token=localStorage.getItem('splatoonAccountToken');
     const url=location.protocol==='file:' ? '' : onlineUrl();
@@ -5131,7 +5134,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function closeOnlinePanel(){
     // オンライン画面を閉じた瞬間は必ずマウスロックを解除する。
     try{ window.__V10?.releaseLock?.(); }catch(e){}
-    hideOnlinePanel();showGlobalOnlineHud(false);onlineReady=false;
+    hideOnlinePanel();showGlobalOnlineHud(false);
+    const wasInActiveMatch=onlineActive||onlineStarted;
+    onlineReady=false;
+    if(!wasInActiveMatch){onlineRoomId='';onlinePlayerId='';onlineTeam='';}
     if(onlineSocket&&onlineSocket.readyState<=1){
       try{
         const payload={type:'leaveQueue'};
