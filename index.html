@@ -4818,8 +4818,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const e=document.getElementById('online-profile');if(e&&profile)e.innerHTML=`${profile.name}　<span class="rank-badge">${profile.rank}</span>　レート ${profile.rating}　｜ 勝 ${profile.wins} / 負 ${profile.losses}`;
   }
   function clearRemoteFighters(){
+    for(const rf of remoteMap.values()){try{scene.remove(rf.root);}catch{}}
     remoteMap.clear();
-    fighters=fighters.filter(f=>{if(f.remote){scene.remove(f.root);return false;}return true;});
+    const kept=[];
+    for(const f of fighters){
+      if(f?.remote){try{scene.remove(f.root);}catch{}}
+      else kept.push(f);
+    }
+    fighters=kept;
+  }
+  function removeRemoteFighter(id){
+    const key=String(id||'');
+    if(!key)return;
+    const known=remoteMap.get(key);
+    if(known){try{scene.remove(known.root);}catch{}}
+    remoteMap.delete(key);
+    fighters=fighters.filter(f=>{
+      if(f?.remote&&String(f.id)===key){try{scene.remove(f.root);}catch{};return false;}
+      return true;
+    });
   }
   function openOnlinePanel(){
     // オンライン画面ではマウスを自由に動かせるよう、最初に確実にロック解除。
@@ -4842,11 +4859,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         source: location.href,
         build: window.__ONLINE_BUILD_ID || 'unknown'
       });
-      onlineSocket=new WebSocket(url);
-      onlineSocket.onopen=()=>{
+      const socket=new WebSocket(url);
+       onlineSocket=socket;
+      socket.onopen=()=>{
+         if(onlineSocket!==socket)return;
         window.__onlineLog?.('WS OPEN', {
-          readyState: onlineSocket.readyState,
-          url: onlineSocket.url
+          readyState: socket.readyState,
+          url: socket.url
         });
         setOnlineConnecting('Render接続OK / ルームを検索中');
         setOnlineCount(1,'自分が参加中。対戦相手を探しています');
@@ -4854,12 +4873,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(token){
           const payload={type:'bindAccount',token};
           window.__onlineLog?.('WS SEND', payload);
-          onlineSocket.send(JSON.stringify(payload));
+          socket.send(JSON.stringify(payload));
         }else{
-          onlineSocket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon,config:Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]})}));
+          socket.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig.weapon,config:Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]})}));
         }
       };
-      onlineSocket.onmessage=(ev)=>{
+      socket.onmessage=(ev)=>{
+         if(onlineSocket!==socket)return;
         window.__onlineLog?.('WS RECEIVE RAW', ev.data);
         let m;
         try{m=JSON.parse(ev.data);}
@@ -4889,7 +4909,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           showOnlineProfile(m.profile);
           const payload={type:'joinQueue',weaponId:playerConfig.weapon,config:Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]})};
           window.__onlineLog?.('WS SEND', payload);
-          onlineSocket.send(JSON.stringify(payload));
+          socket.send(JSON.stringify(payload));
           return;
         }
         if(m.type==='queue'){
@@ -4906,7 +4926,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           setOnlineCount(Math.max(1,m.players.length),m.players.length<2?'対戦相手を探しています':'参加者がそろっています。準備OKを確認中');
           const readyBtn=document.getElementById('online-ready');
           if(readyBtn){
-            readyBtn.disabled=!(onlineSocket&&onlineSocket.readyState===1&&onlineRoomId&&!onlineStarted);
+            readyBtn.disabled=!(onlineSocket&&socket.readyState===1&&onlineRoomId&&!onlineStarted);
             readyBtn.textContent=onlineReady?'準備解除':'準備OK';
             readyBtn.classList.toggle('ready',onlineReady);
           }
@@ -5010,6 +5030,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           }
           return;
         }
+        if(m.type==='playerLeft'){
+          removeRemoteFighter(m.id);
+          return;
+        }
         if(m.type==='state'){applyRemoteState(m);return;}
         if(m.type==='paint'){
           const x2=Number(m.x2), z2=Number(m.z2);
@@ -5033,7 +5057,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           return;
         }
       };
-      onlineSocket.onerror=(ev)=>{
+      socket.onerror=(ev)=>{
+         if(onlineSocket!==socket)return;
         window.__onlineLog?.('WS ERROR', {
           type: ev?.type || 'error',
           readyState: onlineSocket?.readyState,
@@ -5042,7 +5067,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         setOnlineConnecting('オンライン接続エラー');
         setOnlineCount(0,'Renderサーバーに接続できません');
       };
-      onlineSocket.onclose=(ev)=>{
+      socket.onclose=(ev)=>{
+         if(onlineSocket!==socket)return;
         window.__onlineLog?.('WS CLOSE', {
           code: ev?.code,
           reason: ev?.reason || '',
@@ -5089,7 +5115,20 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     (m.players||[]).forEach(p=>{if(p.id!==onlinePlayerId)ensureRemoteFighter(p);});
   }
   function ensureRemoteFighter(p){
-    if(remoteMap.has(p.id)) return remoteMap.get(p.id);
+    const id=String(p?.id||'');
+    if(!id||id===String(onlinePlayerId||''))return null;
+
+    const known=remoteMap.get(id);
+    if(known){
+      if(!fighters.includes(known))fighters.push(known);
+      return known;
+    }
+
+    // Defensive cleanup for stale/duplicate remote entries from older builds.
+    for(const f of fighters.slice()){
+      if(f?.remote&&String(f.id)===id){try{scene.remove(f.root);}catch{};fighters=fighters.filter(x=>x!==f);}
+    }
+
     const src=p.config||p.cfg||{};
     const cfg={
       style:['girl','boy'].includes(src.style)?src.style:(Math.random()<0.5?'girl':'boy'),
@@ -5107,10 +5146,25 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     remoteMap.set(p.id,rf);fighters.push(rf);return rf;
   }
   function applyRemoteState(m){
-    if(m.id===onlinePlayerId)return;
+    const id=String(m?.id||'');
+    if(!id||id===String(onlinePlayerId||''))return;
+    const x=Number(m.x),y=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
+    if(![x,y,z,yaw].every(Number.isFinite))return;
+
     const p=ensureRemoteFighter(m);if(!p)return;
     p.displayName=String(m.name||p.displayName||p.id);
-    const wasAlive=p.alive;p.pos.lerp(new THREE.Vector3(m.x,m.y||0,m.z),.55);p.root.rotation.y=m.yaw||0;p.root.visible=m.alive!==false;p.alive=m.alive!==false;p.hp=m.hp??p.hp;p.ink=m.ink??p.ink;p.squid_mode=!!m.squid;p.weapon=weaponList[m.weaponId]||p.weapon;
+    p._netTarget={x,y,z,yaw};
+    p._netLastAt=performance.now();
+
+    const wasAlive=p.alive;
+    p.pos.lerp(new THREE.Vector3(x,y,z),.72);
+    p.root.rotation.y=yaw;
+    p.root.visible=m.alive!==false;
+    p.alive=m.alive!==false;
+    p.hp=Number.isFinite(Number(m.hp))?Number(m.hp):p.hp;
+    p.ink=Number.isFinite(Number(m.ink))?Number(m.ink):p.ink;
+    p.squid_mode=!!m.squid;
+    p.weapon=weaponList[m.weaponId]||p.weapon;
     updateFighterAnimation(p,!!m.moving,p.squid_mode);
     if(wasAlive&&!p.alive) addKillFeed(`${m.name||p.id} がやられた`,'dead');
   }
@@ -12534,7 +12588,7 @@ window.__V89_WALL_CLIMB_READY=true;window.__V89_WALL_PAINT_READY=true;
 */
 (function(){
 'use strict';
-const BUILD='V90-SPECIAL-8TO13-OBSTACLE-FIX-2026-09-29';
+const BUILD='V92-ONLINE-DUP-SYNC-FIX-2026-09-30';
 window.__ONLINE_BUILD_ID=BUILD;
 window.__V90_BUILD=BUILD;
 const SPECIALS_V90=new Set(['メガホンレーザー5.1ch','ジェットパック','ウルトラハンコ','カニタンク','エナジースタンド','サメライド']);
