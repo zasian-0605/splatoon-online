@@ -806,6 +806,8 @@ wss.on('connection', ws => {
       return;
     }
     if (m.type === 'joinQueue') {
+      const currentRoom = player.roomId ? rooms.get(player.roomId) : null;
+      if (currentRoom?.started) return;
       if (m.config && typeof m.config === 'object') player.config = sanitizeConfig(m.config, player.weaponId);
       applyCanonicalPlayerColor(player);
       if (Number.isFinite(Number(m.weaponId))) player.weaponId = Math.max(0, Math.min(200, Math.floor(Number(m.weaponId))));
