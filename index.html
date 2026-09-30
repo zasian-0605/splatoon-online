@@ -10297,18 +10297,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   'use strict';
 
   function sendShot(f,dir,mode,charge){
+    if(!f?.isPlayer||!onlineActive||!onlineStarted||typeof window.__v93SendShot!=='function')return;
     try{
-      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        const p={
-          type:'shot',
-          x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
-          dx:dir.x,dy:dir.y,dz:dir.z,
-          weaponId:weaponList.indexOf(f.weapon)
-        };
-        if(mode)p.mode=mode;
-        if(Number.isFinite(charge))p.charge=charge;
-        onlineSocket.send(JSON.stringify(p));
-      }
+      window.__v93SendShot({
+        x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+        dx:dir.x,dy:dir.y,dz:dir.z,
+        weaponId:weaponList.indexOf(f.weapon),
+        ...(mode?{mode}:{}),
+        ...(Number.isFinite(charge)?{charge}:{} )
+      });
     }catch(_){}
   }
 
