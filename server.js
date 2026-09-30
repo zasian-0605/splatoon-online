@@ -1023,10 +1023,6 @@ wss.on('connection', ws => {
       send(player.ws,{type:'serverInk',ink:player.serverInk}); return;
     }
 
-    if (m.type === 'matchResult') {
-      console.log('[AUTH RESULT IGNORE] '+room.id+' '+player.id+' clientHint='+(m.winnerTeam||'-'));
-      return;
-    }
   });
   ws.on('close', (code, reason) => {
     ws.isAlive=false;
