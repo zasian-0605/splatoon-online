@@ -318,11 +318,11 @@ function serverTrySpendInk(player,cost){
   return true;
 }
 function serverResolveShot(room,player,m){
-  if(!room.started||!player.team||!player.serverAlive)return;
+  if(!room.started||!player.team||!player.serverAlive)return false;
   const wid=Number.isFinite(Number(m.weaponId))?Math.max(0,Math.min(200,Math.floor(Number(m.weaponId)))):player.weaponId;
-  const w=SERVER_WEAPONS[wid];if(!w)return;
+  const w=SERVER_WEAPONS[wid];if(!w)return false;
   const now=Date.now();
-  if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return;
+  if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return false;
   const shotCost=serverShotInkCost(w,m);
   if(!serverTrySpendInk(player,shotCost)){
     send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
@@ -345,31 +345,32 @@ function serverResolveShot(room,player,m){
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
       : {x:end.x,y:Math.max(0,end.y),z:end.z};
     serverApplyAoE(room,center,w.explosion||2.4,w.splash||w.damage||0,player.team,player,'blaster');
-    return;
+    return true;
   }
   if(w.cat==='slosher'){
     const center=nearest
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
       : {x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
     serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,'slosher');
-    return;
+    return true;
   }
   if(w.cat==='charger'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
     if(nearest)serverApplyDamage(room,nearest.target,w.tap+(w.full-w.tap)*frac,player,'charger');
-    return;
+    return true;
   }
   if(w.cat==='wiper'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
     const dmg=(w.damage||72)+((w.full||w.damage||72)-(w.damage||72))*frac;
     if(nearest)serverApplyDamage(room,nearest.target,dmg,player,'wiper');
-    return;
+    return true;
   }
   if(nearest){
     let dmg=w.damage||0;
     if(mode==='roller-roll')dmg=Math.min(65,dmg);
     serverApplyDamage(room,nearest.target,dmg,player,w.cat);
   }
+  return true;
 }
 function serverResolveSub(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return;
@@ -854,6 +855,8 @@ wss.on('connection', ws => {
       const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
       const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1, Number(m.charge))) : null;
       const mode = typeof m.mode === 'string' ? String(m.mode).slice(0, 32) : null;
+      const accepted=serverResolveShot(room,player,Object.assign({},m,{weaponId,dx:nums[3],dy:nums[4],dz:nums[5],charge}));
+      if(!accepted)return;
       broadcast(room, {
         type: 'shot',
         id: player.id,
@@ -862,7 +865,6 @@ wss.on('connection', ws => {
         dx: nums[3] / dirLen, dy: nums[4] / dirLen, dz: nums[5] / dirLen,
         weaponId, charge, mode
       }, player.id);
-      serverResolveShot(room,player,Object.assign({},m,{weaponId,dx:nums[3],dy:nums[4],dz:nums[5],charge}));
       return;
     }
     if (m.type === 'sub') {
