@@ -858,7 +858,7 @@ wss.on('connection', ws => {
       if (nums.some(v => !Number.isFinite(v))) return;
       const dirLen = Math.hypot(nums[3], nums[4], nums[5]);
       if (dirLen < 0.001 || dirLen > 2.0) return;
-      const weaponId = Number.isFinite(Number(m.weaponId)) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      const weaponId = player.weaponId;
       const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1, Number(m.charge))) : null;
       const mode = typeof m.mode === 'string' ? String(m.mode).slice(0, 32) : null;
       const accepted=serverResolveShot(room,player,Object.assign({},m,{weaponId,dx:nums[3],dy:nums[4],dz:nums[5],charge}));
