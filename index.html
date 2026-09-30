@@ -8034,8 +8034,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const d=aimDir.clone();d.normalize();
       const b=spawnBulletV60(f,d,{speed:38,damage:50,gravity:4,radius:.25,paintRadius:1.3,life:1.3,explosive:true,explosionRadius:1.8,splashDamage:30,kind:'inkjet'});
       trailPath(f.pos,traceForward(f.pos,d,20,.5),1.2,getFighterInkHex(f),false);
-      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      if(f.isPlayer&&onlineActive&&onlineStarted){
+        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,mode:'inkjet'});}catch(_){}
       }
       return;
     }
