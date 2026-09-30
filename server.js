@@ -441,13 +441,13 @@ function serverApplySensorPulse(room,viewer,center,radius,specialName,durationMs
 }
 
 function serverResolveSpecial(room,player,m){
-  if(!room.started||!player.team||!player.serverAlive)return;
-  const name=String(m.specialName||''),spec=SERVER_SPECIALS[name];if(!spec)return;
+  if(!room.started||!player.team||!player.serverAlive)return false;
+  const name=String(m.specialName||''),spec=SERVER_SPECIALS[name];if(!spec)return false;
   const me=player.serverPos||player.spawn;let x=Number(m.x),z=Number(m.z);
   if(!Number.isFinite(x))x=me.x;if(!Number.isFinite(z))z=me.z;
   const dist=Math.hypot(x-me.x,z-me.z);
   if(dist>45){const scale=45/dist;x=me.x+(x-me.x)*scale;z=me.z+(z-me.z)*scale;}
-  if(!serverPointInStage(x,z))return;
+  if(!serverPointInStage(x,z))return false;
 
   const sensorAlias=name==='パルスノード';
   const sensorHop=name==='ホップソナー'||sensorAlias;
@@ -471,6 +471,7 @@ function serverResolveSpecial(room,player,m){
   }
 
   serverApplyAoE(room,{x,y:Number(m.y)||0,z},spec[1],spec[0],player.team,player,'special:'+name);
+  return true;
 }
 function finishServerMatch(room){
   if(!room||room.resultReported)return;
@@ -949,12 +950,13 @@ wss.on('connection', ws => {
       const compact={};
       if(legacyOrb && m.phase) compact.phase=String(m.phase).slice(0,12);
       for(const k of ['angle','targetId']) if(extra[k]!==undefined) compact[k]=String(extra[k]).slice(0,40);
+      const accepted=serverResolveSpecial(room,player,Object.assign({},m,{specialName:name,x,y,z}));
+      if(!accepted)return;
       player.lastSpecialAt=now;
       broadcast(room,{
         type:'special', id:player.id, team:player.team,
         specialName:name, x,y,z, extra:compact
       },player.id);
-      serverResolveSpecial(room,player,Object.assign({},m,{specialName:name,x,y,z}));
       return;
     }
     if (m.type === 'callout') {
