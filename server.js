@@ -323,14 +323,14 @@ function serverResolveShot(room,player,m){
   const w=SERVER_WEAPONS[wid];if(!w)return false;
   const now=Date.now();
   if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return false;
+  const dx=Number(m.dx),dy=Number(m.dy),dz=Number(m.dz),len=Math.hypot(dx,dy,dz);
+  if(!Number.isFinite(len)||len<.001||len>2)return false;
   const shotCost=serverShotInkCost(w,m);
   if(!serverTrySpendInk(player,shotCost)){
     send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
-    return;
+    return false;
   }
   player.lastShotAt=now;
-  const dx=Number(m.dx),dy=Number(m.dy),dz=Number(m.dz),len=Math.hypot(dx,dy,dz);
-  if(!Number.isFinite(len)||len<.001||len>2)return;
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
   const rawMode=String(m.mode||''); const mode=rawMode==='rollerFlick'?'roller-flick':rawMode;
   const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
