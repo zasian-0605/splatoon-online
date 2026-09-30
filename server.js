@@ -546,7 +546,6 @@ function createWaitingRoom() {
     started: false,
     resultReported: false,
     startsAt: 0,
-    timer: 180,
     inkCells: new Map()
   };
   rooms.set(id, room);
@@ -588,7 +587,7 @@ function assignTeamsAndStart(room) {
     p.serverHp=100;p.serverAlive=true;p.serverInk=100;p.serverSquid=false;p.serverInkLastAt=Date.now();p.serverInkUseAt=0;p.serverRespawnAt=0;p.serverPos=Object.assign({},p.spawn);
     p.lastStatePos=Object.assign({},p.spawn);p.lastStateAt=Date.now();p.lastShotAt=0;p.lastSubAt=0;p.lastHazardAt=0;
   }
-  room.started = true; room.startsAt = Date.now() + 1500; room.timer = 180;
+  room.started = true; room.startsAt = Date.now() + 1500;
   console.log('[MATCH START] '+room.id+' players='+ps.map(p=>p.id+'('+(p.accountName||'-')+')').join(',')+' totalSockets='+sockets.size);
   const r = roster(room);
   for (const p of ps) send(p.ws, { type: 'matchFound', roomId: room.id, selfId: p.id, team: p.team, spawn: p.spawn, startAt: room.startsAt, players: r });
@@ -1069,7 +1068,7 @@ setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
     if (!room.started) continue;
-    const remain = Math.max(0, 180 - Math.max(0, (now - room.startsAt) / 1000)); room.timer = remain;
+    const remain = Math.max(0, 180 - Math.max(0, (now - room.startsAt) / 1000));
     broadcast(room, { type:'serverTick', remaining:remain, started:now >= room.startsAt });
     if (remain <= 0 && !room.resultReported) { finishServerMatch(room); }
   }
