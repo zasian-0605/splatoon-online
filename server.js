@@ -256,7 +256,7 @@ function serverKillPlayer(room,target,attacker,reason){
   console.log('[AUTH KILL] '+room.id+' '+target.id+' by '+(attacker?attacker.id:'-')+' reason '+(reason||'weapon'));
   const keepRoom=room;
   setTimeout(()=>{
-    if(rooms.get(keepRoom.id)!==keepRoom||!keepRoom.started||!target.ws||target.ws.readyState!==1)return;
+    if(rooms.get(keepRoom.id)!==keepRoom||!keepRoom.started||keepRoom.players.get(target.id)!==target||!target.ws||target.ws.readyState!==1)return;
     target.serverAlive=true;target.serverHp=100;target.serverPos=Object.assign({},target.spawn);
     target.lastStatePos=Object.assign({},target.spawn);target.lastStateAt=Date.now();
     send(target.ws,{type:'serverRespawn',id:target.id,spawn:target.spawn});
@@ -384,7 +384,11 @@ function serverResolveSub(room,player,m){
   const pos=Object.assign({},player.serverPos||player.spawn),vx=Number(m.vx)||0,vz=Number(m.vz)||0;
   const scale=Math.min(1.8,Math.max(.25,(def.delay||0)/1000)),center={x:pos.x+vx*scale,z:pos.z+vz*scale,y:pos.y||0};
   if(!serverPointInStage(center.x,center.z))return;
-  setTimeout(()=>{if(!rooms.get(room.id)||!room.started)return;serverApplyAoE(room,center,def.radius||0,def.damage||0,player.team,player,'sub');},Math.max(0,def.delay||0));
+  setTimeout(()=>{
+    // The thrower may have left the room while the fuse was running.
+    if(rooms.get(room.id)!==room||!room.started||room.players.get(player.id)!==player||!player.team)return;
+    serverApplyAoE(room,center,def.radius||0,def.damage||0,player.team,player,'sub');
+  },Math.max(0,def.delay||0));
 }
 function serverSendSensorMark(viewer,target,specialName,durationMs){
   if(!viewer||!target||viewer===target||!viewer.ws||!target.ws)return;
@@ -453,7 +457,7 @@ function serverResolveSpecial(room,player,m){
     serverApplySensorPulse(room,player,center,20,name,8000,99);
     [1600,4100,6600].forEach(delay=>{
       setTimeout(()=>{
-        if(rooms.get(room.id)!==room||!room.started||!player.serverAlive)return;
+        if(rooms.get(room.id)!==room||!room.started||room.players.get(player.id)!==player||!player.team)return;
         serverApplySensorPulse(room,player,player.serverPos||center,20,name,8000,99);
       },delay);
     });
