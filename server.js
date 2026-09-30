@@ -488,15 +488,14 @@ function broadcastGlobalOnlineCount() {
   for (const player of sockets.values()) send(player.ws, payload);
 }
 
-const ONLINE_INK_COLORS=[0xe3ff00,0xff2255,0x00d4ff,0x9900ff];
-function canonicalInkColor(config){
-  const c=Number.isFinite(Number(config?.color))?Math.max(0,Math.min(ONLINE_INK_COLORS.length-1,Math.floor(Number(config.color)))):0;
-  return ONLINE_INK_COLORS[c];
+const ONLINE_INK_COLORS={A:0xe3ff00,B:0xff2255};
+function canonicalInkColor(player){
+  return player?.team==='B'?ONLINE_INK_COLORS.B:ONLINE_INK_COLORS.A;
 }
 function applyCanonicalPlayerColor(player){
-  if(!player?.config)return ONLINE_INK_COLORS[0];
-  player.config.inkColorHex=canonicalInkColor(player.config);
-  return player.config.inkColorHex;
+  const c=canonicalInkColor(player);
+  if(player?.config)player.config.inkColorHex=c;
+  return c;
 }
 
 function sanitizeConfig(cfg, fallbackWeapon=0) {
