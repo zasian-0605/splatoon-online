@@ -21,7 +21,7 @@ function face(f,t){
 }
 function brain(f,now){
   let a=brains.get(f);
-  if(!a){a={strafe:Math.random()<.5?-1:1,nextStrafe:now+800+Math.random()*800,nextSub:now+1800+Math.random()*1400,nextSpecial:now+5000+Math.random()*4000,charge:0,waypoint:null,nextWaypoint:0,last:f.pos.clone(),lastAt:now,stuck:0};brains.set(f,a);}
+  if(!a){a={strafe:Math.random()<.5?-1:1,nextShot:0,nextStrafe:now+800+Math.random()*800,nextSub:now+1800+Math.random()*1400,nextSpecial:now+5000+Math.random()*4000,charge:0,waypoint:null,nextWaypoint:0,last:f.pos.clone(),lastAt:now,stuck:0};brains.set(f,a);}
   return a;
 }
 function target(f){
