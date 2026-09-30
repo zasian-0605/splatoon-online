@@ -482,7 +482,6 @@ function finishServerMatch(room){
 }
 
 let nextPlayerNo = 1;
-let nextRoomNo = 1;
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function onlinePlayerCount() { return sockets.size; }
 function broadcastGlobalOnlineCount() {
