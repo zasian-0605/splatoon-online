@@ -477,8 +477,12 @@ function finishServerMatch(room){
   for(const p of room.players.values()){const pr=updateAccountResult(p,winnerTeam);if(pr)updated.push({id:p.id,profile:pr});}
   console.log('[AUTH MATCH END] '+room.id+' Acells='+a+' Bcells='+b+' winner='+winnerTeam);
   broadcast(room,{type:'matchEnd',winnerTeam,results:updated,score:{A:a,B:b}});
+  for(const p of room.players.values()){
+    p.roomId=null;p.team=null;p.ready=false;
+  }
+  room.players.clear();
   room.started=false;
-  setTimeout(()=>{if(rooms.get(room.id)===room)rooms.delete(room.id);},5000);
+  rooms.delete(room.id);
 }
 
 let nextPlayerNo = 1;
