@@ -7960,11 +7960,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       paintTrail:true,
       paintEvery:.18
     });
-    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({
-        type:'shot',x:origin.x,y:origin.y,z:origin.z,
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({
+        x:origin.x,y:origin.y,z:origin.z,
         dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'blaster'
-      }));}catch{}
+      });}catch(_){}
     }
   }
 
