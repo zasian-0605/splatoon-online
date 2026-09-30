@@ -4007,6 +4007,20 @@ function animate3D(token){
     fighters.forEach(f=>{
       if(f.isPlayer) return;
       try{
+        if(f.remote){
+          const t=f._netTarget;
+          if(t){
+            const dist=Math.hypot(f.pos.x-t.x,f.pos.y-t.y,f.pos.z-t.z);
+            if(dist>8){
+              f.pos.set(t.x,t.y,t.z);
+            }else{
+              const alpha=Math.min(1,delta*18);
+              f.pos.lerp(new THREE.Vector3(t.x,t.y,t.z),alpha);
+            }
+            f.root.rotation.y=Number.isFinite(t.yaw)?t.yaw:f.root.rotation.y;
+          }
+          return;
+        }
         if(!f.alive){
           if(time>f.respawnAt){
             respawnFighter(f);
@@ -5177,8 +5191,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     p._netTarget={x,y,z,yaw};
     p._netLastAt=performance.now();
 
+    // First state snaps into place; subsequent states are interpolated in animate3D().
+    if(!p._netHasTarget){
+      p.pos.set(x,y,z);
+      p._netHasTarget=true;
+    }
     const wasAlive=p.alive;
-    p.pos.lerp(new THREE.Vector3(x,y,z),.72);
     p.root.rotation.y=yaw;
     p.root.visible=m.alive!==false;
     p.alive=m.alive!==false;
