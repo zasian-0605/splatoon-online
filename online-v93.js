@@ -269,7 +269,9 @@
       log('CLOSE');
       const wasMatch=state.phase==='in_match';
       state.socket=null;state.proxy=null;state.phase='disconnected';state.roomId='';state.playerId='';state.team='';state.ready=false;setVars();
+      try{window.onlineSocket=null;}catch(_){}
       try{window.showGlobalOnlineHud?.(false);}catch(_){}
+
       if(wasMatch){
         try{window.clearRemoteFighters?.();}catch(_){}
         try{window.battleActive=false;}catch(_){}
