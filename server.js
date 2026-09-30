@@ -376,15 +376,15 @@ function serverResolveSub(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return false;
   const def=SERVER_SUBS[String(m.subType||'')];if(!def)return false;
   const now=Date.now();if(now-(player.lastSubAt||0)<180)return false;
+  const pos=Object.assign({},player.serverPos||player.spawn),vx=Number(m.vx)||0,vz=Number(m.vz)||0;
+  const scale=Math.min(1.8,Math.max(.25,(def.delay||0)/1000)),center={x:pos.x+vx*scale,z:pos.z+vz*scale,y:pos.y||0};
+  if(!serverPointInStage(center.x,center.z))return false;
   const subCost=serverSubInkCost(m.subType);
   if(!serverTrySpendInk(player,subCost)){
     send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
     return false;
   }
   player.lastSubAt=now;
-  const pos=Object.assign({},player.serverPos||player.spawn),vx=Number(m.vx)||0,vz=Number(m.vz)||0;
-  const scale=Math.min(1.8,Math.max(.25,(def.delay||0)/1000)),center={x:pos.x+vx*scale,z:pos.z+vz*scale,y:pos.y||0};
-  if(!serverPointInStage(center.x,center.z))return false;
   setTimeout(()=>{
     // The thrower may have left the room while the fuse was running.
     if(rooms.get(room.id)!==room||!room.started||room.players.get(player.id)!==player||!player.team)return;
