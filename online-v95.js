@@ -69,9 +69,14 @@ function patrol(f,a,now){
 }
 function onlineAIShot(f,mode,charge){
   if(f?.isPlayer||f?.remote||typeof onlineActive==='undefined'||!onlineActive||typeof onlineStarted==='undefined'||!onlineStarted)return;
-  const ws=window.onlineSocket;if(!ws||ws.readyState!==1)return;
+  if(typeof window.__v93SendShot!=='function')return;
   const d=front(f),w=f.weapon||{};
-  try{ws.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:Number(w.id)||0,mode:mode||undefined,charge:Number.isFinite(Number(charge))?Number(charge):undefined}));}catch(_){}
+  try{window.__v93SendShot({
+    x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+    dx:d.x,dy:d.y,dz:d.z,weaponId:Number(w.id)||0,
+    mode:mode||undefined,
+    charge:Number.isFinite(Number(charge))?Number(charge):undefined
+  });}catch(_){}
 }
 function attack(f,t,now,a){
   const w=f.weapon||{};face(f,t);const d=front(f);
