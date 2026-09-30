@@ -258,7 +258,7 @@ function serverKillPlayer(room,target,attacker,reason){
   setTimeout(()=>{
     if(rooms.get(keepRoom.id)!==keepRoom||!keepRoom.started||keepRoom.players.get(target.id)!==target||!target.ws||target.ws.readyState!==1)return;
     target.serverAlive=true;target.serverHp=100;target.serverPos=Object.assign({},target.spawn);
-    target.lastStatePos=Object.assign({},target.spawn);target.lastStateAt=Date.now();
+    target.lastStateAt=Date.now();
     send(target.ws,{type:'serverRespawn',id:target.id,spawn:target.spawn});
     broadcast(keepRoom,{type:'state',id:target.id,name:target.accountName||target.id,team:target.team,
       x:target.spawn.x,y:target.spawn.y||0,z:target.spawn.z,yaw:target.team==='A'?0:Math.PI,
@@ -767,7 +767,7 @@ wss.on('connection', ws => {
   const player = {
     id, ws, roomId: null, team: null, ready: false, weaponId: 0,
     config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 },
-    lastStateAt: 0, lastStatePos: null, lastStateAlive: true, stateSeq: 0,
+    lastStateAt: 0, lastStateAlive: true, stateSeq: 0,
     accountName: null, accountToken: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
@@ -983,7 +983,7 @@ wss.on('connection', ws => {
           }
           player.speedViolations=0;
         }
-        player.serverPos={x,y,z}; player.lastStatePos={x,z,y}; player.lastStateAt=now;
+        player.serverPos={x,y,z}; player.lastStateAt=now;
       }
       const prevInkAt=player.serverInkLastAt||now;
       const inkDt=Math.max(0,Math.min(.25,(now-prevInkAt)/1000));
