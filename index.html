@@ -5989,12 +5989,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   };
 
   /* Legacy 50ms state timer removed. */
-  let __onlineKeepaliveTimer=setInterval(()=>{
-    const ws=onlineSocket;
-    if(!ws||ws.readyState!==1)return;
-    try{ws.send(JSON.stringify({type:'keepalive',at:Date.now()}));}catch(_){}
-  },20000);
-
   // A separate safety timer guarantees the result screen even if the main render loop stalls.
   let __battleWatchdog=setInterval(()=>{
     if(!battleActive || currentPhase!==2) return;
