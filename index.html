@@ -8046,8 +8046,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const hitPos=f.pos.clone().addScaledVector(d,2.4);
       explodeAt(hitPos,2.4,100,f.team,{paintRadius:3.1,colorHex:getFighterInkHex(f),sourceFighter:f});
       trailPath(f.pos,hitPos,1.6,getFighterInkHex(f),false);
-      if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-        try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+0.8,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id}));}catch{}
+      if(f.isPlayer&&onlineActive&&onlineStarted){
+        try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+0.8,z:f.pos.z,dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,mode:'ultra-stamp'});}catch(_){}
       }
       return;
     }
