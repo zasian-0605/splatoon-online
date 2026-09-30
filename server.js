@@ -332,7 +332,10 @@ function serverResolveShot(room,player,m){
   }
   player.lastShotAt=now;
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
-  const rawMode=String(m.mode||''); const mode=rawMode==='rollerFlick'?'roller-flick':rawMode;
+  const rawMode=String(m.mode||'');
+  let mode='';
+  if(w.cat==='roller'&&(rawMode==='roller-flick'||rawMode==='rollerFlick'||rawMode==='roller-roll'))mode=rawMode==='rollerFlick'?'roller-flick':rawMode;
+  else if(w.cat==='wiper'&&rawMode==='wiperSlash')mode='wiper';
   const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
   // Helper needs the firing team's identity so friendly players are never hit.
   w._attackerTeam=player.team;
