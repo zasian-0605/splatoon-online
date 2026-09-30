@@ -7820,8 +7820,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         paintGround(pp.x,pp.z,(w.paintRadius||.7)*.55,color,{noNetwork:true});
       }
     }
-    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:spawn.x,y:spawn.y,z:spawn.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,charge:frac,mode:'stringer'}));}catch{}
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({x:spawn.x,y:spawn.y,z:spawn.z,dx:facing.x,dy:facing.y,dz:facing.z,weaponId:w.id,charge:frac,mode:'stringer'});}catch(_){}
     }
     f.specialGauge=Math.min(100,f.specialGauge+6+5*frac);
     sfx('shoot');
@@ -7860,11 +7860,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       paintEvery:.16
     });
 
-    if(f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({
-        type:'shot',x:origin.x,y:origin.y,z:origin.z,
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({
+        x:origin.x,y:origin.y,z:origin.z,
         dx:d.x,dy:d.y,dz:d.z,weaponId:w.id,charge:frac,mode:'charger'
-      }));}catch{}
+      });}catch(_){}
     }
     f.specialGauge=Math.min(100,f.specialGauge+7+7*frac);
     sfx('shoot');
