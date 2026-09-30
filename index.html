@@ -12022,12 +12022,12 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
       }
     }
 
-    if(fired&&f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
+    if(fired&&f.isPlayer&&onlineActive&&onlineStarted){
       try{
-        onlineSocket.send(JSON.stringify({
-          type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+        window.__v93SendShot?.({
+          x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
           dx:base.x,dy:base.y,dz:base.z,weaponId:f.weapon.id,mode:w.category
-        }));
+        });
       }catch(_){}
     }
     try{
