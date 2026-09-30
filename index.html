@@ -5354,13 +5354,17 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   /* ---------- Per-view online colors ---------- */
   function recolorRemote(f){
-    const c=displayColorForPlayer(f.id);
-    if(f.cfg) f.cfg.inkColorHex=c;
-    // Keep the model's ink/hair visually tied to this player's local color.
+    if(!f)return;
+    const c=getFighterInkHex(f);
+    if(f.cfg)f.cfg.inkColorHex=c;
     if(f.cfg && f.root && !f._v6ColorApplied){
-      // Rebuild once, before the player has a combat role in the room.
       f._v6ColorApplied=true;
-      try{ const oldPos=f.pos.clone(); const oldYaw=f.root.rotation.y; BASE.rebuildFighterModel(f,f.cfg); f.pos.set(oldPos.x,oldPos.y,oldPos.z); f.root.rotation.y=oldYaw; }catch{}
+      try{
+        const oldPos=f.pos.clone(),oldYaw=f.root.rotation.y;
+        BASE.rebuildFighterModel(f,f.cfg);
+        f.pos.set(oldPos.x,oldPos.y,oldPos.z);
+        f.root.rotation.y=oldYaw;
+      }catch{}
     }
   }
 
@@ -5379,19 +5383,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   /* ---------- Patch remote paint + matchFound color roster ---------- */
   document.addEventListener('v6-online-paint',e=>{
     const m=e.detail; if(!m)return;
-    paintGround(m.x,m.z,m.radius,displayColorForPlayer(m.id),{mult:m.mult||1,remote:true});
+    const c=Number.isFinite(Number(m.colorHex))?Number(m.colorHex):teamBHex;
+    paintGround(m.x,m.z,m.radius,c,{mult:m.mult||1,remote:true});
   });
 
   /* Keep the browser's native WebSocket constructor.
      Online state/paint/count handling is done by the real socket handlers above. */
-
-  /* ---------- Better remote creation: own chosen color stays own ---------- */
-  const oldEnsureRemote=window.ensureRemoteFighter;
-  if(typeof oldEnsureRemote==='function'){
-    window.ensureRemoteFighter=function(p){
-      const rf=oldEnsureRemote(p); if(rf && rf.remote){ try{ rf.cfg.inkColorHex=window.__V6?.displayColorForPlayer?.(p.id) ?? rf.cfg.inkColorHex; }catch{} } return rf;
-    };
-  }
 
   /* Battle cursor/map handling is owned by the later v10 layer; no extra wrapper here. */
 
@@ -5629,8 +5626,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         const q=mapPoint(ctx,size,f.pos.x,f.pos.z);
         const r=f.isPlayer?Math.max(4,size/34):Math.max(3,size/45);
         let col;
-        if(f.isPlayer) col=hexToCss(teamAHex);
-        else if(f.remote && window.__V6?.displayColorForPlayer) col=hexToCss(window.__V6.displayColorForPlayer(f.id));
+        if(f.isPlayer) col=hexToCss(getFighterInkHex(f));
+        else if(f.remote) col=hexToCss(getFighterInkHex(f));
         else col=hexToCss(f.team==='A'?teamAHex:teamBHex);
         ctx.fillStyle=col;ctx.beginPath();ctx.arc(q.x,q.y,r,0,Math.PI*2);ctx.fill();
         if(f.isPlayer){
