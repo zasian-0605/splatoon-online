@@ -13956,5 +13956,288 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 })();
 </script>
 
+<script>
+/* V94: 2D top-down vision CPU
+   CPU perception is a rasterized top-down image. Movement is X/Z only.
+   The 3D scene remains presentation/collision; the AI never plans with Y/3D paths.
+*/
+(function(){
+  'use strict';
+
+  const W=160,H=160;
+  const vision=document.createElement('canvas');
+  vision.width=W;vision.height=H;
+  const ctx=vision.getContext('2d',{willReadFrequently:true});
+  const MIN_X=-STAGE_HALF_X,MAX_X=STAGE_HALF_X,MIN_Z=-STAGE_HALF_Z,MAX_Z=STAGE_HALF_Z;
+  const VISION_ENEMY=[255,45,85];
+  const VISION_ALLY=[55,220,255];
+  const VISION_SELF=[255,255,255];
+  const state=new WeakMap();
+  let lastVisionAt=0;
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function wx(x){return clamp(Math.round((x-MIN_X)/(MAX_X-MIN_X)*(W-1)),0,W-1);}
+  function wz(z){return clamp(Math.round((z-MIN_Z)/(MAX_Z-MIN_Z)*(H-1)),0,H-1);}
+  function xw(px){return MIN_X+px/(W-1)*(MAX_X-MIN_X);}
+  function zw(py){return MIN_Z+py/(H-1)*(MAX_Z-MIN_Z);}
+  function d2(a,b){return Math.hypot(a.x-b.x,a.z-b.z);}
+
+  function renderVision(now){
+    if(now-lastVisionAt<90)return;
+    lastVisionAt=now;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#3c3d4a';
+    ctx.fillRect(0,0,W,H);
+    try{ctx.drawImage(paintCanvas,0,0,W,H);}catch(_){}
+
+    ctx.save();
+    ctx.fillStyle='rgba(15,15,24,.78)';
+    for(const b of collidableBlocks||[]){
+      const x1=wx(b.minX),x2=wx(b.maxX),y1=wz(b.minZ),y2=wz(b.maxZ);
+      ctx.fillRect(Math.min(x1,x2),Math.min(y1,y2),Math.max(1,Math.abs(x2-x1)),Math.max(1,Math.abs(y2-y1)));
+    }
+    ctx.restore();
+
+    for(const f of fighters||[]){
+      if(!f?.alive)continue;
+      const rgb=f.isPlayer?VISION_SELF:(f.team==='A'?VISION_ALLY:VISION_ENEMY);
+      ctx.fillStyle='rgb('+rgb.join(',')+')';
+      ctx.beginPath();
+      ctx.arc(wx(f.pos.x),wz(f.pos.z),f.isPlayer?3:3.5,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function readPixel(px,py){
+    return ctx.getImageData(clamp(px,0,W-1),clamp(py,0,H-1),1,1).data;
+  }
+
+  function isEnemyMarker(rgb){
+    return rgb[0]>225&&rgb[1]<95&&rgb[2]<130;
+  }
+
+  function visibleEnemies2D(f){
+    const out=[],seen=new Set(),sx=wx(f.pos.x),sy=wz(f.pos.z);
+    for(let py=2;py<H-2;py+=2){
+      for(let px=2;px<W-2;px+=2){
+        const rgb=readPixel(px,py);
+        if(!isEnemyMarker(rgb))continue;
+        const key=Math.floor(px/4)+','+Math.floor(py/4);
+        if(seen.has(key))continue;
+        seen.add(key);
+        out.push({x:xw(px),z:zw(py),d:Math.hypot(px-sx,py-sy)});
+      }
+    }
+    out.sort((a,b)=>a.d-b.d);
+    return out.slice(0,4);
+  }
+
+  function nearestVisionEnemy(f,now){
+    renderVision(now);
+    const marks=visibleEnemies2D(f);
+    if(!marks.length)return null;
+    const m=marks[0];
+    return {x:m.x,y:0,z:m.z};
+  }
+
+  function brain(f,now){
+    let a=state.get(f);
+    if(!a){
+      a={phase:Math.random()*Math.PI*2,strafe:Math.random()<.5?-1:1,nextShot:0,nextSub:0,nextSpecial:0,lastPos:f.pos.clone(),lastMove:now,stuck:0};
+      state.set(f,a);
+    }
+    return a;
+  }
+
+  function roleRange(w){
+    switch(w?.category){
+      case 'charger':return [18,34];
+      case 'spinner':return [12,28];
+      case 'roller':return [0,6.5];
+      case 'wiper':return [3,9];
+      case 'blaster':return [4,14];
+      case 'slosher':return [5,16];
+      case 'brella':return [3,13];
+      default:return [5,21];
+    }
+  }
+
+  function ownInk(f){
+    try{return !!onFighterInk(f);}catch(_){return false;}
+  }
+
+  function enemyInkHere(f){
+    try{return !!isEnemyInkAt(f);}catch(_){return false;}
+  }
+
+  function targetPoint(f,t,a,now){
+    const dx=t.x-f.pos.x,dz=t.z-f.pos.z,len=Math.hypot(dx,dz)||1;
+    const nx=dx/len,nz=dz/len,px=-nz,pz=nx;
+    const r=roleRange(f.weapon),ideal=(r[0]+r[1])*.5;
+    const wave=Math.sin(now*.005+a.phase)*2.6;
+    return {x:t.x-nx*ideal+px*wave*a.strafe,z:t.z-nz*ideal+pz*wave*a.strafe};
+  }
+
+  function objectiveFromImage(f,now){
+    renderVision(now);
+    const sign=f.team==='A'?-1:1;
+    let best=null,bestScore=-Infinity;
+    for(let gy=4;gy<H-4;gy+=8){
+      for(let gx=4;gx<W-4;gx+=8){
+        const rgb=readPixel(gx,gy);
+        const brightness=(rgb[0]+rgb[1]+rgb[2])/765;
+        const wzv=zw(gy),wxv=xw(gx),forward=clamp(wzv*sign/65,-1,1);
+        const centerBias=1-Math.min(1,Math.hypot(wxv,wzv)/85);
+        const score=brightness*1.7+centerBias*1.4+forward*2.8;
+        if(score>bestScore){bestScore=score;best={x:wxv,z:wzv};}
+      }
+    }
+    return best||{x:0,z:sign*28};
+  }
+
+  function move2D(f,dest,delta,squid){
+    const dx=dest.x-f.pos.x,dz=dest.z-f.pos.z,len=Math.hypot(dx,dz);
+    if(len<.12)return false;
+    const speed=(squid?12.4:5.8)*(f.gearProfile?.[squid?'swim':'move']||1);
+    const before=f.pos.clone();
+    const vel=new THREE.Vector3(dx/len*speed,0,dz/len*speed);
+    try{tryMoveWithCollision(f,vel,delta,squid);}catch(_){}
+    if(before.distanceTo(f.pos)>.02)return true;
+
+    for(const side of [1,-1]){
+      const sx=-dz/len*side,sz=dx/len*side;
+      try{tryMoveWithCollision(f,new THREE.Vector3(sx*speed,0,sz*speed),delta,squid);}catch(_){}
+      if(before.distanceTo(f.pos)>.02)return true;
+    }
+    return false;
+  }
+
+  function attack2D(f,t,now,a){
+    if(!t)return;
+    const dx=t.x-f.pos.x,dz=t.z-f.pos.z,len=Math.hypot(dx,dz)||1;
+    const dir=new THREE.Vector3(dx/len,0,dz/len);
+    const w=f.weapon||weaponList[0];
+    f.human.rotation.y=Math.atan2(dir.x,dir.z);
+    f.root.rotation.y=f.human.rotation.y;
+
+    try{
+      if(w.category==='roller'&&typeof performRollerSwing==='function'){performRollerSwing(f,now);return;}
+      if(w.category==='wiper'&&typeof fireBladeSlashV60==='function'){
+        if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+        const need=Math.max(240,(w.chargeTime||600)*.5);
+        if(now-f.ai.chargeStarted>=need){
+          fireBladeSlashV60(f,Math.min(1,(now-f.ai.chargeStarted)/(w.chargeTime||600)),dir);
+          f.ai.chargeStarted=0;
+        }
+        return;
+      }
+      if(w.category==='charger'&&typeof window.fireChargerShot==='function'){
+        if(!f.ai.chargeStarted)f.ai.chargeStarted=now;
+        const need=Math.max(300,(w.chargeTime||800)*.68);
+        if(now-f.ai.chargeStarted>=need&&now>=a.nextShot){
+          a.nextShot=now+800;
+          window.fireChargerShot(f,dir,clamp((now-f.ai.chargeStarted)/(w.chargeTime||800),.45,.95));
+          f.ai.chargeStarted=0;
+        }
+        return;
+      }
+      if(typeof tryShoot==='function')tryShoot(f,dir,now);
+    }catch(_){}
+  }
+
+  function updateAI2D(f,delta,now){
+    if(!f||f.isPlayer||f.remote||!f.alive)return;
+    const a=brain(f,now);
+    renderVision(now);
+    const t=nearestVisionEnemy(f,now);
+
+    const moved=f.pos.distanceTo(a.lastPos);
+    if(moved>.12){a.lastPos.copy(f.pos);a.lastMove=now;a.stuck=0;}
+    else if(now-a.lastMove>.75){a.stuck+=now-a.lastMove;a.lastMove=now;}
+
+    let destination=null,combat=false,squid=false;
+    if(t){
+      const d=d2(f,t),range=roleRange(f.weapon);
+      if(f.hp<25||(enemyInkHere(f)&&f.hp<55)){
+        const sign=f.team==='A'?-1:1;
+        destination={x:f.pos.x,z:f.pos.z+sign*8};
+        squid=ownInk(f)&&d>16;
+      }else if(d>range[1]){
+        destination=targetPoint(f,t,a,now);
+        squid=ownInk(f)&&d>range[1]+5;
+      }else if(d<Math.max(2,range[0])){
+        const len=d||1;
+        destination={x:f.pos.x-(t.x-f.pos.x)/len*3,z:f.pos.z-(t.z-f.pos.z)/len*3};
+        combat=true;
+      }else{
+        destination=targetPoint(f,t,a,now);
+        combat=true;
+      }
+    }else{
+      destination=objectiveFromImage(f,now);
+      squid=d2(f,destination)>8&&ownInk(f)&&f.ink>35;
+    }
+
+    if(squid&&((t&&d2(f,t)<16)||(!t&&d2(f,destination)<4)||enemyInkHere(f)))squid=false;
+    f.squid_mode=!!squid;
+    f._moving=destination?move2D(f,destination,delta,squid):false;
+
+    if(squid){
+      f.ink=Math.min(100,f.ink+31*delta);
+      if(f.hp<f.maxHp)f.hp=Math.min(f.maxHp,f.hp+7*delta);
+    }else{
+      f.ink=Math.max(0,f.ink-delta*(combat?1.1:.32));
+      if(!combat){
+        try{
+          const end=f.pos.clone().add(new THREE.Vector3(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y)).multiplyScalar(1.4));
+          paintGround(f.pos.x,f.pos.z,1.05,getFighterInkHex(f),{to:{x:end.x,z:end.z},noNetwork:true});
+        }catch(_){}
+      }
+    }
+
+    if(combat&&t&&!squid){
+      const d=d2(f,t);
+      if(d<=Math.max(22,roleRange(f.weapon)[1]+2))attack2D(f,t,now,a);
+
+      if(typeof window.tryThrowSub==='function'&&now>=a.nextSub&&Math.random()<.16){
+        try{
+          const len=d||1;
+          window.tryThrowSub(f,new THREE.Vector3((t.x-f.pos.x)/len,0,(t.z-f.pos.z)/len),now);
+          a.nextSub=now+2200+Math.random()*1500;
+        }catch(_){}
+      }
+      if(f.specialGauge>=100&&now>=a.nextSpecial&&Math.random()<.06){
+        try{window.fireSpecial?.(f);a.nextSpecial=now+9000+Math.random()*5000;}catch(_){}
+      }
+    }
+
+    if(combat&&t){
+      const dx=t.x-f.pos.x,dz=t.z-f.pos.z,len=Math.hypot(dx,dz)||1;
+      const sideSign=Math.sign(Math.sin(now*.005+a.phase))||1;
+      const sideX=-dz/len*sideSign*a.strafe,sideZ=dx/len*sideSign*a.strafe;
+      try{tryMoveWithCollision(f,new THREE.Vector3(sideX*4.2,0,sideZ*4.2),Math.min(delta,.10),false);}catch(_){}
+    }
+
+    if(a.stuck>1.2){
+      a.stuck=0;a.strafe*=-1;
+      const side=new THREE.Vector3(a.strafe*5,0,0);
+      try{tryMoveWithCollision(f,side,.16,false);}catch(_){}
+    }
+
+    updateFighterAnimation(f,!!f._moving,!!f.squid_mode);
+    if(!f.squid_mode&&f._moving)f.root.rotation.y=f.human.rotation.y;
+  }
+
+  window.__AI_VISION_CANVAS=vision;
+  window.__AI_VISION_CONTEXT=ctx;
+  window.__AI_VISION_UPDATE=renderVision;
+  window.updateAI2D=updateAI2D;
+  updateAI=updateAI2D;
+  window.updateAI=updateAI2D;
+  window.__V94_AI='2D-TOP-DOWN-IMAGE-VISION-2026-09-30';
+  console.log('[SPLATOON ONLINE][V94] 2D top-down image AI active');
+})();
+</script>
+
 </body>
 </html>
