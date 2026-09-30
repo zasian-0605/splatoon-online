@@ -12494,8 +12494,15 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     tag.position.set(0,3.1,0);f.root.add(tag);f._v87SensorWarning=tag;return tag;
   }
 
+  let v87OutsideThrottle=0;
   function updateV87(){
     const now=performance.now();
+    const inGameplay=currentPhase===1.5||currentPhase===2;
+    if(!inGameplay && now<v87OutsideThrottle){
+      setTimeout(()=>requestAnimationFrame(updateV87),Math.max(16,v87OutsideThrottle-now));
+      return;
+    }
+    if(!inGameplay) v87OutsideThrottle=now+250;
     for(const f of fighters||[]){
       if(!f)continue;
       if(f.remote&&f.team===onlineTeam){
