@@ -5126,7 +5126,31 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         });
         setGlobalOnlineCount(0);
         showGlobalOnlineHud(false);
-        if(onlineActive){onlineActive=false;showToast('オンライン接続が切断されました');}
+        if(onlineActive||onlineStarted){
+          const wasBattle=onlineStarted&&currentPhase===2;
+          onlineActive=false;
+          onlineStarted=false;
+          onlineResultSent=true;
+          onlineRoomId='';
+          clearRemoteFighters();
+          if(wasBattle){
+            battleActive=false;
+            window.__battleDeadline=0;
+            ++gameLoopToken;
+            currentPhase=1.5;
+            const battleUi=document.getElementById('battle-ui');
+            const rangeHint=document.getElementById('range-hint');
+            const resultScreen=document.getElementById('result-screen');
+            if(battleUi) battleUi.style.display='block';
+            if(resultScreen) resultScreen.style.display='none';
+            if(rangeHint) rangeHint.style.display='block';
+            try{window.__V10?.showMaps?.(true);}catch(e){}
+            try{window.__V10?.requestLock?.();}catch(e){}
+            showToast('オンライン接続が切断されたため、試し撃ち場に戻りました');
+          }else{
+            showToast('オンライン接続が切断されました');
+          }
+        }
       };
     }catch{setOnlineStatus('WebSocket開始に失敗しました。');}
   }
