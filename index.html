@@ -5118,6 +5118,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           showToast(String(m.reason||'通信に異常が検知されました'));
           return;
         }
+        if(m.type==='keepaliveAck'){
+          window.__onlineLastKeepaliveAck=Date.now();
+          return;
+        }
         if(m.type==='serverTick'){
           window.__onlineLastServerTick=Date.now();
           return;
@@ -6305,6 +6309,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       try{sendOnlineState();}catch(e){}
     }
   },50);
+
+  let __onlineKeepaliveTimer=setInterval(()=>{
+    const ws=onlineSocket;
+    if(!ws||ws.readyState!==1)return;
+    try{ws.send(JSON.stringify({type:'keepalive',at:Date.now()}));}catch(_){}
+  },20000);
 
   // A separate safety timer guarantees the result screen even if the main render loop stalls.
   let __battleWatchdog=setInterval(()=>{
