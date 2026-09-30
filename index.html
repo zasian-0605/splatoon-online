@@ -8022,8 +8022,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),ang);
       fireLineShot(f,d,w,{paintMult:.72,kind:'brella',noNetwork:true});
     }
-    if(f.isPlayer && onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-      try{onlineSocket.send(JSON.stringify({type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'brella'}));}catch{}
+    if(f.isPlayer&&onlineActive&&onlineStarted){
+      try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:dir.x,dy:dir.y,dz:dir.z,weaponId:w.id,mode:'brella'});}catch(_){}
     }
     if(f._moving===false){
       f.brellaOpenUntil=performance.now()+850;
