@@ -10613,11 +10613,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       rawShotPaint(f,d);
 
       try{
-        if(onlineActive&&onlineStarted&&onlineSocket&&onlineSocket.readyState===1){
-          onlineSocket.send(JSON.stringify({
-            type:'shot',x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+        if(onlineActive&&onlineStarted&&typeof window.__v93SendShot==='function'){
+          window.__v93SendShot({
+            x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
             dx:d.x,dy:d.y,dz:d.z,weaponId:weaponList.indexOf(w)
-          }));
+          });
         }
       }catch(_){}
       try{sfx('shoot');}catch(_){}
