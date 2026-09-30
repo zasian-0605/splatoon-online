@@ -171,7 +171,7 @@ function wrap(name,mode){
   if(typeof base!=='function'||base.__v95Wrapped)return;
   const fn=function(f,_aim,c){
     const out=base.call(this,f,front(f),c);
-    if(f&&!f.isPlayer&&!f.remote&&f.alive&&out!==false)onlineAIShot(f,mode,c);
+    if(f&&!f.isPlayer&&!f.remote&&f.weapon?.kind!=='stringer'&&f.alive&&out!==false)onlineAIShot(f,mode,c);
     return out;
   };
   fn.__v95Wrapped=true;window[name]=fn;
