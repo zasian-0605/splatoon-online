@@ -768,7 +768,7 @@ wss.on('connection', ws => {
     id, ws, roomId: null, team: null, ready: false, weaponId: 0,
     config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 },
     lastStateAt: 0, stateSeq: 0,
-    accountName: null, accountToken: null,
+    accountName: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
     serverHp:100, serverAlive:true, serverPos:null, serverRespawnAt:0,
@@ -794,7 +794,6 @@ wss.on('connection', ws => {
         // The same account may be open on more than one device/tab without
         // forcibly disconnecting an active match.
         player.accountName = s.name;
-        player.accountToken = token;
         console.log(`[WS BIND] ${player.id} account=${player.accountName}`);
         send(ws, { type: 'accountBound', profile: profile(accounts[s.name]) });
       } else {
