@@ -596,12 +596,8 @@ function joinRoom(player) {
 
   // 参加者が入るたび、部屋全員へ現在人数を即時通知する。
   const players = roster(room);
-  const roomPayload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
-  const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
-  for (const p of room.players.values()) {
-    send(p.ws, roomPayload);
-    send(p.ws, queuePayload);
-  }
+  const roomPayload = { type: 'roomState', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+  for (const p of room.players.values()) send(p.ws, roomPayload);
   console.log(`[MATCH] ${room.id}: ${players.length}/8 players joined | player=${player.id} account=${player.accountName || '-'} totalSockets=${sockets.size} waitingRooms=${[...rooms.values()].filter(r=>!r.started).map(r=>r.id+':'+r.players.size).join(',') || '-'}`);
   return room;
 }
@@ -632,12 +628,8 @@ function leaveRoom(player) {
   }
 
   const players = roster(room);
-  const payload = { type: 'room', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
-  const queuePayload = { type: 'queue', roomId: room.id, count: players.length, maxPlayers: 8 };
-  for (const p of room.players.values()) {
-    send(p.ws, payload);
-    send(p.ws, queuePayload);
-  }
+  const payload = { type: 'roomState', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
+  for (const p of room.players.values()) send(p.ws, payload);
   if (room.players.size === 0) rooms.delete(room.id);
 }
 function updateAccountResult(player, winnerTeam) {
@@ -775,7 +767,7 @@ wss.on('connection', ws => {
   const player = {
     id, ws, roomId: null, team: null, ready: false, weaponId: 0,
     config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 },
-    lastStateAt: 0, lastStatePos: null, lastStateAlive: true,
+    lastStateAt: 0, lastStatePos: null, lastStateAlive: true, stateSeq: 0,
     accountName: null, accountToken: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
@@ -822,7 +814,6 @@ wss.on('connection', ws => {
       console.log(`[WS JOIN REQUEST] ${player.id} account=${player.accountName} currentRoom=${player.roomId || '-'}`);
       const room = joinRoom(player);
       console.log(`[WS JOIN RESULT] ${player.id} account=${player.accountName} room=${room ? room.id : '-'} roomPlayers=${room ? room.players.size : 0} totalSockets=${sockets.size}`);
-      send(ws, { type: 'queue', count: room.players.size, roomId: room.id });
       return;
     }
     if (m.type === 'ready') {
@@ -837,8 +828,12 @@ wss.on('connection', ws => {
       applyCanonicalPlayerColor(player);
       player.config.weapon=player.weaponId;
       console.log(`[WS READY] ${player.id} room=${room.id} ready=${player.ready} roomPlayers=${room.players.size}`);
-      broadcast(room, { type: 'room', roomId: room.id, players: roster(room), minPlayers: 2, maxPlayers: 8 });
+      broadcast(room, { type: 'roomState', roomId: room.id, players: roster(room), count: room.players.size, minPlayers: 2, maxPlayers: 8 });
       assignTeamsAndStart(room); return;
+    }
+    if (m.type === 'probe') {
+      send(ws,{type:'probeAck',at:Date.now(),build:'V93-ONLINE-UNIFIED'});
+      return;
     }
     if (m.type === 'keepalive') {
       send(ws,{type:'keepaliveAck',at:m.at||Date.now()});
@@ -1000,7 +995,7 @@ wss.on('connection', ws => {
       }
       const serverPos=player.serverPos||player.spawn,enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
       player.serverSquid=!!m.squid&&!enemyInk;
-      const packet={type:'state',id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
+      const packet={type:'state',seq:++player.stateSeq,id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
         hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId,colorHex:applyCanonicalPlayerColor(player)};
       broadcast(room,packet,player.id); send(player.ws,packet); return;
     }

@@ -7335,13 +7335,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         add('4. サーバー応答','ok','hello を受信。RenderのWebSocketサーバーまで到達しています。');
         // Guest diagnostic: no account token is required by the current server.
         try{
-          ws.send(JSON.stringify({type:'joinQueue',weaponId:playerConfig?.weapon||0}));
-          log('joinQueue を送信');
+          ws.send(JSON.stringify({type:'probe',client:'legacy-diagnostic'}));
+          log('probe を送信');
         }catch(err){}
-      }else if(m.type==='queue'&&!queue){
+      }else if(m.type==='probeAck'&&!queue){
         queue=true;
-        add('5. マッチング参加','ok','部屋 '+m.roomId+' に参加成功。現在 '+m.count+'人。');
-        add('6. 診断結果','ok','オンラインサーバーへの接続と、部屋参加まで成功しています。');
+        add('5. 接続プローブ','ok','部屋には参加せず、WebSocket通信だけ確認できました。');
+        add('6. 診断結果','ok','オンラインサーバーへの接続確認に成功しました。');
         finished=true;
         setTimeout(done,250);
       }else if(m.type==='queueError'){
@@ -14267,5 +14267,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 })();
 </script>
 
+<script src="/online-v93.js"></script>
 </body>
 </html>
