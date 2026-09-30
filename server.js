@@ -319,7 +319,7 @@ function serverTrySpendInk(player,cost){
 }
 function serverResolveShot(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return false;
-  const wid=Number.isFinite(Number(m.weaponId))?Math.max(0,Math.min(200,Math.floor(Number(m.weaponId)))):player.weaponId;
+  const wid=player.weaponId;
   const w=SERVER_WEAPONS[wid];if(!w)return false;
   const now=Date.now();
   if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return false;
