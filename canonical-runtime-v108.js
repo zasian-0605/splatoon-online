@@ -453,9 +453,16 @@ function updateCanonicalAI(f,dt,now){
   }else{
     const q=f.team==='A'?-1:1;dest={x:Math.sin(now*.0007)*20,z:q*(18+Math.cos(now*.0005)*12)};
   }
+  if(num(f.ink)<15)f.squid_mode=canonicalOnInk(f);
+  if(num(f.ink)>92)f.squid_mode=false;
+  const aiWasSquid=!!f.squid_mode;
   if(dest){
     const dx=dest.x-f.pos.x,dz=dest.z-f.pos.z,l=Math.hypot(dx,dz);
-    if(l>.12){const v=new THREE.Vector3(dx/l*(f.squid_mode?12.5:5.8),0,dz/l*(f.squid_mode?12.5:5.8));try{tryMoveWithCollision(f,v,dt,!!f.squid_mode);}catch(_){}}
+    if(l>.12){const v=new THREE.Vector3(dx/l*(aiWasSquid?12.5:5.8),0,dz/l*(aiWasSquid?12.5:5.8));try{tryMoveWithCollision(f,v,dt,aiWasSquid);}catch(_){}}
+  }
+  if(aiWasSquid)f.ink=Math.min(100,num(f.ink)+31*dt);
+  else if(dest&&Math.hypot(dest.x-f.pos.x,dest.z-f.pos.z)>.2){
+    f.ink=Math.max(0,num(f.ink)-dt*(combat?1:.25));
   }
   if(combat&&t){
     const dx=t.pos.x-f.pos.x,dz=t.pos.z-f.pos.z,l=Math.hypot(dx,dz)||1,dir=new THREE.Vector3(dx/l,0,dz/l);
