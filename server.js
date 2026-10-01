@@ -728,7 +728,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V98-SERVER-MOVEMENT-SYNC-2026-10-01', time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V99-SERVER-INK-SWIM-SYNC-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
@@ -799,16 +799,21 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-function securityStrike(player, reason) {
+function securityStrike(player, reason, notify=true) {
   const now = Date.now();
   if (!player.securityWindowStart || now-player.securityWindowStart>10000) {
     player.securityWindowStart=now; player.securityStrikes=0;
   }
   player.securityStrikes++;
   console.warn(`[ANTI-CHEAT] ${player.id} strike=${player.securityStrikes} reason=${reason}`);
-  // 通常プレイの移動・高低差・一時的な座標ズレではオンライン自体を切断しない。
-  // 異常なパケットは呼び出し元で破棄するだけにする。
-  try{send(player.ws,{type:'antiCheatWarning',reason:'座標同期を調整しました。'});}catch(_){}
+  /*
+   * V99: 通常のオンライン移動補正はプレイヤーへ警告を出さない。
+   * 特にインク上の高速移動はフレーム間隔や通信遅延で一時的に大きな
+   * 座標差が出るため、同期補正そのものを「失敗」と見せない。
+   */
+  if(notify){
+    try{send(player.ws,{type:'antiCheatWarning',reason:'座標同期を調整しました。'});}catch(_){}
+  }
   return true;
 }
 function finiteNumber(v){ return Number.isFinite(Number(v)); }
@@ -1072,17 +1077,29 @@ wss.on('connection', ws => {
         if(player.serverPos){
           const dt=Math.max(.028,(now-player.lastStateAt)/1000);
           const d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z);
-          const maxStep=m.superJump ? Math.min(12,.82+dt*150) : Math.min(2.8,.82+dt*42);
+          /*
+           * V99: derive the allowed displacement from the real client movement
+           * rates instead of a fixed 2.8-unit cap. Squid movement is faster on
+           * friendly ink, and packet timing can jitter, so a fixed cap caused
+           * false corrections during perfectly normal ink-swim movement.
+           */
+          const requestedSquid=!!m.squid;
+          const maxSpeed=requestedSquid ? 30 : 18;
+          const baseStep=requestedSquid ? 1.05 : .95;
+          const maxStep=m.superJump
+            ? Math.min(14,Math.max(3.2,baseStep+dt*150))
+            : Math.min(7,Math.max(2.8,baseStep+dt*maxSpeed));
           if(d>maxStep){
             player.speedViolations=(player.speedViolations||0)+1;
             if(now-(player.lastSpeedWarnAt||0)>3000){
               player.lastSpeedWarnAt=now;
-              console.warn('[WS SPEED CLAMP] '+player.id+' d='+d.toFixed(2)+' max='+maxStep.toFixed(2));
+              console.warn('[WS SPEED CLAMP] '+player.id+' d='+d.toFixed(2)+' max='+maxStep.toFixed(2)+' squid='+requestedSquid);
             }
             const scale=maxStep/Math.max(d,.0001);
             x=player.serverPos.x+(x-player.serverPos.x)*scale;
             z=player.serverPos.z+(z-player.serverPos.z)*scale;
             corrected=true;
+            /* Movement correction is silent; only truly invalid coordinates notify. */
           }else{
             player.speedViolations=0;
           }
