@@ -149,13 +149,10 @@ function finishActive(f,returnHome=false){
   try{f.invulnUntil=0;}catch(_){}
 }
 function sendSpecial(f,name,p,extra={}){
-  try{
-    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1)return;
-    onlineSocket.send(JSON.stringify({
-      type:'special',specialName:name,x:n(p?.x,f.pos.x),y:n(p?.y,f.pos.y),z:n(p?.z,f.pos.z),
-      extra:Object.assign({v102:true},extra)
-    }));
-  }catch(_){}
+  return window.sendOnlineSpecial?.({
+    specialName:name,x:n(p?.x,f.pos.x),y:n(p?.y,f.pos.y),z:n(p?.z,f.pos.z),
+    extra:Object.assign({v102:true},extra)
+  })||false;
 }
 
 function makeBarrier(f){
@@ -828,9 +825,9 @@ try{
 
 /* Final ongoing-effect owner. Older V90/V91 state is not touched because this
    runtime uses only __v102Special and cfg.effects. */
-const baseOngoing=window.updateOngoingEffects;
+/* updateCanon owns persistent-special progression.  Do not call a captured
+   legacy updater here: those wrappers update the same effects a second time. */
 window.updateOngoingEffects=function(dt){
-  try{baseOngoing?.(dt);}catch(e){console.warn('[V102 old special layer]',e);}
   try{updateCanon(dt);}catch(e){console.warn('[V102 canonical specials]',e);}
 };
 try{updateOngoingEffects=window.updateOngoingEffects;}catch(_){}

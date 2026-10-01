@@ -4,6 +4,7 @@
   "private": true,
   "main": "server.js",
   "scripts": {
+    "audit:canonical-runtime": "node scripts/audit-canonical-runtime.js",
     "start": "node server.js",
     "validate": "node scripts/validate-html-js.js && node scripts/validate-security.js && node scripts/validate-server.js"
   },

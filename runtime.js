@@ -350,7 +350,7 @@ function regularShot(f,d,t){
   else if(w.category==='maneuver'){for(const s of [-1,1]){const q=base.clone().applyAxisAngle(Y,s*clamp(n(w.spread,.05),.015,.11));spawnCanonical(f,q,{speed:clamp(n(w.speed,35),20,46),gravity:4.8,drag:.03,radius:.13,paintRadius:clamp(n(w.paintRadius,.8),.55,1.1),damage:n(w.damage,20),life:1.15,maxRange:range,kind:'dualies'});count++;}}
   else if(w.category==='brella'){const p=clamp(Math.floor(n(w.pellets,7)),3,9);for(let i=0;i<p;i++){const q=base.clone().applyAxisAngle(Y,(i-(p-1)/2)*.055);spawnCanonical(f,q,{speed:clamp(n(w.speed,30),18,42),gravity:4.8,drag:.04,radius:.13,paintRadius:clamp(n(w.paintRadius,.75),.5,1),damage:n(w.damage,18),life:1.1,maxRange:range,kind:'brella'});count++;}}
   else{const p=w.category==='spinner'?3:clamp(Math.floor(n(w.burst,1)),1,3);for(let i=0;i<p;i++){const q=base.clone();if(p>1)q.applyAxisAngle(Y,(i-(p-1)/2)*.025);spawnCanonical(f,q,{speed:clamp(n(w.speed,36),22,50),gravity:4.8,drag:.035,radius:.13,paintRadius:clamp(n(w.paintRadius,.9),.55,1.15),damage:n(w.damage,28),life:1.15,maxRange:range,kind:w.category==='spinner'?'splatling':'shooter'});count++;}}
-  if(count&&f.isPlayer&&onlineActive&&onlineStarted)try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,weaponId:w.id,mode:w.category});}catch(_){}
+  if(count&&f.isPlayer&&onlineActive&&onlineStarted)try{window.sendOnlineShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,weaponId:w.id,mode:w.category});}catch(_){}
   try{f.specialGauge=Math.min(100,n(f.specialGauge)+.7*count*(f.gearProfile?.specialGain||1));sfx('shoot');}catch(_){}
   return count>0;
 }
@@ -371,7 +371,7 @@ function canonicalCharger(f,d,frac=1){
     if(stringer){qdir.y=.12+.1*q;qdir.normalize();}
     spawnCanonical(f,qdir,{speed:stringer?n(w.speedShot,50)*(.75+.25*q):n(w.speed,65),gravity:stringer?10:0,drag:.005,radius:.13,paintRadius:clamp(n(w.paintRadius,.75),.5,1.2),damage:stringer?n(w.tapDamage,20)+(n(w.fullDamage,80)-n(w.tapDamage,20))*q:n(w.tapDamage,30)+(n(w.fullDamage,120)-n(w.tapDamage,30))*q,maxRange:clamp(n(w.range,50),5,80),life:stringer?1.7:1.3,kind:stringer?'stringer':'charger'});
   }
-  if(f.isPlayer&&onlineActive&&onlineStarted)try{window.__v93SendShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,weaponId:w.id,mode:stringer?'stringer':'charger',charge:q});}catch(_){}
+  if(f.isPlayer&&onlineActive&&onlineStarted)try{window.sendOnlineShot?.({x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,weaponId:w.id,mode:stringer?'stringer':'charger',charge:q});}catch(_){}
   try{sfx('shoot');}catch(_){}
   return true;
 }
