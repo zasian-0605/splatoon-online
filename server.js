@@ -567,6 +567,11 @@ function serverResolveSpecial(room,player,m){
   if(dist>45){const scale=45/dist;x=me.x+(x-me.x)*scale;z=me.z+(z-me.z)*scale;}
   if(!serverPointInStage(x,z))return false;
 
+  /* Continuous shot packets only synchronize projectile visuals/damage
+     on the other clients. They must never retrigger the placed special effect. */
+  const shotPhase=String(m?.extra?.phase||'')==='shot';
+  if(shotPhase)return true;
+
   const sensorHop=name==='ホップソナー';
   const sensorMega=name==='メガホンレーザー5.1ch';
   const sensorMissile=name==='マルチミサイル';
@@ -1082,16 +1087,26 @@ wss.on('connection', ws => {
       const name=legacyOrb?'チャージオーブ':specialName;
       if(!allowed.includes(name)) return;
       const now=Date.now();
-      if(now-player.lastSpecialAt<500) return;
+      let extra=(m.extra && typeof m.extra==='object')?m.extra:{};
+      const phase=String(extra.phase||m.phase||'');
+      const continuousShot=phase==='shot';
+      if(continuousShot){
+        if(now-(player.lastSpecialShotAt||0)<90)return;
+      }else{
+        if(now-(player.lastSpecialAt||0)<500)return;
+      }
       const x=Number(m.x),y=Number(m.y),z=Number(m.z);
       if(!saneWorldPosition(x,y,z)) return;
-      let extra=(m.extra && typeof m.extra==='object')?m.extra:{};
       const compact={};
-      if(legacyOrb && m.phase) compact.phase=String(m.phase).slice(0,12);
+      if(phase) compact.phase=phase.slice(0,12);
       for(const k of ['angle','targetId']) if(extra[k]!==undefined) compact[k]=String(extra[k]).slice(0,40);
-      const accepted=serverResolveSpecial(room,player,Object.assign({},m,{specialName:name,x,y,z}));
+      for(const k of ['cannon','dx','dy','dz']) if(extra[k]!==undefined){
+        compact[k]=k==='cannon'?!!extra[k]:Number(extra[k]);
+      }
+      const accepted=serverResolveSpecial(room,player,Object.assign({},m,{specialName:name,x,y,z,extra:Object.assign({},extra,{phase})}));
       if(!accepted)return;
-      player.lastSpecialAt=now;
+      if(continuousShot)player.lastSpecialShotAt=now;
+      else player.lastSpecialAt=now;
       broadcast(room,{
         type:'special', id:player.id, team:player.team,
         specialName:name, x,y,z, extra:compact
