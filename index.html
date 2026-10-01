@@ -295,6 +295,23 @@ html.cursor-force-visible canvas{
 #online-ready{background:#00d4ff;color:#07101a;}
 #online-ready.ready{background:#e3ff00;color:#2f059c;}
 #online-profile{margin:8px 0;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid #555;border-radius:10px;font:800 13px/1.4 Arial,sans-serif;}
+#online-ranking-open,#account-ranking-open{width:100%;margin-top:10px;padding:10px 12px;border:2px solid #00d4ff;border-radius:10px;background:#101b2b;color:#eafcff;font:900 14px Arial,Meiryo,sans-serif;cursor:pointer;}
+#online-ranking-open:hover,#account-ranking-open:hover{background:#16314a;border-color:#e3ff00;}
+#ranking-panel{position:absolute;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(3,0,18,.94);font-family:Arial,Meiryo,sans-serif;color:#fff;}
+#ranking-card{width:min(700px,94vw);max-height:88vh;overflow:hidden;background:linear-gradient(145deg,#18004e,#071a35);border:4px solid #e3ff00;border-radius:18px;box-shadow:12px 12px 0 #000;padding:20px;box-sizing:border-box;}
+#ranking-title{margin:0;text-align:center;color:#e3ff00;font-size:32px;text-shadow:3px 3px 0 #ff0055;}
+#ranking-my{margin:12px 0;padding:10px 12px;background:rgba(0,212,255,.10);border:2px solid #00d4ff;border-radius:10px;font:900 14px/1.4 Arial,Meiryo,sans-serif;text-align:center;}
+#ranking-total{margin:8px 0;color:#bbb;text-align:center;font:12px Arial,Meiryo,sans-serif;}
+#ranking-list{max-height:52vh;overflow:auto;padding-right:4px;}
+.ranking-row{display:grid;grid-template-columns:60px 1fr 92px 48px;gap:8px;align-items:center;padding:9px 10px;margin:5px 0;background:rgba(255,255,255,.055);border:1px solid #444;border-radius:9px;}
+.ranking-row.me{border-color:#e3ff00;background:rgba(227,255,0,.10);}
+.ranking-pos{font-size:20px;font-weight:900;text-align:center;color:#e3ff00;}
+.ranking-name{font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ranking-rank{display:inline-block;width:max-content;padding:3px 8px;border-radius:999px;background:#ff2255;color:#fff;font-weight:900;font-size:12px;margin-top:2px;}
+.ranking-rating{font-size:18px;font-weight:900;text-align:right;}
+#ranking-close{display:block;width:100%;margin-top:12px;padding:11px;border:0;border-radius:10px;background:#ff0055;color:#fff;font-weight:900;font-size:16px;cursor:pointer;}
+.ranking-empty{padding:25px 10px;text-align:center;color:#bbb;}
+@media(max-width:600px){#ranking-card{padding:14px;}.ranking-row{grid-template-columns:46px 1fr 72px 42px;padding:8px 7px;}.ranking-rating{font-size:15px;}.ranking-pos{font-size:17px;}.ranking-name{font-size:13px;}}
 </style>
 <meta name="game-version" content="v69-45deg-shots-ai-respawn-facing"></head>
 <body>
@@ -354,6 +371,7 @@ html.cursor-force-visible canvas{
     <div id="account-sub">名前とパスワードでアカウントに入れます。腕前・勝敗・レートを保存します。初めてなら「新規登録」。</div>
     <div class="account-field"><label>名前（2〜16文字）</label><input id="account-name" autocomplete="username" maxlength="16"></div>
     <div class="account-field"><label>パスワード（4文字以上）</label><input id="account-password" type="password" autocomplete="current-password" maxlength="72"></div>
+    <div class="account-actions"><button id="account-ranking-open" type="button">🏆 腕前・全体ランキングを見る</button></div>
     <div class="account-actions">
       <button id="account-login" class="account-primary">ログイン</button>
       <button id="account-register" class="account-secondary">新規登録</button>
@@ -463,6 +481,16 @@ html.cursor-force-visible canvas{
   <span id="global-online-count" class="count">0人</span>
   <span id="global-online-note" class="note">現在オンラインの全プレイヤー</span>
 </div>
+<div id="ranking-panel">
+  <div id="ranking-card">
+    <h2 id="ranking-title">🏆 腕前・全体ランキング</h2>
+    <div id="ranking-my">ランキングを読み込み中…</div>
+    <div id="ranking-total"></div>
+    <div id="ranking-list"></div>
+    <button id="ranking-close" type="button">閉じる</button>
+  </div>
+</div>
+
 <div id="online-panel">
   <div id="online-card">
     <h2>オンラインルーム</h2>
@@ -479,9 +507,75 @@ html.cursor-force-visible canvas{
       <button id="online-ready" disabled>準備OK</button>
       <button id="online-cancel" type="button" aria-label="ルームから退出">ルームから退出</button>
     </div>
+    <button id="online-ranking-open" type="button">🏆 腕前・全体ランキングを見る</button>
     <div id="online-note">2〜7人でマッチング。全員が「準備OK」で開始し、8人そろうと自動で開始します。</div>
   </div>
 </div>
+
+<script>
+/* V100: Global rating ranking */
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  function origin(){
+    try{
+      const x=typeof getOnlineServerOrigin==='function'?getOnlineServerOrigin():'';
+      return String(x||location.origin||'').replace(/\/$/,'');
+    }catch(_){return String(location.origin||'').replace(/\/$/,'');}
+  }
+  function esc(v){
+    return String(v??'').replace(/[&<>"]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]));
+  }
+  function close(){
+    const p=$('ranking-panel');if(p)p.style.display='none';
+  }
+  async function load(){
+    const my=$('ranking-my'),total=$('ranking-total'),list=$('ranking-list');
+    if(my)my.textContent='ランキングを読み込み中…';
+    if(total)total.textContent='';
+    if(list)list.innerHTML='';
+    try{
+      const token=localStorage.getItem('splatoonAccountToken')||'';
+      const headers={'Accept':'application/json'};
+      if(token)headers.Authorization='Bearer '+token;
+      const res=await fetch(origin()+'/api/ranking?limit=50',{cache:'no-store',headers});
+      const d=await res.json().catch(()=>null);
+      if(!res.ok||!d?.ok)throw new Error(d?.error||('HTTP '+res.status));
+      if(my){
+        if(d.myRank&&d.myProfile){
+          my.innerHTML='あなた：<strong>#'+d.myRank+'</strong>　'+esc(d.myProfile.name)+'　<span class="ranking-rank">'+esc(d.myProfile.rank)+'</span>　レート <strong>'+Number(d.myProfile.rating||0)+'</strong>';
+        }else{
+          my.textContent='ログイン中のアカウントはランキング対象外です。ゲストはランキングに掲載されません。';
+        }
+      }
+      if(total)total.textContent='登録ユーザー '+Number(d.total||0)+'人 ／ 上位50人を表示';
+      const rows=Array.isArray(d.entries)?d.entries:[];
+      if(!list)return;
+      if(!rows.length){list.innerHTML='<div class="ranking-empty">まだ登録ユーザーがいません。</div>';return;}
+      list.innerHTML=rows.map((p,i)=>{
+        const pos=i+1;
+        const me=d.myRank===pos?' me':'';
+        return '<div class="ranking-row'+me+'">'+
+          '<div class="ranking-pos">#'+pos+'</div>'+
+          '<div><div class="ranking-name">'+esc(p.name)+'</div><span class="ranking-rank">'+esc(p.rank)+'</span></div>'+
+          '<div class="ranking-rating">'+Number(p.rating||0)+'<div style="font-size:10px;color:#aaa;font-weight:700;">勝 '+Number(p.wins||0)+'</div></div>'+
+          '<div style="font-size:11px;color:#aaa;text-align:right;">'+Number(p.games||0)+'試合</div>'+
+        '</div>';
+      }).join('');
+    }catch(e){
+      if(my)my.textContent='ランキングの取得に失敗しました。';
+      if(total)total.textContent=String(e?.message||e);
+    }
+  }
+  function open(){const p=$('ranking-panel');if(p)p.style.display='flex';load();}
+  $('online-ranking-open')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();open();},true);
+  $('account-ranking-open')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();open();},true);
+  $('ranking-close')?.addEventListener('click',close);
+  $('ranking-panel')?.addEventListener('click',e=>{if(e.target===$('ranking-panel'))close();});
+  document.addEventListener('keydown',e=>{if(e.code==='Escape'&&$('ranking-panel')?.style.display==='flex')close();},true);
+  window.__openRatingRanking=open;
+})();
+</script>
 
 <script>
 /* V46: 最優先のP/3オンライン入口。後続のゲーム処理に依存しない。 */
