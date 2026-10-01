@@ -13,10 +13,20 @@ window.__V96_ACTIVE=true;
 window.__V96_BUILD=BUILD;
 
 const getFighters=()=>{
-  try{return Array.isArray(window.fighters)?window.fighters:[];}catch(_){return [];}
+  try{
+    if(typeof fighters!=='undefined' && Array.isArray(fighters))return fighters;
+    return Array.isArray(window.fighters)?window.fighters:[];
+  }catch(_){
+    return Array.isArray(window.fighters)?window.fighters:[];
+  }
 };
 const getPlayer=()=>{
-  try{return window.playerFighter||null;}catch(_){return null;}
+  try{
+    if(typeof playerFighter!=='undefined' && playerFighter)return playerFighter;
+    return window.playerFighter||null;
+  }catch(_){
+    return window.playerFighter||null;
+  }
 };
 function find(id){
   const k=String(id||'');
