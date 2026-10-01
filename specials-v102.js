@@ -332,8 +332,6 @@ const baseTryShoot=window.tryShoot;
 function shootSpecial(f,dir){
   const s=stateFor(f);if(!s||!alive(f))return false;
   const t=now(),d=dir?.clone?dir.clone().normalize():facing(f);
-  d.y=Math.max(-.65,Math.min(.65,Number(d.y)||0));
-  d.normalize();
 
   if(s.mode==='ultra'){
     if(s.shots<=0||t>s.until)return false;
@@ -403,7 +401,7 @@ function shotAim(f,d){
   if(f?.isPlayer&&camera){
     const q=new THREE.Vector3();
     try{camera.getWorldDirection(q);}catch(_){}
-    q.y=Math.max(-.65,Math.min(.65,Number(q.y)||0));
+    q.y=0;
     if(q.lengthSq()>.0001){
       q.normalize();
       const y=Math.atan2(q.x,q.z);
@@ -412,7 +410,7 @@ function shotAim(f,d){
     }
   }
   const q=d?.clone?d.clone():facing(f);
-  q.y=Math.max(-.65,Math.min(.65,Number(q.y)||0));
+  q.y=0;
   if(q.lengthSq()<.0001)return facing(f);
   return q.normalize();
 }
@@ -545,7 +543,7 @@ function moveSpecial(dt){
       f.root.rotation.y=f.human.rotation.y;
     }else f._moving=false;
     if(s.visual)s.visual.scale.setScalar(s.ball?1.12:1);
-    if(isShooting)shootSpecial(f,shotAim(f,facing(f)),t);
+    if(isShooting)shootSpecial(f,facing(f),t);
     setHuman(f);return true;
   }
 
