@@ -17,6 +17,17 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const teamColor=(team,c)=>Number.isFinite(Number(c))?(Number(c)&0xffffff):(team==='B'?0xff2255:0xe3ff00);
 const alive=f=>!!f&&f.alive!==false;
 
+/* V109: remove canonical visual marks before a stage rebuild. */
+try{
+  const _buildStageV109=buildStage;
+  buildStage=function(){
+    for(const mesh of visualInk.splice(0,visualInk.length)){
+      try{scene.remove(mesh);mesh.geometry?.dispose?.();mesh.material?.dispose?.();}catch(_){}
+    }
+    return _buildStageV109.apply(this,arguments);
+  };
+  window.buildStage=buildStage;
+}catch(_){}
 function supportHeight(x,z,y=0){
   const px=n(x),pz=n(z),hint=n(y);
   let best=0;
@@ -125,7 +136,8 @@ function visualStamp(block,p,normal,r,c,team){
   mesh.position.copy(p).addScaledVector(normal,.025);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal.clone().normalize());
   mesh.userData.__v108=true;
-  if(block.mesh)block.mesh.add(mesh); else scene.add(mesh);
+  /* V109: p is already a world-space hit point. Never attach it as local coordinates to block.mesh. */
+  scene.add(mesh);
   visualInk.push(mesh);
   while(visualInk.length>20000){
     const old=visualInk.shift();
