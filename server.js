@@ -610,7 +610,16 @@ function finishServerMatch(room){
 
 let nextPlayerNo = 1;
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
-function onlinePlayerCount() { return sockets.size; }
+function onlineIdentityKey(player) {
+  if (player?.accountName) return 'account:' + String(player.accountName);
+  if (player?.guestKey) return 'guest:' + String(player.guestKey);
+  return 'socket:' + String(player?.id || '');
+}
+function onlinePlayerCount() {
+  const ids = new Set();
+  for (const player of sockets.values()) ids.add(onlineIdentityKey(player));
+  return ids.size;
+}
 function broadcastGlobalOnlineCount() {
   const payload = { type: 'globalOnlineCount', count: onlinePlayerCount() };
   for (const player of sockets.values()) send(player.ws, payload);
@@ -913,6 +922,7 @@ wss.on('connection', ws => {
     config: sanitizeConfig(null,0), spawn: { x: 0, y: 0, z: 0 },
     lastStateAt: 0, stateSeq: 0,
     accountName: null,
+    guestKey: null,
     msgWindowStart: 0, msgCount: 0, securityWindowStart: 0, securityStrikes: 0,
     lastCalloutAt: 0, lastSpecialStartAt: 0, lastSpecialAt: 0,
     lastClientSeq: 0,
@@ -936,7 +946,29 @@ wss.on('connection', ws => {
     if(!messageBudget(player,m.type)){
       if((player.msgRateDrops||0)===1)console.warn('[WS RATE DROP] '+player.id+' account='+(player.accountName||'-'));
       return;
-    }    if (m.type === 'bindAccount') {
+    }    if (m.type === 'identify') {
+      const boundRoom = player.roomId ? rooms.get(player.roomId) : null;
+      if (boundRoom?.started) return;
+      const token = String(m.token || '');
+      const guestKey = String(m.guestId || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64);
+      const s = sessionForToken(token);
+      if (s && accounts[s.name]) {
+        player.accountName = s.name;
+        player.guestKey = null;
+        send(ws, { type:'accountBound', profile:profile(accounts[s.name]) });
+      } else if (guestKey) {
+        player.accountName = null;
+        player.guestKey = guestKey;
+        send(ws, { type:'guestIdentified', guestId:guestKey, name:'ゲスト' });
+      } else {
+        player.accountName = null;
+        player.guestKey = null;
+        send(ws, { type:'guestIdentified', name:'ゲスト' });
+      }
+      broadcastGlobalOnlineCount();
+      return;
+    }
+    if (m.type === 'bindAccount') {
       const boundRoom = player.roomId ? rooms.get(player.roomId) : null;
       if (boundRoom?.started) return;
       const token = String(m.token || '');
@@ -957,13 +989,26 @@ wss.on('connection', ws => {
     if (m.type === 'joinQueue') {
       const currentRoom = player.roomId ? rooms.get(player.roomId) : null;
       if (currentRoom?.started) return;
+      /* Join may arrive immediately after socket creation. Re-bind from the
+         stored token/guest id here too, so the roster never falls back to a
+         socket-generated Guest_Player_XXXX name. */
+      if (!player.accountName && m.token) {
+        const s = sessionForToken(String(m.token || ''));
+        if (s && accounts[s.name]) player.accountName = s.name;
+      }
+      if (!player.accountName && m.guestId) {
+        const guestKey = String(m.guestId || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64);
+        if (guestKey) player.guestKey = guestKey;
+      }
       if (m.config && typeof m.config === 'object') player.config = sanitizeConfig(m.config, player.weaponId);
       applyCanonicalPlayerColor(player);
       if (Number.isFinite(Number(m.weaponId))) player.weaponId = Math.max(0, Math.min(200, Math.floor(Number(m.weaponId))));
       player.config.weapon = player.weaponId;
       // Online battles can also use Render without a WEB ID.
-      // Registered users keep their account/rating; guests simply use their connection id.
-      if (!player.accountName) player.accountName = `Guest_${player.id}`;
+      // Registered users keep their account/rating; guests keep one stable
+      // browser identity instead of becoming a new Guest_Player_XXXX on every reconnect.
+      if (!player.accountName && !player.guestKey) player.guestKey = 'anon-' + player.id;
+      if (!player.accountName) player.accountName = 'ゲスト';
       console.log(`[WS JOIN REQUEST] ${player.id} account=${player.accountName} currentRoom=${player.roomId || '-'}`);
       const room = joinRoom(player);
       console.log(`[WS JOIN RESULT] ${player.id} account=${player.accountName} room=${room ? room.id : '-'} roomPlayers=${room ? room.players.size : 0} totalSockets=${sockets.size}`);
