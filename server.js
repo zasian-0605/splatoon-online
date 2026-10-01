@@ -980,8 +980,10 @@ wss.on('connection', ws => {
         // The same account may be open on more than one device/tab without
         // forcibly disconnecting an active match.
         player.accountName = s.name;
+        player.guestKey = null;
         console.log(`[WS BIND] ${player.id} account=${player.accountName}`);
         send(ws, { type: 'accountBound', profile: profile(accounts[s.name]) });
+        broadcastGlobalOnlineCount();
       } else {
         console.log(`[WS BIND FAIL] ${player.id} tokenInvalid=true`);
         send(ws, { type: 'accountBound', error: 'ログイン情報が無効です。' });
