@@ -635,9 +635,10 @@ function waitingRoomFor() {
   return createWaitingRoom();
 }
 function assignTeamsAndStart(room) {
+  // オンライン対戦は2人以上そろったら自動で開始する。
+  // 「準備OK」を押し忘れて待機し続ける状態を防ぎ、人数表示と実際の開始条件を一致させる。
   if (room.started || room.players.size < 2) return;
   const ps = [...room.players.values()];
-  if (!ps.every(p => p.ready)) return;
   ps.forEach((p, i) => {
     p.team = i % 2 === 0 ? 'A' : 'B';
     const slot = Math.floor(i / 2);
@@ -669,6 +670,8 @@ function joinRoom(player) {
   const roomPayload = { type: 'roomState', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
   for (const p of room.players.values()) send(p.ws, roomPayload);
   console.log(`[MATCH] ${room.id}: ${players.length}/8 players joined | player=${player.id} account=${player.accountName || '-'} totalSockets=${sockets.size} waitingRooms=${[...rooms.values()].filter(r=>!r.started).map(r=>r.id+':'+r.players.size).join(',') || '-'}`);
+  // 2人目が入った瞬間にマッチを開始する。
+  assignTeamsAndStart(room);
   return room;
 }
 function leaveRoom(player) {
