@@ -592,14 +592,31 @@ function serverResolveSpecial(room,player,m){
    */
   return true;
 }
-function finishServerMatch(room){
+function finishServerMatch(room, forcedWinnerTeam=null, reason='turf'){
   if(!room||room.resultReported)return;
   room.resultReported=true;let a=0,b=0;
   for(const team of room.inkCells?.values()||[]){if(team==='A')a++;else if(team==='B')b++;}
-  const winnerTeam=a===b?'DRAW':(a>b?'A':'B'),updated=[];
-  for(const p of room.players.values()){const pr=updateAccountResult(p,winnerTeam);if(pr)updated.push({id:p.id,profile:pr});}
-  console.log('[AUTH MATCH END] '+room.id+' Acells='+a+' Bcells='+b+' winner='+winnerTeam);
-  broadcast(room,{type:'matchEnd',winnerTeam,results:updated,score:{A:a,B:b}});
+  let winnerTeam;
+  if(forcedWinnerTeam==='A'||forcedWinnerTeam==='B'){
+    winnerTeam=forcedWinnerTeam;
+  }else{
+    winnerTeam=a===b?'DRAW':(a>b?'A':'B');
+  }
+  const updated=[];
+  for(const p of room.players.values()){
+    const pr=updateAccountResult(p,winnerTeam);
+    if(pr)updated.push({id:p.id,profile:pr});
+  }
+  const forced=winnerTeam!==null && (reason==='team-eliminated');
+  console.log('[AUTH MATCH END] '+room.id+' Acells='+a+' Bcells='+b+' winner='+winnerTeam+' reason='+reason);
+  broadcast(room,{
+    type:'matchEnd',
+    winnerTeam,
+    forced,
+    reason,
+    results:updated,
+    score:{A:a,B:b}
+  });
   for(const p of room.players.values()){
     p.roomId=null;p.team=null;p.ready=false;
   }
@@ -759,12 +776,25 @@ function leaveRoom(player) {
 
   if (wasStarted) {
     // Existing players must immediately remove the disconnected fighter.
-    // Previously a started room only cleaned itself when empty, leaving
-    // ghost/duplicate fighters on every remaining client.
+    // When an entire team disappears, the remaining team wins immediately.
     if (room.players.size > 0) {
       broadcast(room, { type: 'playerLeft', id: leavingId, name: leavingName });
     }
-    if (room.players.size === 0) rooms.delete(room.id);
+
+    if (room.players.size === 0) {
+      rooms.delete(room.id);
+      return;
+    }
+
+    const hasA = [...room.players.values()].some(p=>p.team==='A');
+    const hasB = [...room.players.values()].some(p=>p.team==='B');
+
+    if (room.started && !room.resultReported && (hasA !== hasB)) {
+      const forcedWinner = hasA ? 'A' : 'B';
+      finishServerMatch(room, forcedWinner, 'team-eliminated');
+      return;
+    }
+
     return;
   }
 
