@@ -102,15 +102,23 @@
     try{ws.send(JSON.stringify(msg));return true;}catch(e){log('SEND_ERROR',{type,error:String(e)});return false;}
   }
 
-  function sendOnlineShot(packet){
-    if(!packet||typeof packet!=='object')return false;
+  /* The only outbound gameplay route.  Callers never access the WebSocket
+     directly, which keeps normal shots, subs and specials on one protocol
+     path and lets rawSend attach sequence metadata consistently. */
+  function sendGameplay(type,packet){
+    if(!['shot','sub','special'].includes(type)||!packet||typeof packet!=='object')return false;
     const out=Object.assign({},packet);
     delete out.type;
     delete out.roomId;
     delete out.team;
-    return rawSend('shot',out);
+    return rawSend(type,out);
   }
-  window.__v93SendShot=sendOnlineShot;
+  window.sendOnlineGameplay=sendGameplay;
+  window.sendOnlineShot=packet=>sendGameplay('shot',packet);
+  window.sendOnlineSub=packet=>sendGameplay('sub',packet);
+  window.sendOnlineSpecial=packet=>sendGameplay('special',packet);
+  /* Compatibility aliases deliberately delegate to the same route. */
+  window.__v93SendShot=window.sendOnlineShot;
   function forwardLegacy(data){
     let m;try{m=typeof data==='string'?JSON.parse(data):data;}catch(_){return false;}
     if(!m||typeof m!=='object'||typeof m.type!=='string')return false;
@@ -463,4 +471,3 @@
 /* V107: preserve paint surface normals from the authoritative server. */
 window.__V107_ONLINE_PAINT_NORMALS=true;
 window.__V111_ONLINE_CONSOLIDATED=true;
-
