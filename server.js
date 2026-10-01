@@ -802,14 +802,13 @@ const server = http.createServer(async (req, res) => {
 function securityStrike(player, reason) {
   const now = Date.now();
   if (!player.securityWindowStart || now-player.securityWindowStart>10000) {
-    player.securityWindowStart=now;    player.securityStrikes=0;  }
+    player.securityWindowStart=now; player.securityStrikes=0;
+  }
   player.securityStrikes++;
   console.warn(`[ANTI-CHEAT] ${player.id} strike=${player.securityStrikes} reason=${reason}`);
-  send(player.ws,{type:'antiCheatWarning',reason:'不正または異常な通信を検知しました。'});
-  if(player.securityStrikes>=4){
-    try{ player.ws.close(1008,'invalid client state'); }catch{}
-    return false;
-  }
+  // 通常プレイの移動・高低差・一時的な座標ズレではオンライン自体を切断しない。
+  // 異常なパケットは呼び出し元で破棄するだけにする。
+  try{send(player.ws,{type:'antiCheatWarning',reason:'座標同期を調整しました。'});}catch(_){}
   return true;
 }
 function finiteNumber(v){ return Number.isFinite(Number(v)); }
@@ -1042,9 +1041,19 @@ wss.on('connection', ws => {
     if (m.type === 'state') {
       const now=Date.now(); if(now-player.lastStateAt<28)return;
       const x=Number(m.x),rawY=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
-      if(!saneWorldPosition(x,rawY,z)||!Number.isFinite(yaw)){securityStrike(player,'invalid-position');return;}
-      if(rawY<-1||rawY>14){securityStrike(player,'invalid-height');return;}
-      if(!serverPointInStage(x,z)){securityStrike(player,'outside-stage');return;}
+      if(!saneWorldPosition(x,rawY,z)||!Number.isFinite(yaw)){
+        console.warn('[WS STATE DROP] '+player.id+' invalid-position');
+        return;
+      }
+      if(rawY<-1||rawY>14){
+        console.warn('[WS STATE DROP] '+player.id+' invalid-height='+rawY);
+        return;
+      }
+      if(x<-SERVER_PLAYABLE_HALF_X||x>SERVER_PLAYABLE_HALF_X||z<-SERVER_PLAYABLE_HALF_Z||z>SERVER_PLAYABLE_HALF_Z){
+        // 水場の外や明らかなワールド外だけを拒否する。細かいステージ形状はクライアント衝突判定に任せる。
+        securityStrike(player,'outside-playable-area');
+        return;
+      }
       const y=Math.max(0,rawY);
       if(player.serverHp==null)player.serverHp=100; if(player.serverAlive==null)player.serverAlive=true; if(player.serverInk==null)player.serverInk=100;
       if(player.serverAlive){
