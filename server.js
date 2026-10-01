@@ -611,8 +611,10 @@ function finishServerMatch(room){
 let nextPlayerNo = 1;
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function onlineIdentityKey(player) {
-  if (player?.accountName) return 'account:' + String(player.accountName);
+  /* Guests are identified by their persistent browser guestKey; all guest
+     sockets must not collapse into one generic 'ゲスト' identity. */
   if (player?.guestKey) return 'guest:' + String(player.guestKey);
+  if (player?.accountName) return 'account:' + String(player.accountName);
   return 'socket:' + String(player?.id || '');
 }
 function onlinePlayerCount() {
