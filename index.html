@@ -10179,7 +10179,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   function addRaisedLine(x1,z1,x2,z2,r,colorHex,surfaceY,team){
     const dist=Math.hypot(x2-x1,z2-z1);
-    const steps=Math.max(2,Math.min(7,Math.ceil(dist/1.35)));
+    /* V106: long raised-ink routes need enough stamps to stay connected.
+       Seven stamps were too sparse on long paths, producing visible gaps. */
+    const steps=Math.max(2,Math.min(40,Math.ceil(dist/.85)));
     for(let i=0;i<=steps;i++){
       const t=i/steps;
       const x=x1+(x2-x1)*t,z=z1+(z2-z1)*t;
@@ -14078,6 +14080,7 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
   window.updateAI2D=updateAI2D;
   updateAI=updateAI2D;
   window.updateAI=updateAI2D;
+  window.__V106_RAISED_LINE_FIX=true;
   window.__V94_AI='2D-TOP-DOWN-IMAGE-VISION-2026-09-30';
   window.__V105_AI_TARGET_FIX=true;
   console.log('[SPLATOON ONLINE][V105] AI target detection uses actual enemy entities');
