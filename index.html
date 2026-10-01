@@ -11554,14 +11554,45 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function colorOf(c){return Math.max(0,Math.min(0xffffff,Math.floor(num(c,0))));}
 
-  function supportBlock(x,z,yHint=50){
+  /* V103: precise resolver for stacked paint surfaces. */
+  function supportBlock(x,z,yHint=0){
+    const hint=Number.isFinite(Number(yHint))?Number(yHint):0;
+    const tolerance=.24;
     let best=null,bestY=-Infinity;
     for(const b of collidableBlocks||[]){
       if(x<b.minX||x>b.maxX||z<b.minZ||z>b.maxZ)continue;
-      if(b.maxY>yHint+1.15)continue;
+      if(b.maxY>hint+tolerance)continue;
       if(b.maxY>bestY){best=b;bestY=b.maxY;}
     }
     return best;
+  }
+
+  function paintSurfaceHint(x,z,o){
+    const explicit=Number(o?.surfaceY);
+    if(Number.isFinite(explicit))return explicit;
+    const hinted=Number(o?.yHint);
+    if(Number.isFinite(hinted))return hinted;
+    const sourceY=Number(o?.sourceFighter?.pos?.y);
+    if(Number.isFinite(sourceY))return sourceY;
+
+    let nearestY=null,bestD=Infinity;
+    try{
+      for(const f of fighters||[]){
+        if(!f?.alive||!f?.pos)continue;
+        const d=Math.hypot(f.pos.x-x,f.pos.z-z);
+        if(d<=2.6&&d<bestD){
+          bestD=d;
+          nearestY=Number(f.pos.y);
+        }
+      }
+    }catch(_){}
+    return Number.isFinite(nearestY)?nearestY:0;
+  }
+
+  function paintSurfaceY(x,z,yHint){
+    const hint=Number.isFinite(Number(yHint))?Number(yHint):0;
+    const b=supportBlock(x,z,hint);
+    return b?b.maxY:0;
   }
 
   function makeIrregularCircle(radius,color){
@@ -11691,9 +11722,8 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     if(!Number.isFinite(px)||!Number.isFinite(pz))return;
     if(typeof marketPointInPolygon==='function'&&!marketPointInPolygon(px,pz))return;
 
-    const sy=Number.isFinite(Number(o.surfaceY))
-      ? Number(o.surfaceY)
-      : getSupportHeight(px,pz,Number.isFinite(Number(o.yHint))?Number(o.yHint):50);
+    const hint=paintSurfaceHint(px,pz,o);
+    const sy=paintSurfaceY(px,pz,hint);
     const n=o.normal?.clone?o.normal.clone():UP.clone();
     if(n.lengthSq()<.0001)n.copy(UP);else n.normalize();
     const team=o.team||o.sourceFighter?.team||null;
@@ -11847,8 +11877,8 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     let best=0;
     for(const block of collidableBlocks||[]){
       if(x<block.minX||x>block.maxX||z<block.minZ||z>block.maxZ)continue;
-      /* 弾より上にある台は「下から塗る」対象にしない。 */
-      if(block.maxY>projectileY+.38)continue;
+      /* Never paint a stacked platform that is above the projectile. */
+      if(block.maxY>projectileY+.24)continue;
       if(block.maxY>best)best=block.maxY;
     }
     return best;
@@ -12224,6 +12254,8 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
   };
 
   window.__V82_PHYSICS_READY=true;
+  window.__V103_PAINT_SURFACE_FIX=true;
+  console.log('[SPLATOON ONLINE][V103] precise stacked-surface paint resolver active');
 })();
 </script>
 
