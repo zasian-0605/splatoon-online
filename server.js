@@ -117,6 +117,9 @@ const SERVER_SUBS={
   splashWall:{delay:500,radius:2.8,damage:18},sprinkler:{delay:400,radius:2.0,damage:15},sensor:{delay:0,radius:0,damage:0},turret:{delay:0,radius:2.5,damage:50}
 };
 const SERVER_SPECIALS={
+  'ドームシールド':[0,5.0],'グラップラー':[0,4.0],'ヴァキュームコア':[75,3.0],
+  'ブーストステーション':[0,5.0],'スカイパック':[80,3.0],'ジェットパック':[80,3.0],
+  'グレートバリア':[0,6.0],'エナジースタンド':[0,5.0],'トリプルトルネード':[120,3.2],
   'トリガーキャノン':[220,2.8],'センチネルミサイル':[150,3.0],'ペイントクラウド':[24,4.5],'ギガスタンプ':[160,3.6],
   'オムニレーザー':[120,2.0],'チャージオーブ':[180,4.0],'パルスノード':[55,3.0],'ラッシュカート':[140,3.4],'トライアークトルネード':[120,3.2],
   'アサルトシェル':[140,3.5],'スワームビーコン':[70,3.0],'コロッサス':[150,3.6],'トリプルクラッシュ':[140,3.0],
@@ -125,10 +128,35 @@ const SERVER_SPECIALS={
   'ウルトラハンコ':[160,3.8],'テイオウイカ':[160,3.8],'メガホンレーザー5.1ch':[110,2.4],'マルチミサイル':[90,3.0],
   'デコイチラシ':[70,2.4],'スミナガシート':[20,3.5],'ウルトラチャクチ':[160,4.0],'ショクワンダー':[80,3.0]
 };
+const SERVER_WEAPON_INK_COST=[
+  .95,1.55,.70,1.45,1.85,3.20,2.70,2.80,3.00,9.00,12.00,6.00,4.50,7.00,1.60,
+  .68,.82,1.15,4.40,3.40,5.00,5.70,7.00,9.00,.90,.65,1.40,1.90,3.10,4.20,2.00,
+  1.30,1.50,1.90,.75,2.60,2.20,6.00,4.80,6.50,7.20,1.80,3.20,3.60,4.80
+];
+const SERVER_SPECIAL_BY_WEAPON={
+  0:'トライアークトルネード',1:'チャージオーブ',2:'センチネルミサイル',3:'パルスノード',4:'スカイパック',
+  5:'ペイントクラウド',6:'ドームシールド',7:'ラッシュカート',8:'トリガーキャノン',
+  9:'アサルトシェル',10:'センチネルミサイル',11:'グラップラー',12:'ギガスタンプ',13:'ブーストステーション',
+  14:'オムニレーザー',15:'スワームビーコン',16:'コロッサス',17:'トリプルクラッシュ',18:'ヴァキュームコア',
+  19:'スモークスクリーン',20:'ドームシールド',21:'チャージオーブ',22:'ホップソナー',23:'ショクワンダー',
+  24:'カニタンク',25:'サメライド',26:'ウルトラハンコ',27:'エナジースタンド',28:'グレートバリア',
+  29:'ウルトラショット',30:'ショクワンダー',31:'ウルトラハンコ',32:'ホップソナー',33:'ナイスダマ',
+  34:'カニタンク',35:'グレートバリア',36:'ホップソナー',37:'メガホンレーザー5.1ch',38:'マルチミサイル',
+  39:'グレートバリア',40:'ウルトラハンコ',41:'メガホンレーザー5.1ch',42:'ホップソナー',
+  43:'ナイスダマ',44:'ナイスダマ'
+};
 function serverPointInStage(x,z){
-  return Number.isFinite(x)&&Number.isFinite(z)
-    && x>=-SERVER_PLAYABLE_HALF_X && x<=SERVER_PLAYABLE_HALF_X
-    && z>=-SERVER_PLAYABLE_HALF_Z && z<=SERVER_PLAYABLE_HALF_Z;
+  x=Number(x);z=Number(z);
+  if(!Number.isFinite(x)||!Number.isFinite(z))return false;
+  if(x<-SERVER_PLAYABLE_HALF_X||x>SERVER_PLAYABLE_HALF_X||z<-SERVER_PLAYABLE_HALF_Z||z>SERVER_PLAYABLE_HALF_Z)return false;
+  let inside=false;
+  for(let i=0,j=SERVER_STAGE_POLYGON.length-1;i<SERVER_STAGE_POLYGON.length;j=i++){
+    const xi=SERVER_STAGE_POLYGON[i][0],zi=SERVER_STAGE_POLYGON[i][1];
+    const xj=SERVER_STAGE_POLYGON[j][0],zj=SERVER_STAGE_POLYGON[j][1];
+    const hit=((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/(zj-zi||1e-9)+xi);
+    if(hit)inside=!inside;
+  }
+  return inside;
 }
 function serverCellKey(x,z,y){
   return Math.floor(Number(x)/SERVER_CELL)+','+Math.floor(Number(z)/SERVER_CELL)+','+Math.round(Number(y||0)/SERVER_Y_STEP);
@@ -276,16 +304,29 @@ function serverApplyDamage(room,target,damage,attacker,reason){
   return true;
 }
 function serverApplyAoE(room,center,radius,damage,team,attacker,reason){
+  const cy=Number(center?.y)||0,rr=Math.max(.1,Number(radius)||0);
   for(const target of room.players.values()){
     if(!target.serverAlive||target.team===team)continue;
-    const pos=target.serverPos||target.spawn,dist=Math.hypot(pos.x-center.x,pos.z-center.z);
-    if(dist<=radius){
-      const scaled=damage*(1-Math.min(.65,dist/Math.max(.01,radius))*.5);
+    const pos=target.serverPos||target.spawn;
+    const flat=Math.hypot((pos.x||0)-(center.x||0),(pos.z||0)-(center.z||0));
+    const vertical=Math.abs((Number(pos.y)||0)-cy);
+    if(flat<=rr && vertical<=Math.max(2.25,rr*1.25)){
+      const dist=Math.hypot(flat,vertical);
+      const scaled=damage*(1-Math.min(.65,dist/Math.max(.01,rr))*.5);
       serverApplyDamage(room,target,scaled,attacker,reason||'aoe');
     }
   }
 }
 function serverShotInkCost(w,m){
+  const wid=Number(m?.weaponId);
+  if(Number.isInteger(wid)&&SERVER_WEAPON_INK_COST[wid]!=null){
+    const base=SERVER_WEAPON_INK_COST[wid];
+    if(w?.cat==='charger'){
+      const frac=Math.max(0,Math.min(1,Number(m?.charge)||0));
+      return base*(.55+.90*frac);
+    }
+    return base;
+  }
   const cat=w?.cat||'shooter';
   if(cat==='charger'){
     const frac=Math.max(0,Math.min(1,Number(m?.charge)||0));
@@ -317,6 +358,26 @@ function serverTrySpendInk(player,cost){
   player.serverInkUseAt=Date.now();
   return true;
 }
+function serverBeginPaintTrace(player){
+  const p=player.serverPos||player.spawn||{x:0,y:0,z:0};
+  player.paintAnchors=[{x:Number(p.x)||0,z:Number(p.z)||0,at:Date.now()}];
+  player.paintTraceUntil=Date.now()+2200;
+}
+function serverAcceptPaintTrace(player,x,z,x2,z2){
+  const now=Date.now();
+  const anchors=Array.isArray(player.paintAnchors)?player.paintAnchors:[];
+  const candidates=[{x,z},{x:Number(x2),z:Number(z2)}].filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.z));
+  const near=anchors.some(a=>candidates.some(p=>Math.hypot(p.x-a.x,p.z-a.z)<=3.6));
+  if(near || (player.serverPos&&Math.hypot(x-player.serverPos.x,z-player.serverPos.z)<=3.6)){
+    const end=Number.isFinite(Number(x2))&&Number.isFinite(Number(z2))
+      ? {x:Number(x2),z:Number(z2),at:now}
+      : {x:Number(x),z:Number(z),at:now};
+    player.paintAnchors=[end,...anchors.filter(a=>now-a.at<2200)].slice(0,12);
+    player.paintTraceUntil=Math.max(player.paintTraceUntil||0,now+2200);
+    return true;
+  }
+  return now>=(player.paintTraceUntil||0)?false:true;
+}
 function serverResolveShot(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return false;
   const wid=player.weaponId;
@@ -331,6 +392,7 @@ function serverResolveShot(room,player,m){
     return false;
   }
   player.lastShotAt=now;
+  serverBeginPaintTrace(player);
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
   const rawMode=String(m.mode||'');
   let mode='';
@@ -443,6 +505,8 @@ function serverApplySensorPulse(room,viewer,center,radius,specialName,durationMs
 function serverResolveSpecial(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return false;
   const name=String(m.specialName||''),spec=SERVER_SPECIALS[name];if(!spec)return false;
+  const expected=SERVER_SPECIAL_BY_WEAPON[Number(player.weaponId)];
+  if(expected && name!==expected)return false;
   const me=player.serverPos||player.spawn;let x=Number(m.x),z=Number(m.z);
   if(!Number.isFinite(x))x=me.x;if(!Number.isFinite(z))z=me.z;
   const dist=Math.hypot(x-me.x,z-me.z);
@@ -637,6 +701,7 @@ function leaveRoom(player) {
   const payload = { type: 'roomState', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
   for (const p of room.players.values()) send(p.ws, payload);
   if (room.players.size === 0) rooms.delete(room.id);
+  else assignTeamsAndStart(room);
 }
 function updateAccountResult(player, winnerTeam) {
   const a = accounts[player.accountName]; if (!a) return null;
@@ -780,6 +845,7 @@ wss.on('connection', ws => {
     lastClientSeq: 0,
     serverHp:100, serverAlive:true, serverPos:null, serverRespawnAt:0,
     lastHazardAt:0, lastShotAt:0, lastSubAt:0,
+    paintAnchors:[], paintTraceUntil:0,
     msgRateDrops:0, speedViolations:0, lastSpeedStrikeAt:0
   };
   sockets.set(ws, player);
@@ -797,8 +863,7 @@ wss.on('connection', ws => {
     if(!messageBudget(player)){
       if((player.msgRateDrops||0)===1)console.warn('[WS RATE DROP] '+player.id+' account='+(player.accountName||'-'));
       return;
-    }
-    if (m.type === 'bindAccount') {
+    }    if (m.type === 'bindAccount') {
       const boundRoom = player.roomId ? rooms.get(player.roomId) : null;
       if (boundRoom?.started) return;
       const token = String(m.token || '');
@@ -1020,6 +1085,8 @@ wss.on('connection', ws => {
       if(![x,z,radius].every(Number.isFinite)||radius<.2||radius>8||!serverPointInStage(x,z))return;
       const now=Date.now();
       if(now-(player.lastPaintAt||0)<28)return;
+      const x2raw=Number(m.x2),z2raw=Number(m.z2);
+      if(!serverAcceptPaintTrace(player,x,z,x2raw,z2raw))return;
       player.lastPaintAt=now;
       const serverPos=player.serverPos||player.spawn,y=Number.isFinite(Number(m.y))?Number(m.y):Number(serverPos.y)||0;
       const colorHex=applyCanonicalPlayerColor(player);
