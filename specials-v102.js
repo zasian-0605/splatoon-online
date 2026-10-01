@@ -548,6 +548,13 @@ function updateCanon(dt){
     const s=stateFor(f);
     if(!s||!alive(f))continue;
 
+    if(t>=s.until&&['jet','crab','stamp','reef','kraken','zip','chaku'].includes(s.mode)){
+      if(!f.isPlayer&&s.mode==='reef')explosion(f,f.pos,5.0,220,5.5);
+      if(!f.isPlayer&&s.mode==='chaku')explosion(f,f.pos,5.2,220,5.8);
+      finishActive(f,s.mode==='jet'||s.mode==='zip');
+      continue;
+    }
+
     if(s.mode==='mega'){
       if(t>=s.until){finishActive(f,false);continue;}
       if(t-(s.last||0)>140){
@@ -621,19 +628,9 @@ function updateCanon(dt){
       f.speedBoostUntil=Math.max(f.speedBoostUntil||0,t+17000);
       f.__v102EnergyUntil=t+17000;
       f.ink=Math.min(100,f.ink+35);
-      const can=s.cans>=0?s.cans:null;
-      if(Number.isInteger(can)&&s.cans<4&&s.cans>=0&&s.cans<s.cans+1){
-        const idx=3-s.cans;if(s.cans>=0&&s.cans<4&&s.cans<4){const q=s.cans<4?s.cans:null;}
-      }
-      const visible=s.cans>=0?s.cans:null;
-      if(Array.isArray(s.cans)){}
-      const meshList=s._canMeshes||s.group?.userData?.canMeshes;
-      if(meshList){
-        const q=meshList.find(x=>x?.visible);if(q)q.visible=false;
-      }else if(s.group){
-        const qs=s.group.children.filter(x=>x?.isMesh&&x.visible);
-        if(qs.length>1)qs[qs.length-1].visible=false;
-      }
+      const meshList=s.canMeshes||[];
+      const q=meshList.find(x=>x?.visible);
+      if(q)q.visible=false;
     }
   }
 
