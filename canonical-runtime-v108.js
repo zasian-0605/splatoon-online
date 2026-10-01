@@ -374,7 +374,7 @@ function bulletTrail(b,a){
   const r=clamp(n(b.paintRadius,.8)*.58,.4,1.1);
   canonicalPaint(a.x,a.z,r,b.colorHex,{surfaceY:ga,normal:UP,team:b.team,to:{x:z.x,z:z.z},noNetwork:true,sourceFighter:b.sourceFighter});
   const t=performance.now();
-  if(b.sourceFighter?.isPlayer&&t-(b.netAt||0)>=55){b.netAt=t;sendPaint(a.x,a.z,r,b.colorHex,{y:ga,normal:UP,team:b.team,to:{x:z.x,z:z.z});}
+  if(b.sourceFighter?.isPlayer&&t-(b.netAt||0)>=55){b.netAt=t;sendPaint(a.x,a.z,r,b.colorHex,{y:ga,normal:UP,team:b.team,to:{x:z.x,z:z.z}});}
 }
 function pointSegment(p,a,b){
   const ab=b.clone().sub(a),q=Math.max(EPS,ab.lengthSq()),t=clamp(p.clone().sub(a).dot(ab)/q,0,1);
