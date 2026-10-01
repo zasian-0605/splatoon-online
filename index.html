@@ -13100,7 +13100,27 @@ function makeFists(f){
 }
 function startSpecial(f,name,target,remote){
   if(!f?.alive)return false;
-  f.__v91Mode=name;f.__v91Until=now();
+  /*
+   * V101: use a canonical runtime mode instead of the Japanese display name.
+   * Several active specials (jetpack, stamp, reef, etc.) are controlled by
+   * the movement/shoot loops using these mode IDs. The old code stored the
+   * display name, so those loops never ran and the special looked inert.
+   */
+  const modeByName={
+    'ウルトラショット':'ultra',
+    'ショクワンダー':'zip',
+    'キューインキ':'inkvac',
+    'メガホンレーザー5.1ch':'mega',
+    'ジェットパック':'jet',
+    'ウルトラハンコ':'stamp',
+    'カニタンク':'crab',
+    'サメライド':'reef',
+    'テイオウイカ':'kraken',
+    'ウルトラチャクチ':'chaku'
+  };
+  f.__v91Mode=modeByName[name]||null;
+  f.__v91SpecialName=name;
+  f.__v91Until=now();
   const p=target?.clone?target.clone():f.pos.clone().addScaledVector(aim(f),18);
 
   if(name==='ウルトラショット'){
@@ -13128,8 +13148,13 @@ function startSpecial(f,name,target,remote){
     f.__v91Until=now()+9000;f.__v91Crab=makeCrab(f);f.__v91CrabBall=false;f.invulnUntil=Math.max(f.invulnUntil||0,now()+500);
   }else if(name==='エナジースタンド'){
     const g=new THREE.Group(),body=new THREE.Mesh(new THREE.BoxGeometry(1.15,2.2,.75),mtl(col(f),.9));body.position.y=1.1;g.add(body);
-    for(let i=0;i<4;i++){const q=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.45,10),mtl(i%2?0xe3ff00:0xffffff,.95));q.rotation.x=Math.PI*.5;q.position.set((i-1.5)*.28,1.2,.43);g.add(q);}
-    g.position.copy(f.pos);scene.add(g);sp91.stands.push({owner:f,pos:f.pos.clone(),team:f.team,end:now()+15000,cans:4,used:new Set(),group:g});
+    const cans=[];
+    for(let i=0;i<4;i++){
+      const q=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.45,10),mtl(i%2?0xe3ff00:0xffffff,.95));
+      q.rotation.x=Math.PI*.5;q.position.set((i-1.5)*.28,1.2,.43);g.add(q);cans.push(q);
+    }
+    g.position.copy(f.pos);scene.add(g);
+    sp91.stands.push({owner:f,pos:f.pos.clone(),team:f.team,end:now()+15000,cans:4,used:new Set(),group:g,canMeshes:cans});
   }else if(name==='サメライド'){
     f.__v91Until=now()+1700;f.__v91Home=f.pos.clone();f.__v91Dir=face(f);f.__v91Reef=makeReef(f);f.invulnUntil=Math.max(f.invulnUntil||0,now()+1600);
   }else if(name==='トリプルトルネード'){
@@ -13202,27 +13227,28 @@ window.tryShoot=function(f,d,t){
 
 const moveBasePlayerV91=updatePlayerMovement;
 updatePlayerMovement=function(dt){
+  /* V101: active-special control is selected by canonical __v91Mode. */
   const f=playerFighter;if(!f?.alive)return moveBasePlayerV91(dt);const t=now();
   if(f.__v91Mode==='jet'){
-    if(t>=f.__v91Until){const h=f.__v91Home?.clone();rm(f.__v91Jet);f.__v91Jet=null;f.__v91Mode=null;if(h)f.pos.copy(h);return;}
+    if(t>=f.__v91Until){const h=f.__v91Home?.clone();rm(f.__v91Jet);f.__v91Jet=null;f.__v91Mode=null;f.__v91SpecialName=null;if(h)f.pos.copy(h);return;}
     let y=f.__v91JetY;if(keys.space)y+=2.8;if(keys.shift)y-=2.2;f.pos.y+=(y-f.pos.y)*Math.min(1,dt*8);
     const d=(()=>{const x=(keys.d?1:0)-(keys.a?1:0),z=(keys.s?1:0)-(keys.w?1:0);if(!x&&!z)return null;const u=new THREE.Vector3(x,0,z);u.normalize();return u;})();if(d){f.pos.x+=d.x*7*dt;f.pos.z+=d.z*7*dt;}return;
   }
   if(f.__v91Mode==='stamp'){
-    if(t>=f.__v91Until){blast(f,f.pos.clone(),3.8,180);rm(f.__v91Hammer);f.__v91Hammer=null;f.__v91Mode=null;f.invulnUntil=0;return;}
+    if(t>=f.__v91Until){blast(f,f.pos.clone(),3.8,180);rm(f.__v91Hammer);f.__v91Hammer=null;f.__v91Mode=null;f.__v91SpecialName=null;f.invulnUntil=0;return;}
     const d=(()=>{const x=(keys.d?1:0)-(keys.a?1:0),z=(keys.s?1:0)-(keys.w?1:0);if(!x&&!z)return null;return new THREE.Vector3(x,0,z).normalize();})();if(d){tryMoveWithCollision(f,d.multiplyScalar(4.9),dt,false);f.root.rotation.y=Math.atan2(d.x,d.z);}return;
   }
   if(f.__v91Mode==='crab'){
-    if(t>=f.__v91Until){blast(f,f.pos.clone(),2.5,80);rm(f.__v91Crab);f.__v91Crab=null;f.__v91Mode=null;f.invulnUntil=0;return;}
+    if(t>=f.__v91Until){blast(f,f.pos.clone(),2.5,80);rm(f.__v91Crab);f.__v91Crab=null;f.__v91Mode=null;f.__v91SpecialName=null;f.invulnUntil=0;return;}
     f.__v91CrabBall=!!keys.shift;
     const x=(keys.d?1:0)-(keys.a?1:0),z=(keys.s?1:0)-(keys.w?1:0);if(x||z){const d=new THREE.Vector3(x,0,z).normalize();tryMoveWithCollision(f,d.multiplyScalar(f.__v91CrabBall?13.5:5.5),dt,false);f.root.rotation.y=Math.atan2(d.x,d.z);}return;
   }
   if(f.__v91Mode==='reef'){
-    if(t>=f.__v91Until){blast(f,f.pos.clone(),5,220);rm(f.__v91Reef);f.__v91Reef=null;f.__v91Mode=null;f.invulnUntil=0;return;}
+    if(t>=f.__v91Until){blast(f,f.pos.clone(),5,220);rm(f.__v91Reef);f.__v91Reef=null;f.__v91Mode=null;f.__v91SpecialName=null;f.invulnUntil=0;return;}
     tryMoveWithCollision(f,f.__v91Dir.clone().multiplyScalar(26),dt,false);return;
   }
   if(f.__v91Mode==='kraken'){
-    if(t>=f.__v91Until){blast(f,f.pos.clone(),3,120);f.root.scale.set(1,1,1);f.__v91Mode=null;f.invulnUntil=0;return;}
+    if(t>=f.__v91Until){blast(f,f.pos.clone(),3,120);f.root.scale.set(1,1,1);f.__v91Mode=null;f.__v91SpecialName=null;f.invulnUntil=0;return;}
     const d=(()=>{const x=(keys.d?1:0)-(keys.a?1:0),z=(keys.s?1:0)-(keys.w?1:0);return x||z?new THREE.Vector3(x,0,z).normalize():face(f);})();tryMoveWithCollision(f,d.multiplyScalar(8),dt,false);return;
   }
   if(f.__v91Mode==='chaku'){
@@ -13270,7 +13296,20 @@ function updateSpecialsV91(dt){
   for(let i=sp91.tornados.length-1;i>=0;i--){const z=sp91.tornados[i];if(t>=z.end){rm(z.group);sp91.tornados.splice(i,1);continue;}z.group.rotation.y+=dt*2;if(t>=z.next){z.next=t+180;paintGround(z.pos.x,z.pos.z,4,z.color,{team:z.team});for(const o of fighters)if(o.alive&&o.team!==z.team&&o.pos.distanceTo(z.pos)<4.2)applyDamage(o,28,z.owner);}}
   for(let i=sp91.chumps.length-1;i>=0;i--){const c=sp91.chumps[i];if(t>=c.end){blast(c.owner,c.pos.clone(),2.2,60);rm(c.group);sp91.chumps.splice(i,1);}}
   for(let i=sp91.barriers.length-1;i>=0;i--){const b=sp91.barriers[i];if(t>=b.end||!b.owner.alive){rm(b.group);sp91.barriers.splice(i,1);continue;}for(let j=bullets.length-1;j>=0;j--){const q=bullets[j];if(q?.mesh&&q.team!==b.team&&Math.hypot(q.mesh.position.x-b.pos.x,q.mesh.position.z-b.pos.z)<6&&Math.abs(q.mesh.position.y-(b.pos.y+2.2))<3.8){rm(q.mesh);bullets.splice(j,1);b.hp-=Math.max(1,n(q.damage,20));}}if(b.hp<=0){rm(b.group);sp91.barriers.splice(i,1);}}
-  for(let i=sp91.stands.length-1;i>=0;i--){const s=sp91.stands[i];if(t>=s.end||s.cans<=0){rm(s.group);sp91.stands.splice(i,1);continue;}for(const a of fighters)if(a.alive&&a.team===s.team&&!s.used.has(String(a.id))&&a.pos.distanceTo(s.pos)<2.5){s.used.add(String(a.id));s.cans--;a.speedBoostUntil=Math.max(a.speedBoostUntil||0,t+17000);a.ink=Math.min(100,a.ink+35);if(s.group){const q=s.group.children.find(x=>x.visible);if(q)q.visible=false;}}}
+  for(let i=sp91.stands.length-1;i>=0;i--){
+    const s=sp91.stands[i];
+    if(t>=s.end||s.cans<=0){rm(s.group);sp91.stands.splice(i,1);continue;}
+    for(const a of fighters){
+      if(!a.alive||a.team!==s.team||s.used.has(String(a.id))||a.pos.distanceTo(s.pos)>2.5)continue;
+      s.used.add(String(a.id));s.cans--;
+      a.speedBoostUntil=Math.max(a.speedBoostUntil||0,t+17000);
+      a.ink=Math.min(100,a.ink+35);
+      a.__v91EnergyUntil=t+17000;
+      a.__v91EnergyInkResistUntil=t+17000;
+      const q=(s.canMeshes||[]).find(x=>x?.visible);
+      if(q)q.visible=false;
+    }
+  }
   let gray=false;
   for(let i=sp91.screens.length-1;i>=0;i--){const s=sp91.screens[i];if(t>=s.end){rm(s.group);sp91.screens.splice(i,1);continue;}s.pos.addScaledVector(s.dir,.8*dt);s.group.position.copy(s.pos);const p=playerFighter;if(p?.alive){const r=p.pos.clone().sub(s.pos),side=Math.abs(r.dot(new THREE.Vector3(-s.dir.z,0,s.dir.x))),front=Math.abs(r.dot(s.dir));if(side<7&&front<.45){gray=true;if(t>s.hit){s.hit=t+500;applyDamage(p,8,s.owner);}}}}
   if(renderer?.domElement)renderer.domElement.style.filter=gray?'grayscale(1) saturate(.3)':'';
