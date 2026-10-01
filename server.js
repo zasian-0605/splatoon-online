@@ -248,16 +248,8 @@ function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   const qx=ax+abx*t,qy=ay+aby*t,qz=az+abz*t;
   return {distance:Math.hypot(px-qx,py-qy,pz-qz),t,x:qx,y:qy,z:qz};
 }
-function serverEffectiveWeaponRange(w){
-  const c=String(w?.cat||''),raw=Math.max(1,Number(w?.range)||35);
-  if(w?.kind==='stringer')return Math.min(18,raw);
-  if(c==='charger')return Math.max(16,Math.min(34,raw*.72));
-  if(c==='blaster')return Math.max(8,Math.min(19,raw*.62));
-  if(c==='slosher')return Math.max(7,Math.min(19,raw*.66));
-  return Math.max(9,Math.min(22,raw*.58));
-}
 function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
-  const range=serverEffectiveWeaponRange(w),candidates=[];
+  const range=Math.max(1,Number(w.range)||35),candidates=[];
   const addSegment=(a,b,order)=>{
     for(const target of room.players.values()){
       if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
@@ -274,18 +266,8 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
       z:origin.z+dir.z*range
     };
     addSegment(origin,end,0);
-
-    /* クライアントと同じ：射程端で前進を6%に落とし、その場から落下。 */
-    const dropTime=.38,dropSpeed=46,gravity=26,speed=Math.max(1,Number(w.speed)||70);
-    const dropEnd={
-      x:end.x+dir.x*speed*.06*dropTime,
-      y:end.y-dropSpeed*dropTime-.5*gravity*dropTime*dropTime,
-      z:end.z+dir.z*speed*.06*dropTime
-    };
-    addSegment(end,dropEnd,1);
-
     candidates.sort((a,b)=>a.order-b.order);
-    return {hit:candidates[0]||null,straightEnd:end,dropEnd};
+    return {hit:candidates[0]||null,straightEnd:end,dropEnd:end};
   }
 
   const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
@@ -312,34 +294,19 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
 
   const speed=Math.max(1,Number(w.speed)||35);
   const remain=Math.max(0,range-straightDist);
-  if(w.cat!=='slosher'){
-    const end={
-      x:origin.x+fd.x*range,
-      y:origin.y+fd.y*range,
-      z:origin.z+fd.z*range
+  const gravity=w.cat==='slosher'?10.5:5.5;
+  const totalTime=remain/Math.max(1,speed*cp);
+  const steps=Math.max(16,Math.min(56,Math.ceil(totalTime*50)));
+  let prev=straight;
+  for(let i=1;i<=steps;i++){
+    const t=totalTime*i/steps;
+    const cur={
+      x:straight.x+fd.x*speed*t,
+      y:straight.y+fd.y*speed*t-.5*gravity*t*t,
+      z:straight.z+fd.z*speed*t
     };
-    addSegment(origin,end,0);
-    const dropTime=.38,dropSpeed=34,gravity=26;
-    const dropEnd={
-      x:end.x+fd.x*speed*.06*dropTime,
-      y:end.y-dropSpeed*dropTime-.5*gravity*dropTime*dropTime,
-      z:end.z+fd.z*speed*.06*dropTime
-    };
-    addSegment(end,dropEnd,1);
-  }else{
-    const remainTime=remain/Math.max(1,speed*cp);
-    const steps=Math.max(16,Math.min(56,Math.ceil(remainTime*50)));
-    let prev=straight;
-    for(let i=1;i<=steps;i++){
-      const t=remainTime*i/steps;
-      const cur={
-        x:straight.x+fd.x*speed*t,
-        y:straight.y+fd.y*speed*t-.5*10.5*t*t,
-        z:straight.z+fd.z*speed*t
-      };
-      addSegment(prev,cur,i/steps);
-      prev=cur;
-    }
+    addSegment(prev,cur,i/steps);
+    prev=cur;
   }
   candidates.sort((a,b)=>a.order-b.order);
   return {
