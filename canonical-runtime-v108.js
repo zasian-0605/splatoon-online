@@ -187,6 +187,22 @@ function surfaceSegment(a,b,r,c,team,block,normal){
     visualStamp(block,p,normal,r,c,team);
   }
 }
+function canonicalPaintSegment(a,b,r,c,network=false){
+  if(!a||!b)return;
+  const ay=Number.isFinite(Number(a.y))?Number(a.y):0;
+  const by=Number.isFinite(Number(b.y))?Number(b.y):ay;
+  const sy=supportHeight(a.x,a.z,Math.max(ay,.2));
+  const ey=supportHeight(b.x,b.z,Math.max(by,.2));
+  const surfaceY=Math.abs(sy-ey)<=.35?sy:Math.min(sy,ey);
+  const team=a.team||b.team||a.sourceFighter?.team||b.sourceFighter?.team||null;
+  canonicalPaint(a.x,a.z,r,c,{surfaceY,normal:UP,team,to:{x:b.x,z:b.z},noNetwork:true,sourceFighter:a.sourceFighter||b.sourceFighter});
+  if(network)sendPaint(a.x,a.z,r,c,{y:surfaceY,normal:UP,team,to:{x:b.x,z:b.z}});
+}
+try{paintSegment=canonicalPaintSegment;}catch(_){}
+window.paintSegment=canonicalPaintSegment;
+try{sendPaintSegment=function(a,b,r,c){canonicalPaintSegment(a,b,r,c,true);};}catch(_){}
+window.sendPaintSegment=function(a,b,r,c){canonicalPaintSegment(a,b,r,c,true);};
+
 function teamOf(o){return o?.team||o?.sourceFighter?.team||null;}
 function sendPaint(x,z,r,c,o={}){
   if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1)return;
