@@ -504,5 +504,25 @@ function computeCanonicalTurf(){
 try{computeTurf=computeCanonicalTurf;}catch(_){}
 window.computeTurf=computeCanonicalTurf;
 
+/* ---------- simple, accessible help UI ---------- */
+(function installHelpUI(){
+  if(document.getElementById('v108-help-button'))return;
+  const style=document.createElement('style');
+  style.textContent=`
+    #v108-help-button{position:fixed;right:14px;top:72px;z-index:9000;border:2px solid #fff;border-radius:10px;background:#171b22;color:#fff;font-weight:800;font-size:14px;padding:8px 11px;cursor:pointer}
+    #v108-help-panel{position:fixed;right:14px;top:118px;z-index:8999;width:min(320px,calc(100vw - 28px));box-sizing:border-box;background:rgba(18,22,29,.97);color:#fff;border:2px solid #fff;border-radius:14px;padding:14px;display:none;box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:system-ui,sans-serif}
+    #v108-help-panel h3{margin:0 0 10px;font-size:17px}
+    #v108-help-panel p{margin:7px 0;line-height:1.45;font-size:13px}
+    #v108-help-panel .close{width:100%;margin-top:8px;border:0;border-radius:9px;padding:9px;font-weight:800;cursor:pointer}
+    @media(max-width:700px){#v108-help-button{top:58px;right:10px}#v108-help-panel{top:105px;right:10px}}
+  `;
+  document.head.appendChild(style);
+  const btn=document.createElement('button');btn.id='v108-help-button';btn.type='button';btn.textContent='操作';
+  const panel=document.createElement('div');panel.id='v108-help-panel';
+  panel.innerHTML='<h3>操作ガイド</h3><p>移動：W A S D</p><p>視点：マウス</p><p>攻撃：左クリック</p><p>サブ：右クリック</p><p>イカ：Shift</p><p>ジャンプ：Space</p><p>オンライン：P / パネル：T</p><button class="close" type="button">閉じる</button>';
+  document.body.appendChild(btn);document.body.appendChild(panel);
+  btn.addEventListener('click',e=>{e.stopPropagation();panel.style.display=panel.style.display==='block'?'none':'block';});
+  panel.querySelector('.close').addEventListener('click',()=>panel.style.display='none');
+})();
 console.log('[SPLATOON ONLINE][V108] canonical gameplay runtime active');
 })();
