@@ -10731,12 +10731,18 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!w)return false;
     if(w.category==='charger'||w.category==='roller'||w.category==='spinner'||w.category==='wiper'||w.brush)return false;
     const now=performance.now();
-    let dir=new THREE.Vector3();
+    const dir=new THREE.Vector3();
     try{camera.getWorldDirection(dir);}catch(_){}
     dir.y=0;
     if(dir.lengthSq()<.0001)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
     dir.normalize();
-    const ok=simpleSafeShot(f,dir,now);
+    /*
+     * FINAL: the first click must use the exact same canonical tryShoot path
+     * as subsequent frames. The latest specials runtime re-aims player shots
+     * from the camera every time, eliminating the old V67/V95 split.
+     */
+    const fn=window.tryShoot;
+    const ok=typeof fn==='function' ? !!fn(f,dir,now) : !!simpleSafeShot(f,dir,now);
     if(ok)lastDirectShot=now;
     return ok;
   }
