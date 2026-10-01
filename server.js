@@ -723,7 +723,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V96-SERVER-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
@@ -797,8 +797,7 @@ const server = http.createServer(async (req, res) => {
 function securityStrike(player, reason) {
   const now = Date.now();
   if (!player.securityWindowStart || now-player.securityWindowStart>10000) {
-    player.securityWindowStart=now;    player.securityStrikes=0;
-  }
+    player.securityWindowStart=now;    player.securityStrikes=0;  }
   player.securityStrikes++;
   console.warn(`[ANTI-CHEAT] ${player.id} strike=${player.securityStrikes} reason=${reason}`);
   send(player.ws,{type:'antiCheatWarning',reason:'不正または異常な通信を検知しました。'});
