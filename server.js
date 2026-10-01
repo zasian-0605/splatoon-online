@@ -35,6 +35,35 @@ function rankFromRating(r) {
 function profile(a) {
   return { name: a.name, rating: a.rating, rank: rankFromRating(a.rating), wins: a.wins, losses: a.losses, games: a.games };
 }
+function buildRanking(limit=50, session=null) {
+  const list=Object.values(accounts)
+    .filter(a=>a && typeof a.name==='string')
+    .map(a=>({
+      name:a.name,
+      rating:Number.isFinite(Number(a.rating))?Number(a.rating):750,
+      rank:rankFromRating(Number.isFinite(Number(a.rating))?Number(a.rating):750),
+      wins:Number.isFinite(Number(a.wins))?Number(a.wins):0,
+      losses:Number.isFinite(Number(a.losses))?Number(a.losses):0,
+      games:Number.isFinite(Number(a.games))?Number(a.games):0
+    }))
+    .sort((a,b)=>
+      b.rating-a.rating ||
+      b.wins-a.wins ||
+      b.games-a.games ||
+      a.name.localeCompare(b.name,'ja')
+    );
+  const total=list.length;
+  let myRank=null;
+  let myProfile=null;
+  if(session?.name){
+    const index=list.findIndex(x=>x.name===session.name);
+    if(index>=0){
+      myRank=index+1;
+      myProfile=list[index];
+    }
+  }
+  return {entries:list.slice(0,Math.max(1,Math.min(100,Number(limit)||50))),total,myRank,myProfile};
+}
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -728,7 +757,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V99-SERVER-INK-SWIM-SYNC-2026-10-01', time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V100-SERVER-RANKING-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
@@ -752,6 +781,11 @@ const server = http.createServer(async (req, res) => {
       saveAccounts();
       return json(res, 200, { ok: true, token, profile: profile(accounts[name]), created: p.endsWith('register') });
     } catch { return json(res, 400, { ok: false, error: 'リクエストを処理できませんでした。' }); }
+  }
+  if (req.method === 'GET' && p === '/api/ranking') {
+    const s=getSession(req);
+    const limit=Math.max(1,Math.min(100,Number(new URL(req.url||'/', 'http://localhost').searchParams.get('limit'))||50));
+    return json(res,200,{ok:true,...buildRanking(limit,s)});
   }
   if (req.method === 'GET' && p === '/api/account/me') {
     const s = getSession(req); if (!s || !accounts[s.name]) return json(res, 401, { ok: false });
