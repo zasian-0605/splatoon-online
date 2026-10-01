@@ -14,12 +14,11 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 const PUBLIC_FILES = new Set([
   'index.html',
   'about.html',
-  'online-v93.js',
-  'online-v95.js',
-  'online-v96.js',
-  'specials-v102.js',
-  'canonical-runtime-v108.js',
-  'paint-sync-v110.js'
+  'online.js',
+  'ai.js',
+  'specials.js',
+  'runtime.js',
+  'paint.js'
 ]);
 const PUBLIC_THREE_FILE = 'node_modules/three/build/three.min.js';
 
