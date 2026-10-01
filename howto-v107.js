@@ -325,6 +325,15 @@
         </div>
 
         <div class="v107-help-box full">
+          <b>📖 遊び方を開く・閉じる</b>
+          <div class="v107-help-row">
+            <span class="v107-key">U</span>
+            <span>遊び方を開く / もう一度Uで閉じる</span>
+          </div>
+          <div class="v107-note">画面右上の「📖 遊び方・キー操作」ボタンが押せないときも、Uキーで開けます。ESCでも閉じられます。</div>
+        </div>
+
+        <div class="v107-help-box full">
           <b>📝 いま画面に出ている操作説明を全部まとめると</b>
           <div class="v107-note" style="font-size:15px;color:#fff;">
             【PC】WASD：移動 / マウス：視点＆射撃 / 左クリック：射撃 / 右クリック：サブ / Shift：潜伏（イカ） / Space：ジャンプ / Q：サブ / R：スペシャル<br>
