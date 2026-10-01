@@ -1224,7 +1224,8 @@ wss.on('connection', ws => {
       const x=Number(m.x),z=Number(m.z),radius=Number(m.radius);
       if(![x,z,radius].every(Number.isFinite)||radius<.2||radius>8||!serverPointInStage(x,z))return;
       const now=Date.now();
-      if(now-(player.lastPaintAt||0)<28)return;
+      /* V110: paint packets may arrive in bursts; don't drop legitimate same-frame paint updates. */
+      if(now-(player.lastPaintAt||0)<5)return;
       const x2raw=Number(m.x2),z2raw=Number(m.z2);
       if(!serverAcceptPaintTrace(player,x,z,x2raw,z2raw))return;
       player.lastPaintAt=now;
