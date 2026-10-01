@@ -329,6 +329,12 @@
       case 'antiCheatWarning':try{window.showToast?.(String(m.reason||'通信に異常が検知されました'));}catch(_){}break;
       case 'matchEnd':
         try{
+          /* V111: remember a server-forced win before endBattle() calculates the
+             local result screen. A team-disconnect result is authoritative. */
+          window.__V111_FORCED_MATCH_RESULT = (m.forced && (m.winnerTeam==='A'||m.winnerTeam==='B'))
+            ? {winnerTeam:m.winnerTeam,reason:String(m.reason||'team-eliminated')}
+            : null;
+
           const me=(m.results||[]).find(x=>String(x.id)===String(state.playerId));
           if(me?.profile){
             window.showOnlineProfile?.(me.profile);
