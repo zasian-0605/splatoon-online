@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const BUILD='V97-ONLINE-MATCH-READY-2026-10-01';
+  const BUILD='V111-ONLINE-CONSOLIDATED-2026-10-01';
   const SERVER_ORIGIN='https://splatoon-online-8r1r.onrender.com';
   const WS_URL=SERVER_ORIGIN.replace(/^https:/,'wss:').replace(/^http:/,'ws:');
   const state={
@@ -102,15 +102,23 @@
     try{ws.send(JSON.stringify(msg));return true;}catch(e){log('SEND_ERROR',{type,error:String(e)});return false;}
   }
 
-  function sendOnlineShot(packet){
-    if(!packet||typeof packet!=='object')return false;
+  /* The only outbound gameplay route.  Callers never access the WebSocket
+     directly, which keeps normal shots, subs and specials on one protocol
+     path and lets rawSend attach sequence metadata consistently. */
+  function sendGameplay(type,packet){
+    if(!['shot','sub','special'].includes(type)||!packet||typeof packet!=='object')return false;
     const out=Object.assign({},packet);
     delete out.type;
     delete out.roomId;
     delete out.team;
-    return rawSend('shot',out);
+    return rawSend(type,out);
   }
-  window.__v93SendShot=sendOnlineShot;
+  window.sendOnlineGameplay=sendGameplay;
+  window.sendOnlineShot=packet=>sendGameplay('shot',packet);
+  window.sendOnlineSub=packet=>sendGameplay('sub',packet);
+  window.sendOnlineSpecial=packet=>sendGameplay('special',packet);
+  /* Compatibility aliases deliberately delegate to the same route. */
+  window.__v93SendShot=window.sendOnlineShot;
   function forwardLegacy(data){
     let m;try{m=typeof data==='string'?JSON.parse(data):data;}catch(_){return false;}
     if(!m||typeof m!=='object'||typeof m.type!=='string')return false;
@@ -123,7 +131,7 @@
     const sig=signature(m),now=performance.now();
     if(sig){
       const prev=state.lastSig.get(sig)||0;
-      const windowMs=m.type==='state'?24:(m.type==='paint'?28:18);
+      const windowMs=m.type==='state'?24:(m.type==='paint'?5:18);
       if(now-prev<windowMs)return true;
       state.lastSig.set(sig,now);
       if(state.lastSig.size>300)for(const [k,t] of state.lastSig)if(now-t>1000)state.lastSig.delete(k);
@@ -142,6 +150,7 @@
     };
     state.proxy=proxy;
     try{window.onlineSocket=proxy;}catch(_){}
+    try{wireProxy(ws);}catch(_){}
     return proxy;
   }
 
@@ -269,13 +278,35 @@
         if(f&&name)try{window.__receiveOriginalSpecial?.(f,name,new THREE.Vector3(Number(m.x)||0,Number(m.y)||0,Number(m.z)||0),m.extra||{});}catch(_){}
         break;
       }
-      case 'sensorMark':
-        try{const f=findFighter(m.targetId)||ensureRemote(m);if(f)f.revealedUntil=Math.max(Number(f.revealedUntil)||0,Number(m.until)||0);}catch(_){}
+      case 'sensorMark':{
+        try{
+          const f=findFighter(m.targetId)||ensureRemote(m);
+          if(f){
+            const until=Number(m.until)||0;
+            f._sensorViewerUntil=Math.max(Number(f._sensorViewerUntil)||0,until);
+            f.revealedUntil=Math.max(Number(f.revealedUntil)||0,until);
+          }
+        }catch(_){}
         break;
+      }
+      case 'sensorTagged':{
+        try{
+          const f=findFighter(m.targetId)||getPlayer();
+          if(f){
+            const until=Number(m.until)||0;
+            f._sensorTaggedUntil=Math.max(Number(f._sensorTaggedUntil)||0,until);
+            f.__v111SensorSourceId=String(m.sourceId||'');
+            f.__v111SensorSourceName=String(m.sourceName||'');
+          }
+        }catch(_){}
+        break;
+      }
       case 'paint':{
         const x2=Number(m.x2),z2=Number(m.z2);
         const o={mult:m.mult||1,remote:true,team:m.team,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined};
         if(Number.isFinite(x2)&&Number.isFinite(z2))o.to={x:x2,z:z2};
+        const nx=Number(m.nx),ny=Number(m.ny),nz=Number(m.nz);
+        if([nx,ny,nz].every(Number.isFinite))o.normal=new THREE.Vector3(nx,ny,nz);
         try{window.paintGround?.(m.x,m.z,m.radius,m.colorHex,o);}catch(_){}
         break;
       }
@@ -301,6 +332,20 @@
         state.phase='room';state.roomId='';state.playerId='';state.team='';state.ready=false;setVars();break;
       default:break;
     }
+  }
+
+  function wireProxy(ws){
+    const p=window.onlineSocket;
+    if(!p||p.__v111EventsWired||p.__v93Proxy!==true)return;
+    p.__v111EventsWired=true;
+    try{
+      p.addEventListener=(type,fn,opts)=>{
+        if(ws&&typeof ws.addEventListener==='function')return ws.addEventListener(type,fn,opts);
+      };
+      p.removeEventListener=(type,fn,opts)=>{
+        if(ws&&typeof ws.removeEventListener==='function')return ws.removeEventListener(type,fn,opts);
+      };
+    }catch(_){}
   }
 
   function connect(){
@@ -347,8 +392,10 @@
     try{window.showGlobalOnlineHud?.(true);}catch(_){}
     if(!state.socket||state.socket.readyState===WebSocket.CLOSED)connect();
     else if(state.phase==='disconnected'||state.phase==='closing')join();
-    else if(state.phase==='room')setStatus('参加者を確認しています');
-    else setStatus(state.phase==='in_match'?'対戦中':'オンライン接続中');
+    else if(state.phase==='room'){
+      if(!state.roomId)join();
+      else setStatus('参加者を確認しています');
+    }else setStatus(state.phase==='in_match'?'対戦中':'オンライン接続中');
     return true;
   }
 
@@ -420,3 +467,7 @@
   try{window.onlineSocket=null;}catch(_){}
   log('READY',{server:WS_URL});
 })();
+
+/* V107: preserve paint surface normals from the authoritative server. */
+window.__V107_ONLINE_PAINT_NORMALS=true;
+window.__V111_ONLINE_CONSOLIDATED=true;

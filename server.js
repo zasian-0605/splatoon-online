@@ -10,6 +10,25 @@ const DATA_DIR = path.join(ROOT, 'data');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
+/* V111: only explicitly public web assets may be served. */
+const PUBLIC_FILES = new Set([
+  'index.html',
+  'about.html',
+  'online.js',
+  'ai.js',
+  'specials.js',
+  'runtime.js',
+  'paint.js'
+]);
+const PUBLIC_THREE_FILE = 'node_modules/three/build/three.min.js';
+
+process.on('uncaughtException', err => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+});
+process.on('unhandledRejection', err => {
+  console.error('[UNHANDLED REJECTION]', err);
+});
+
 function loadAccounts() {
   try { return JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8')); }
   catch { return {}; }
@@ -85,8 +104,16 @@ function json(res, status, obj) {
   res.end(body);
 }
 async function readBody(req) {
-  let s = ''; for await (const chunk of req) { s += chunk; if (s.length > 64 * 1024) throw new Error('too large'); }
-  return JSON.parse(s || '{}');
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+    total += buf.length;
+    if (total > 64 * 1024) throw new Error('too large');
+    chunks.push(buf);
+  }
+  const body = Buffer.concat(chunks).toString('utf8');
+  return JSON.parse(body || '{}');
 }
 function sessionForToken(token) {
   token=String(token||'');
@@ -108,8 +135,10 @@ function getSession(req) {
 const rooms = new Map();
 const sockets = new Map();
 
-const SERVER_CELL=2;
+/* V104: server paint grid matches the playable stage and keeps narrow routes. */
+const SERVER_CELL=1;
 const SERVER_Y_STEP=.5;
+const SERVER_SURFACE_TOLERANCE=.28;
 const SERVER_STAGE_POLYGON=[[48,-30.4],[14,-72],[0.5,-38.4],[-3.5,-44.8],[-19,-20.8],[-20.5,-33.6],[-20.5,-17.6],[-14,-3.2],[-36.5,3.2],[-47.5,20.8],[-48,35.2],[-14,72],[-4,46.4],[4,48],[20.5,24],[20,8],[19,20.8],[13.5,9.6],[36,0],[48,-17.6]];
 const SERVER_PLAYABLE_HALF_X=52;
 const SERVER_PLAYABLE_HALF_Z=76;
@@ -189,15 +218,10 @@ const SERVER_SPECIAL_BY_WEAPON={
 function serverPointInStage(x,z){
   x=Number(x);z=Number(z);
   if(!Number.isFinite(x)||!Number.isFinite(z))return false;
-  if(x<-SERVER_PLAYABLE_HALF_X||x>SERVER_PLAYABLE_HALF_X||z<-SERVER_PLAYABLE_HALF_Z||z>SERVER_PLAYABLE_HALF_Z)return false;
-  let inside=false;
-  for(let i=0,j=SERVER_STAGE_POLYGON.length-1;i<SERVER_STAGE_POLYGON.length;j=i++){
-    const xi=SERVER_STAGE_POLYGON[i][0],zi=SERVER_STAGE_POLYGON[i][1];
-    const xj=SERVER_STAGE_POLYGON[j][0],zj=SERVER_STAGE_POLYGON[j][1];
-    const hit=((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/(zj-zi||1e-9)+xi);
-    if(hit)inside=!inside;
-  }
-  return inside;
+  /* The client stage became a full rectangular platform in V67.
+     The server must use the same boundary or paint/hazard state diverges. */
+  return x>=-SERVER_PLAYABLE_HALF_X && x<=SERVER_PLAYABLE_HALF_X &&
+         z>=-SERVER_PLAYABLE_HALF_Z && z<=SERVER_PLAYABLE_HALF_Z;
 }
 function serverCellKey(x,z,y){
   return Math.floor(Number(x)/SERVER_CELL)+','+Math.floor(Number(z)/SERVER_CELL)+','+Math.round(Number(y||0)/SERVER_Y_STEP);
@@ -234,13 +258,28 @@ function seedServerSpawnInk(room){
   }
 }
 function serverInkTeamAt(room,p){
-  if(!room.inkCells)return null;
-  const gx=Math.floor(p.x/SERVER_CELL),gz=Math.floor(p.z/SERVER_CELL),gy=Math.round((Number(p.y)||0)/SERVER_Y_STEP);
-  for(let dy=-1;dy<=1;dy++){
-    const team=room.inkCells.get(gx+','+gz+','+(gy+dy));
-    if(team)return team;
+  if(!room.inkCells||!p)return null;
+  const gx=Math.floor(Number(p.x)/SERVER_CELL);
+  const gz=Math.floor(Number(p.z)/SERVER_CELL);
+  const py=Number(p.y)||0;
+  const gy=Math.round(py/SERVER_Y_STEP);
+
+  /* Choose the nearest painted surface layer instead of "first hit in ±1".
+     This prevents lower/upper platforms sharing the same X/Z cell from
+     making enemy-ink detection jump to the wrong floor. */
+  let best=null,bestDistance=Infinity;
+  for(let dy=-2;dy<=2;dy++){
+    const layerGy=gy+dy;
+    const layerY=layerGy*SERVER_Y_STEP;
+    const distance=Math.abs(layerY-py);
+    if(distance>SERVER_SURFACE_TOLERANCE||distance>=bestDistance)continue;
+    const team=room.inkCells.get(gx+','+gz+','+layerGy);
+    if(team){
+      best=team;
+      bestDistance=distance;
+    }
   }
-  return null;
+  return best;
 }
 function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   const abx=bx-ax,aby=by-ay,abz=bz-az,apx=px-ax,apy=py-ay,apz=pz-az,den=abx*abx+aby*aby+abz*abz||1;
@@ -450,6 +489,7 @@ function serverResolveShot(room,player,m){
     const center=nearest
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
       : {x:end.x,y:Math.max(0,end.y),z:end.z};
+    markServerPaint(room,center.x,center.z,Math.min(2.8,w.explosion||2.4),player.team,center.y);
     serverApplyAoE(room,center,w.explosion||2.4,w.splash||w.damage||0,player.team,player,'blaster');
     return true;
   }
@@ -457,20 +497,27 @@ function serverResolveShot(room,player,m){
     const center=nearest
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
       : {x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
+    markServerPaint(room,center.x,center.z,Math.min(2.8,w.explosion||2.4),player.team,center.y);
     serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,'slosher');
     return true;
   }
   if(w.cat==='charger'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
+    const mark=nearest?nearest.hit:{x:origin.x+dir.x*range,y:origin.y+dir.y*range,z:origin.z+dir.z*range};
+    markServerPaint(room,mark.x,mark.z,.85,player.team,mark.y);
     if(nearest)serverApplyDamage(room,nearest.target,w.tap+(w.full-w.tap)*frac,player,'charger');
     return true;
   }
   if(w.cat==='wiper'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
     const dmg=(w.damage||72)+((w.full||w.damage||72)-(w.damage||72))*frac;
+    const mark=nearest?nearest.hit:{x:origin.x+dir.x*Math.min(range,6),y:origin.y,z:origin.z+dir.z*Math.min(range,6)};
+    markServerPaint(room,mark.x,mark.z,1.0,player.team,mark.y);
     if(nearest)serverApplyDamage(room,nearest.target,dmg,player,'wiper');
     return true;
   }
+  const end=nearest?nearest.hit:trajectory.straightEnd||{x:origin.x+dir.x*range,y:origin.y+dir.y*range,z:origin.z+dir.z*range};
+  markServerPaint(room,end.x,end.z,.95,player.team,end.y);
   if(nearest){
     let dmg=w.damage||0;
     if(mode==='roller-roll')dmg=Math.min(65,dmg);
@@ -567,6 +614,11 @@ function serverResolveSpecial(room,player,m){
   if(dist>45){const scale=45/dist;x=me.x+(x-me.x)*scale;z=me.z+(z-me.z)*scale;}
   if(!serverPointInStage(x,z))return false;
 
+  /* Continuous shot packets only synchronize projectile visuals/damage
+     on the other clients. They must never retrigger the placed special effect. */
+  const shotPhase=String(m?.extra?.phase||'')==='shot';
+  if(shotPhase)return true;
+
   const sensorHop=name==='ホップソナー';
   const sensorMega=name==='メガホンレーザー5.1ch';
   const sensorMissile=name==='マルチミサイル';
@@ -616,6 +668,7 @@ function broadcastGlobalOnlineCount() {
   for (const player of sockets.values()) send(player.ws, payload);
 }
 
+console.log('[SPLATOON ONLINE][V108] canonical server paint grid + stacked-surface sync');
 const ONLINE_INK_COLORS={A:0xe3ff00,B:0xff2255};
 function canonicalInkColor(player){
   return player?.team==='B'?ONLINE_INK_COLORS.B:ONLINE_INK_COLORS.A;
@@ -773,7 +826,12 @@ function updateAccountResult(player, winnerTeam) {
 }
 
 const server = http.createServer(async (req, res) => {
-  let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  let p;
+  try {
+    p = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    return json(res, 400, { ok:false, error:'不正なURLです。' });
+  }
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -783,7 +841,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V103-SERVER-SPECIAL-AUTH-2026-10-01', time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V108-CANONICAL-SERVER-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
@@ -818,9 +876,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, profile: profile(accounts[s.name]) });
   }
   if (req.method === 'POST' && p === '/api/account/result') {
-    const s = getSession(req); if (!s || !accounts[s.name]) return json(res, 401, { ok: false });
-    const b = await readBody(req).catch(() => ({})); const winner = String(b.winnerTeam || 'DRAW');
-    return json(res, 200, { ok: true, profile: updateAccountResult({ accountName: s.name, team: b.team || 'A' }, winner) });
+    return json(res, 410, { ok:false, error:'このエンドポイントは利用できません。対戦結果はサーバー側で確定します。' });
   }
   if (req.method === 'POST' && p === '/api/feedback') {
     try {
@@ -849,8 +905,11 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/') p = '/index.html';
   const file = path.resolve(ROOT, p.replace(/^\/+/, ''));
-  const relativeFile = path.relative(ROOT, file);
+  const relativeFile = path.relative(ROOT, file).split(path.sep).join('/');
   if (relativeFile.startsWith('..') || path.isAbsolute(relativeFile)) return res.writeHead(403).end();
+  if (!PUBLIC_FILES.has(relativeFile) && relativeFile !== PUBLIC_THREE_FILE) {
+    return res.writeHead(404).end('Not found');
+  }
   fs.readFile(file, (err, data) => {
     if (err) return res.writeHead(404).end('Not found');
     const ext = path.extname(file).toLowerCase();
@@ -1082,16 +1141,26 @@ wss.on('connection', ws => {
       const name=legacyOrb?'チャージオーブ':specialName;
       if(!allowed.includes(name)) return;
       const now=Date.now();
-      if(now-player.lastSpecialAt<500) return;
+      let extra=(m.extra && typeof m.extra==='object')?m.extra:{};
+      const phase=String(extra.phase||m.phase||'');
+      const continuousShot=phase==='shot';
+      if(continuousShot){
+        if(now-(player.lastSpecialShotAt||0)<90)return;
+      }else{
+        if(now-(player.lastSpecialAt||0)<500)return;
+      }
       const x=Number(m.x),y=Number(m.y),z=Number(m.z);
       if(!saneWorldPosition(x,y,z)) return;
-      let extra=(m.extra && typeof m.extra==='object')?m.extra:{};
       const compact={};
-      if(legacyOrb && m.phase) compact.phase=String(m.phase).slice(0,12);
+      if(phase) compact.phase=phase.slice(0,12);
       for(const k of ['angle','targetId']) if(extra[k]!==undefined) compact[k]=String(extra[k]).slice(0,40);
-      const accepted=serverResolveSpecial(room,player,Object.assign({},m,{specialName:name,x,y,z}));
+      for(const k of ['cannon','dx','dy','dz']) if(extra[k]!==undefined){
+        compact[k]=k==='cannon'?!!extra[k]:Number(extra[k]);
+      }
+      const accepted=serverResolveSpecial(room,player,Object.assign({},m,{specialName:name,x,y,z,extra:Object.assign({},extra,{phase})}));
       if(!accepted)return;
-      player.lastSpecialAt=now;
+      if(continuousShot)player.lastSpecialShotAt=now;
+      else player.lastSpecialAt=now;
       broadcast(room,{
         type:'special', id:player.id, team:player.team,
         specialName:name, x,y,z, extra:compact
@@ -1188,7 +1257,8 @@ wss.on('connection', ws => {
       const x=Number(m.x),z=Number(m.z),radius=Number(m.radius);
       if(![x,z,radius].every(Number.isFinite)||radius<.2||radius>8||!serverPointInStage(x,z))return;
       const now=Date.now();
-      if(now-(player.lastPaintAt||0)<28)return;
+      /* V110: paint packets may arrive in bursts; don't drop legitimate same-frame paint updates. */
+      if(now-(player.lastPaintAt||0)<5)return;
       const x2raw=Number(m.x2),z2raw=Number(m.z2);
       if(!serverAcceptPaintTrace(player,x,z,x2raw,z2raw))return;
       player.lastPaintAt=now;

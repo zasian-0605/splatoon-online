@@ -1,3 +1,5 @@
+/* SPECIALS RUNTIME
+ * Former specials-v102.js. Code retained as-is. */
 /* V102: Canonical Splatoon 3-style special runtime.
    Sources checked: GameWith special list/effects (updated 2026-08-29).
    This file intentionally becomes the final special layer so older V90/V91
@@ -68,7 +70,12 @@ function facing(f){
   if(f?.isPlayer&&camera){
     const d=new THREE.Vector3();
     camera.getWorldDirection(d);d.y=0;
-    if(d.lengthSq()>.0001)return d.normalize();
+    if(d.lengthSq()>.0001){
+      d.normalize();
+      const y=Math.atan2(d.x,d.z);
+      try{if(f.human)f.human.rotation.y=y;if(f.root)f.root.rotation.y=y;}catch(_){}
+      return d;
+    }
   }
   const a=n(f?.root?.rotation?.y,0);
   return new THREE.Vector3(Math.sin(a),0,Math.cos(a)).normalize();
@@ -142,13 +149,10 @@ function finishActive(f,returnHome=false){
   try{f.invulnUntil=0;}catch(_){}
 }
 function sendSpecial(f,name,p,extra={}){
-  try{
-    if(!onlineActive||!onlineStarted||!onlineSocket||onlineSocket.readyState!==1)return;
-    onlineSocket.send(JSON.stringify({
-      type:'special',specialName:name,x:n(p?.x,f.pos.x),y:n(p?.y,f.pos.y),z:n(p?.z,f.pos.z),
-      extra:Object.assign({v102:true},extra)
-    }));
-  }catch(_){}
+  return window.sendOnlineSpecial?.({
+    specialName:name,x:n(p?.x,f.pos.x),y:n(p?.y,f.pos.y),z:n(p?.z,f.pos.z),
+    extra:Object.assign({v102:true},extra)
+  })||false;
 }
 
 function makeBarrier(f){
@@ -341,17 +345,33 @@ function shootSpecial(f,dir){
 
   if(s.mode==='jet'){
     if(t-(s.lastShot||0)<180)return false;s.lastShot=t;
-    try{spawnBulletV60(f,d,{speed:38,damage:120,gravity:4,radius:.25,paintRadius:1.5,life:1.4,explosive:true,explosionRadius:2.2,splashDamage:50,kind:'v102Jetpack'});sendSpecial(f,'ジェットパック',f.pos,{phase:'shot',dx:d.x,dy:d.y,dz:d.z});}catch(_){}
+    try{spawnBulletV60(f,d,{speed:40,damage:150,gravity:3.5,radius:.25,paintRadius:1.65,life:1.4,explosive:true,explosionRadius:2.2,splashDamage:50,kind:'v102Jetpack'});sendSpecial(f,'ジェットパック',f.pos,{phase:'shot',dx:d.x,dy:d.y,dz:d.z});}catch(_){}
     return true;
   }
 
   if(s.mode==='crab'){
-    if(t-(s.lastShot||0)<(keys.space?420:140))return false;s.lastShot=t;
+    /*
+     * FINAL: crab shooting is tied to the same held mouse state as normal
+     * shooting. Left-click hold = rapid fire; hold Space while firing =
+     * explosive cannon. A single click still fires one shot immediately.
+     */
+    const cannon=!!keys.space;
+    const interval=cannon?480:125;
+    if(t-(s.lastShot||0)<interval)return false;
+    s.lastShot=t;
     try{
-      if(keys.space){
-        spawnBulletV60(f,d,{speed:34,damage:50,gravity:8,radius:.32,paintRadius:2.3,life:1.8,explosive:true,explosionRadius:2.7,splashDamage:30,kind:'v102CrabCannon'}); sendSpecial(f,'カニタンク',f.pos,{phase:'shot',cannon:true,dx:d.x,dy:d.y,dz:d.z});
+      if(cannon){
+        spawnBulletV60(f,d,{
+          speed:36,damage:78,gravity:7.5,radius:.34,paintRadius:2.6,life:1.9,
+          explosive:true,explosionRadius:3.05,splashDamage:43,kind:'v102CrabCannon',paintTrail:true
+        });
+        sendSpecial(f,'カニタンク',f.pos,{phase:'shot',cannon:true,dx:d.x,dy:d.y,dz:d.z});
       }else{
-        spawnBulletV60(f,d,{speed:44,damage:32,gravity:5,radius:.18,paintRadius:1.5,life:1.2,kind:'v102CrabShot'}); sendSpecial(f,'カニタンク',f.pos,{phase:'shot',cannon:false,dx:d.x,dy:d.y,dz:d.z});
+        spawnBulletV60(f,d,{
+          speed:46,damage:38,gravity:4.5,radius:.20,paintRadius:1.65,life:1.25,
+          kind:'v102CrabShot',paintTrail:true
+        });
+        sendSpecial(f,'カニタンク',f.pos,{phase:'shot',cannon:false,dx:d.x,dy:d.y,dz:d.z});
       }
     }catch(_){}
     return true;
@@ -360,7 +380,7 @@ function shootSpecial(f,dir){
   if(s.mode==='stamp'){
     if(t-(s.lastHit||0)<260)return false;s.lastHit=t;
     const p=f.pos.clone().addScaledVector(d,2.2);p.y+=.1;
-    damageRadius(f,p,2.25,100,'ultra-stamp');
+    damageRadius(f,p,2.45,125,'ultra-stamp');
     paint(p,2.8,color(f),f.team);
     return true;
   }
@@ -368,20 +388,45 @@ function shootSpecial(f,dir){
   if(s.mode==='kraken'){
     if(t-(s.lastHit||0)<320)return false;s.lastHit=t;
     const p=f.pos.clone().addScaledVector(d,2.5);
-    damageRadius(f,p,2.8,120,'kraken-charge');
+    damageRadius(f,p,2.9,140,'kraken-charge');
     paint(p,2.5,color(f),f.team);
     try{f.pos.addScaledVector(d,2.0);}catch(_){}
     return true;
   }
   return false;
 }
+const directSafePlayerShot=window.__V67_SIMPLE_SAFE_SHOT||null;
+function shotAim(f,d){
+  if(f?.isPlayer&&camera){
+    const q=new THREE.Vector3();
+    try{camera.getWorldDirection(q);}catch(_){}
+    q.y=0;
+    if(q.lengthSq()>.0001){
+      q.normalize();
+      const y=Math.atan2(q.x,q.z);
+      try{if(f.human)f.human.rotation.y=y;if(f.root)f.root.rotation.y=y;}catch(_){}
+      return q;
+    }
+  }
+  const q=d?.clone?d.clone():facing(f);
+  q.y=0;
+  if(q.lengthSq()<.0001)return facing(f);
+  return q.normalize();
+}
 function overrideTryShoot(f,d,t){
   const s=stateFor(f);
-  if(s&&['ultra','jet','crab','stamp','kraken'].includes(s.mode))return shootSpecial(f,d);
-  return baseTryShoot?.(f,d,t);
+  const q=shotAim(f,d);
+  if(s&&['ultra','jet','crab','stamp','kraken'].includes(s.mode))return shootSpecial(f,q);
+  /*
+   * FINAL: player regular shots bypass the old V67/V95 direction wrappers.
+   * One and every subsequent shot use exactly the same camera-horizontal aim.
+   */
+  if(f?.isPlayer&&typeof directSafePlayerShot==='function')return directSafePlayerShot(f,q,t);
+  return baseTryShoot?.(f,q,t);
 }
 window.tryShoot=overrideTryShoot;
 try{tryShoot=overrideTryShoot;}catch(_){}
+window.__V102_CANONICAL_TRY_SHOOT=overrideTryShoot;
 
 /* --- special button / activation --- */
 const baseFireSpecial=window.fireSpecial;
@@ -391,7 +436,7 @@ function fireCanonical(f){
   if(s?.mode==='booyah'){
     if(s.charge<100){if(f.isPlayer)try{showToast('ナイスダマ：ナイスを5回！');}catch(_){}return false;}
     const p=targetPoint(f,18);
-    explosion(f,p,5.2,300,5.6);
+    explosion(f,p,5.4,360,5.8);
     s.charge=0;
     sendSpecial(f,'ナイスダマ',p,{phase:'throw',charge:100});
     finishActive(f,false);
@@ -441,7 +486,6 @@ window.__receiveOriginalSpecial=function(f,name,p,extra){
       }catch(_){ }
       return;
     }
-    const e=extra&&typeof extra==='object'?extra:{};
     if(name==='ナイスダマ'&&e.phase==='charge'){
       const s=stateFor(f)||startSpecial(f,name,p,true,e)&&stateFor(f);
       if(s)s.charge=Math.max(s.charge,n(e.charge,s.charge));
@@ -476,9 +520,29 @@ function moveSpecial(dt){
 
   if(s.mode==='crab'){
     if(t>=s.until){finishActive(f,false);return true;}
+    /*
+     * FINAL: camera-relative movement, collision-aware first, safe raw fallback.
+     * This path never depends on the normal movement loop, so crab cannot get
+     * frozen by legacy squid/weapon movement wrappers.
+     */
     s.ball=!!keys.shift;
-    const d=planarInput(f);if(d){const sp=s.ball?12.5:5.5;f.pos.x+=d.x*sp*dt;f.pos.z+=d.z*sp*dt;f.root.rotation.y=Math.atan2(d.x,d.z);}
+    const d=planarInput(f);
+    if(d){
+      const sp=s.ball?13.2:6.2;
+      const v=d.clone().multiplyScalar(sp);
+      const before=f.pos.clone();
+      let moved=false;
+      try{tryMoveWithCollision(f,v,dt,false);moved=before.distanceTo(f.pos)>.005;}catch(_){}
+      if(!moved){
+        f.pos.x+=d.x*sp*dt;
+        f.pos.z+=d.z*sp*dt;
+      }
+      f._moving=true;
+      f.human.rotation.y=Math.atan2(d.x,d.z);
+      f.root.rotation.y=f.human.rotation.y;
+    }else f._moving=false;
     if(s.visual)s.visual.scale.setScalar(s.ball?1.12:1);
+    if(isShooting)shootSpecial(f,facing(f),t);
     setHuman(f);return true;
   }
 
@@ -489,7 +553,7 @@ function moveSpecial(dt){
   }
 
   if(s.mode==='reef'){
-    if(t>=s.until){explosion(f,f.pos,5.0,220,5.5);finishActive(f,false);return true;}
+    if(t>=s.until){explosion(f,f.pos,5.2,260,5.8);finishActive(f,false);return true;}
     const before=f.pos.clone(),step=s.dir.clone().multiplyScalar(26*dt);
     try{tryMoveWithCollision(f,step,dt,false);}catch(_){f.pos.addScaledVector(step,1);}
     if(f.pos.distanceTo(before)<.05){
@@ -501,14 +565,14 @@ function moveSpecial(dt){
   }
 
   if(s.mode==='kraken'){
-    if(t>=s.until){explosion(f,f.pos,3.2,120,3.8);finishActive(f,false);return true;}
+    if(t>=s.until){explosion(f,f.pos,3.4,150,4.0);finishActive(f,false);return true;}
     const d=planarInput(f)||facing(f);
     if(d){
       try{tryMoveWithCollision(f,d.clone().multiplyScalar(8.2),dt,false);}catch(_){f.pos.addScaledVector(d,8.2*dt);}
       f.root.rotation.y=Math.atan2(d.x,d.z);
     }
     if(keys.space&&t-(s.lastSlam||0)>1000){
-      s.lastSlam=t;explosion(f,f.pos,3.8,60,4.2);
+      s.lastSlam=t;explosion(f,f.pos,4.0,85,4.5);
     }
     setHuman(f);return true;
   }
@@ -574,7 +638,7 @@ function updateCanon(dt){
           const side=new THREE.Vector3(-Math.cos(f.root.rotation.y),0,Math.sin(f.root.rotation.y)).multiplyScalar(off);
           s.lines[k++].geometry.setFromPoints([a.clone().add(side),b.clone().add(side)]);
           const key=String(q.id),last=n(s.hit?.get(key),0);
-          if(t-last>200){s.hit.set(key,t);try{applyDamage(q,28,f,'megaphone');}catch(_){}}
+          if(t-last>180){s.hit.set(key,t);try{applyDamage(q,34,f,'megaphone');}catch(_){}}
         }
       }
       for(;k<s.lines.length;k++)s.lines[k].geometry.setFromPoints([f.pos,f.pos]);
@@ -639,12 +703,12 @@ function updateCanon(dt){
     if(t>=s.end){remove(s.group);cfg.effects.storms.splice(i,1);continue;}
     s.pos.addScaledVector(s.dir,1.25*dt);s.group.position.copy(s.pos);
     if(t>=s.next){
-      s.next=t+250;paint(s.pos,5,color(s.owner),s.team);
+      s.next=t+220;paint(s.pos,5.2,color(s.owner),s.team);
       for(const f of fighters||[]){
         if(!alive(f))continue;
         const d=f.pos.distanceTo(s.pos);
         if(f.team===s.team){if(d<5&&f.hp<f.maxHp)f.hp=Math.min(f.maxHp,f.hp+5);}
-        else if(d<5.1)try{applyDamage(f,6,s.owner,'ink-storm');}catch(_){}
+        else if(d<5.2)try{applyDamage(f,8,s.owner,'ink-storm');}catch(_){}
       }
     }
   }
@@ -671,12 +735,12 @@ function updateCanon(dt){
     const s=cfg.effects.tornados[i];
     if(t>=s.end){remove(s.group);cfg.effects.tornados.splice(i,1);continue;}
     s.group.rotation.y+=dt*2;
-    if(t>=s.next){s.next=t+650;explosion(s.owner,s.pos,3.0,135,3.8);}
+    if(t>=s.next){s.next=t+600;explosion(s.owner,s.pos,3.2,165,4.1);}
   }
 
   for(let i=cfg.effects.decoys.length-1;i>=0;i--){
     const d=cfg.effects.decoys[i];
-    if(t>=d.end){explosion(d.owner,d.pos,2.4,70,3.0);remove(d.group);remove(d.marker);cfg.effects.decoys.splice(i,1);continue;}
+    if(t>=d.end){explosion(d.owner,d.pos,2.8,95,3.4);remove(d.group);remove(d.marker);cfg.effects.decoys.splice(i,1);continue;}
     d.group.rotation.y+=dt*1.5;
     for(const f of fighters||[])if(enemy(d.owner,f)&&f.pos.distanceTo(d.pos)<1.2){/* real game lets enemies destroy decoys; proximity only intimidates here */}
   }
@@ -685,7 +749,7 @@ function updateCanon(dt){
     const m=cfg.effects.missiles[i];
     if(t>=m.at){
       const p=alive(m.target)?m.target.pos.clone():m.pos.clone();
-      explosion(m.owner,p,2.6,150,3.2);remove(m.marker);cfg.effects.missiles.splice(i,1);continue;
+      explosion(m.owner,p,2.8,175,3.5);remove(m.marker);cfg.effects.missiles.splice(i,1);continue;
     }
     if(m.marker&&alive(m.target))m.marker.position.copy(groundPos(m.target.pos));
   }
@@ -699,7 +763,7 @@ function updateCanon(dt){
       const r=f.pos.clone().sub(s.pos);const side=Math.abs(r.dot(new THREE.Vector3(-s.dir.z,0,s.dir.x)));const front=Math.abs(r.dot(s.dir));
       if(side<7&&front<.45){
         const last=n(s.lastHit.get(String(f.id)),0);
-        if(t-last>500){s.lastHit.set(String(f.id),t);try{applyDamage(f,30,s.owner,'sminaga-sheet');}catch(_){}}
+        if(t-last>420){s.lastHit.set(String(f.id),t);try{applyDamage(f,36,s.owner,'sminaga-sheet');}catch(_){}}
         f.grayVisionUntil=t+400;
       }
     }
@@ -761,9 +825,9 @@ try{
 
 /* Final ongoing-effect owner. Older V90/V91 state is not touched because this
    runtime uses only __v102Special and cfg.effects. */
-const baseOngoing=window.updateOngoingEffects;
+/* updateCanon owns persistent-special progression.  Do not call a captured
+   legacy updater here: those wrappers update the same effects a second time. */
 window.updateOngoingEffects=function(dt){
-  try{baseOngoing?.(dt);}catch(e){console.warn('[V102 old special layer]',e);}
   try{updateCanon(dt);}catch(e){console.warn('[V102 canonical specials]',e);}
 };
 try{updateOngoingEffects=window.updateOngoingEffects;}catch(_){}

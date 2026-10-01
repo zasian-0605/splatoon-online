@@ -1,4 +1,5 @@
-/* V95: stable CPU AI, front-only firing, automatic team colors */
+/* AI RUNTIME
+ * Former online-v95.js. Code retained as-is; this file contains AI only. */
 (function(){
 'use strict';
 if(window.__V95_ACTIVE)return;
