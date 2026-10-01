@@ -198,17 +198,28 @@
         if(cameraArg===camera&&(currentPhase===1.5||currentPhase===2)){
           if(playerFighter?.alive){
             const anchor=playerFighter.pos.clone();
-            anchor.y+=1.5;
+            anchor.y+=1.45;
 
-            // IMPORTANT: invert the old X-axis orbit sign.
-            // Mouse up -> pitch increases -> camera moves upward -> view turns upward.
-            const offset=new THREE.Vector3(1.5,1.5,n(cameraDistance,8));
-            offset.applyAxisAngle(new THREE.Vector3(1,0,0),-pitch);
-            offset.applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
+            // True third-person pitch:
+            // mouse up = positive pitch = look upward.
+            const cp=Math.cos(pitch),sp=Math.sin(pitch);
+            const sy=Math.sin(yaw),cy=Math.cos(yaw);
+            const aimDir=new THREE.Vector3(sy*cp,sp,cy*cp).normalize();
 
-            const desired=anchor.clone().add(offset);
-            cameraArg.position.copy(clampCameraPosition(desired,anchor));
-            cameraArg.lookAt(anchor);
+            // Camera stays behind/above the player instead of orbiting around X.
+            // This makes vertical aiming independent from the player's position.
+            const right=new THREE.Vector3(cy,0,-sy);
+            const desired=anchor.clone()
+              .addScaledVector(right,1.5)
+              .addScaledVector(new THREE.Vector3(0,1,0),1.45)
+              .addScaledVector(aimDir,-n(cameraDistance,8));
+
+            const safe=clampCameraPosition(desired,anchor);
+            cameraArg.position.copy(safe);
+
+            // Look beyond the player so camera pitch controls the actual view.
+            const lookTarget=anchor.clone().addScaledVector(aimDir,10);
+            cameraArg.lookAt(lookTarget);
           }else if(typeof findSpectateTarget==='function'){
             const target=findSpectateTarget(playerFighter);
             if(target?.pos){
@@ -225,7 +236,6 @@
       return originalRender(sceneArg,cameraArg);
     };
   }
-
   window.__V104_CLAMP_CAMERA=clampCameraPosition;
   window.__V104_BUILD=BUILD;
   window.__V104_TOP_INK_FIX=true;
