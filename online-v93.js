@@ -176,8 +176,26 @@
     try{if(typeof fighters!=='undefined'&&Array.isArray(fighters))fighters=fighters.filter(x=>x!==f);}catch(_){}
   }
   function applyRemote(m){
-    const id=String(m?.id||'');if(!id||id===String(state.playerId||''))return;
+    const id=String(m?.id||'');
+    if(!id)return;
     const seq=Number.isFinite(Number(m.seq))?Number(m.seq):0;
+
+    /*
+     * V98: the server may clamp a client's position to keep synchronization
+     * continuous. Apply correction only when the packet is explicitly marked
+     * corrected; ordinary self-state packets must never fight local movement.
+     */
+    if(id===String(state.playerId||'')){
+      if(!m.corrected)return;
+      const me=getPlayer();
+      const x=Number(m.x),y=Number(m.y),z=Number(m.z);
+      if(me?.pos&&[x,y,z].every(Number.isFinite)){
+        me.pos.set(x,y,z);
+        if(me.root?.rotation)me.root.rotation.y=Number(m.yaw)||me.root.rotation.y;
+      }
+      return;
+    }
+
     const f=ensureRemote(m);if(!f)return;
     if(seq&&Number.isFinite(Number(f.__v93LastSeq))&&seq<=Number(f.__v93LastSeq))return;
     if(seq)f.__v93LastSeq=seq;
