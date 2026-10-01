@@ -6002,14 +6002,18 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       };
     }
 
-    /* Mouse attack pressed during squid: humanize before the old handler sees the click. */
+    /* V106: squid attack input is ignored.
+       It does NOT auto-humanize just because the player clicks shoot/sub. */
     document.addEventListener('mousedown',function(e){
       if(currentPhase!==1.5&&currentPhase!==2)return;
       if(e.target?.closest?.('#minimap,#fullmap,#online-panel,#result-screen,.mobile-btn,#gear-panel'))return;
       const f=playerFighter;
       if(!f||!f.alive||!f.squid_mode)return;
-      if(e.button===0)breakSquidForAttackV66('shoot');
-      else if(e.button===2)breakSquidForAttackV66('sub');
+      if(e.button===0||e.button===2){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        isShooting=false;
+      }
     },true);
 
     /* Holding Shift cannot leave a charger/wiper half-charged after form changes. */
