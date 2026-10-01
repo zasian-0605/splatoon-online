@@ -897,8 +897,7 @@ function setupCustomizeUI(){
     hairContainer.innerHTML='';
     const options = hairOptions[playerConfig.style] || hairOptions.girl;
     options.forEach((opt)=>{
-      const btn=document.createElement('button');
-      btn.className = `opt-btn ${playerConfig.hair===opt.val?'active':''}`;
+      const btn=document.createElement('button');      btn.className = `opt-btn ${playerConfig.hair===opt.val?'active':''}`;
       btn.setAttribute('data-val', opt.val);
       btn.textContent = opt.name;
       btn.addEventListener('click',(e)=>{
@@ -1797,8 +1796,7 @@ function buildStage(){
   addBlock(0,-0.04,0,PLAYABLE_HALF_X*2,0.08,PLAYABLE_HALF_Z*2,0x4b535d,
     {climbable:false,paintTop:true});
 
-  const waterMat=new THREE.MeshLambertMaterial({color:0x176b83,transparent:true,opacity:.92});
-  /* ステージの外周を広く水面にする。 */
+  const waterMat=new THREE.MeshLambertMaterial({color:0x176b83,transparent:true,opacity:.92});  /* ステージの外周を広く水面にする。 */
   const water=new THREE.Mesh(
     new THREE.PlaneGeometry(PLAYABLE_HALF_X*2+64,PLAYABLE_HALF_Z*2+64),
     waterMat
@@ -2697,8 +2695,7 @@ function createChargeOrbVisual(fighter){
   const ring=new THREE.Mesh(ringGeo,ringMat);ring.rotation.x=Math.PI/2;ring.position.set(0,2.08,.02);
   group.add(a1,a2,p1,p2,core,ring);
   group.userData.core=core;group.userData.ring=ring;
-  scene.add(group);fighter.specialChargeOrbVisual=group;
-}
+  scene.add(group);fighter.specialChargeOrbVisual=group;}
 function updateChargeOrbVisual(fighter,now){
   const g=fighter?.specialChargeOrbVisual;if(!g)return;
   g.position.copy(fighter.pos);
@@ -3597,8 +3594,7 @@ function updatePlayerMovement(delta){
       if(f.isCharging){
         const frac = Math.min(1,(now-f.chargeStart)/f.weapon.chargeTime);
         gauge.style.setProperty('--pct', Math.round(frac*100));
-      }
-    } else if(isShooting){
+      }    } else if(isShooting){
       f.human.rotation.y = yaw + Math.PI;
       const aimDir = new THREE.Vector3();
       camera.getWorldDirection(aimDir);
@@ -4497,8 +4493,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }
       fighters.forEach(o=>{
         if(o.team===f.team||!o.alive)return;
-        const rel=o.pos.clone().sub(f.pos);rel.y=0; const d=rel.length();
-        if(d<w.swingRange+0.8 && rel.normalize().dot(facing)>0.15) applyDamage(o,w.swingDamage,f);
+        const rel=o.pos.clone().sub(f.pos);rel.y=0; const d=rel.length();        if(d<w.swingRange+0.8 && rel.normalize().dot(facing)>0.15) applyDamage(o,w.swingDamage,f);
       });
     }
     f.specialGauge=Math.min(100,f.specialGauge+3*(f.gearProfile?.specialGain||1));
@@ -5397,8 +5392,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!target){ jumpState=null; return false; }
     const t=Math.min(1,(now-jumpState.startTime)/jumpState.duration);
     const p=t*t*(3-2*t);
-    playerFighter.pos.lerpVectors(jumpState.start,jumpState.end,p);
-    const arc=Math.sin(Math.PI*t)*7;
+    playerFighter.pos.lerpVectors(jumpState.start,jumpState.end,p);    const arc=Math.sin(Math.PI*t)*7;
     playerFighter.pos.y=getSupportHeight(playerFighter.pos.x,playerFighter.pos.z,playerFighter.pos.y)+arc;
     playerFighter.root.position.copy(playerFighter.pos);
     if(t>=1){
@@ -6297,8 +6291,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const p=lobby.player; if(!p)return;
 
     // 試し撃ちだけはメニュー/数字キーから直接入れるようにする。
-    if(key==='range'){
-      rangeReturnLobby={x:p.pos.x,z:p.pos.z,yaw:lobbyYaw,pitch:lobbyPitch,valid:true};
+    if(key==='range'){      rangeReturnLobby={x:p.pos.x,z:p.pos.z,yaw:lobbyYaw,pitch:lobbyPitch,valid:true};
       leaveLobby();
       enterRangeSafely();
       return;
@@ -7197,8 +7190,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       shields.push({pos:f.pos.clone(),team:f.team,radius:5.5,endTime:now+8000,hp:2000});
       ringFx(f.pos,c,5.5);
     }else if(name==="グラップラー"){
-      const v=new THREE.Vector3().subVectors(q,f.pos);v.y=0;
-      const dist=Math.min(24,v.length());
+      const v=new THREE.Vector3().subVectors(q,f.pos);v.y=0;      const dist=Math.min(24,v.length());
       if(v.lengthSq()>0.01){v.normalize();f.grappleDir=v;f.grappleDist=dist;f.grappleUntil=now+850;}
       f.invulnUntil=now+350;
     }else if(name==="センチネルミサイル"){
@@ -8097,8 +8089,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(!v60ConsumeInk(f,v60InkCost(f,cost)))return;
     const color=getFighterInkHex(f);
     f.lastSwing=now;
-    const facing=new THREE.Vector3(Math.sin(f.human.rotation.y),0,Math.cos(f.human.rotation.y));
-    if(moving){
+    const facing=new THREE.Vector3(Math.sin(f.human.rotation.y),0,Math.cos(f.human.rotation.y));    if(moving){
       const current=f.pos.clone();
       const prev=f._v60RollLast||current.clone().addScaledVector(facing,-1.0);
       paintSegment(prev,current,w.paintFan*.75,color,true);
@@ -8997,8 +8988,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       return;
     }
     if(rf.v60UltraStampUntil && now<rf.v60UltraStampUntil){
-      const facing=new THREE.Vector3(Math.sin(rf.root.rotation.y),0,Math.cos(rf.root.rotation.y));
-      const hitPos=rf.pos.clone().addScaledVector(facing,2.4);
+      const facing=new THREE.Vector3(Math.sin(rf.root.rotation.y),0,Math.cos(rf.root.rotation.y));      const hitPos=rf.pos.clone().addScaledVector(facing,2.4);
       explodeAt(hitPos,2.4,100,rf.team,{paintRadius:3.1,colorHex:getFighterInkHex(rf),sourceFighter:rf});
       return;
     }
@@ -9898,7 +9888,6 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }else if(w.category==='charger'||w.category==='spinner'||w.category==='wiper'){
       a.chargeStarted=0;
     }
-
     /* A short ink burst after retreat prevents the CPU from starving forever. */
     if(f.ink<10 && !f.squid_mode && friendlyInkAt(f)){
       f.squid_mode=true;
@@ -10797,8 +10786,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       try{
         f.alive=true;
         f.squid_mode=false;
-        f.human.visible=true;
-        f.squid.visible=false;
+        f.human.visible=true;        f.squid.visible=false;
         if(f.ai){
           f.ai.state='patrol';
           f.ai.path=[];
@@ -11697,8 +11685,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     const mesh=new THREE.Mesh(
       new THREE.SphereGeometry(clamp(num(o?.radius,.14),.1,.34),8,8),
       new THREE.MeshBasicMaterial({color:colorOf(getFighterInkHex(f))})
-    );
-    mesh.position.copy(s);
+    );    mesh.position.copy(s);
     scene.add(mesh);
 
     const b={
@@ -12597,8 +12584,7 @@ function updateV90Specials(delta){
         if(dir){const v=dir.clone().multiplyScalar(c.ball?13:5.5);tryMoveWithCollision(f,v,delta,false);f.root.rotation.y=Math.atan2(v.x,v.z);}
         if(c.visual)c.visual.scale.setScalar(c.ball?1.15:1);
         if(keys.space&&!c.lastSpace){
-          const d=facingOf(f),o=f.pos.clone();o.y+=1.2;
-          const b=spawnBulletV60(f,d,{speed:44,damage:60,gravity:12,radius:.25,paintRadius:2.2,life:1.9,explosive:true,explosionRadius:2.8,splashDamage:35,kind:'crabCannon'});
+          const d=facingOf(f),o=f.pos.clone();o.y+=1.2;          const b=spawnBulletV60(f,d,{speed:44,damage:60,gravity:12,radius:.25,paintRadius:2.2,life:1.9,explosive:true,explosionRadius:2.8,splashDamage:35,kind:'crabCannon'});
           b.paintTrail=true;
         }
         c.lastSpace=!!keys.space;setHuman(f,true);
@@ -13497,8 +13483,7 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
     return false;
   }
 
-  function updateAdaptiveAI(f,delta,now){
-    if(!f||f.isPlayer||f.remote||!f.alive)return;
+  function updateAdaptiveAI(f,delta,now){    if(!f||f.isPlayer||f.remote||!f.alive)return;
     const a=brainFor(f,now);
     const target=chooseTarget(f,a);
     a.target=target;
@@ -13906,5 +13891,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 
 <script src="/online-v93.js"></script>
 <script src="/online-v95.js"></script>
+<script src="/online-v96.js"></script>
 </body>
 </html>
