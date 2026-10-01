@@ -142,6 +142,7 @@
     };
     state.proxy=proxy;
     try{window.onlineSocket=proxy;}catch(_){}
+    try{wireProxy(ws);}catch(_){}
     return proxy;
   }
 
@@ -325,12 +326,26 @@
     }
   }
 
+  function wireProxy(ws){
+    const p=window.onlineSocket;
+    if(!p||p.__v111EventsWired||p.__v93Proxy!==true)return;
+    p.__v111EventsWired=true;
+    try{
+      p.addEventListener=(type,fn,opts)=>{
+        if(ws&&typeof ws.addEventListener==='function')return ws.addEventListener(type,fn,opts);
+      };
+      p.removeEventListener=(type,fn,opts)=>{
+        if(ws&&typeof ws.removeEventListener==='function')return ws.removeEventListener(type,fn,opts);
+      };
+    }catch(_){}
+  }
+
   function connect(){
     if(state.socket&&(state.socket.readyState===WebSocket.OPEN||state.socket.readyState===WebSocket.CONNECTING))return;
     state.phase='connecting';state.roomId='';state.playerId='';state.team='';state.ready=false;state.lastStateAt=0;setVars();
     setStatus('オンライン接続中');setCount(1,'サーバーへ接続しています');
     let ws;try{ws=new WebSocket(WS_URL);}catch(e){setStatus('WebSocket開始に失敗しました');return;}
-    state.socket=ws;makeProxy();installSocket(ws);wireProxy(ws);
+    state.socket=ws;makeProxy();
     ws.onopen=()=>{log('OPEN',{url:WS_URL});setStatus('Render接続OK / ルームを検索中');};
     ws.onmessage=ev=>{try{handleMessage(JSON.parse(ev.data));}catch(e){log('BAD_MESSAGE',String(e));}};
     ws.onerror=()=>{if(state.socket===ws){log('ERROR');setStatus('オンライン接続エラー');}};
@@ -369,8 +384,10 @@
     try{window.showGlobalOnlineHud?.(true);}catch(_){}
     if(!state.socket||state.socket.readyState===WebSocket.CLOSED)connect();
     else if(state.phase==='disconnected'||state.phase==='closing')join();
-    else if(state.phase==='room')setStatus('参加者を確認しています');
-    else setStatus(state.phase==='in_match'?'対戦中':'オンライン接続中');
+    else if(state.phase==='room'){
+      if(!state.roomId)join();
+      else setStatus('参加者を確認しています');
+    }else setStatus(state.phase==='in_match'?'対戦中':'オンライン接続中');
     return true;
   }
 
