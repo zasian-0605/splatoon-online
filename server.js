@@ -108,8 +108,10 @@ function getSession(req) {
 const rooms = new Map();
 const sockets = new Map();
 
-const SERVER_CELL=2;
+/* V104: server paint grid matches the playable stage and keeps narrow routes. */
+const SERVER_CELL=1;
 const SERVER_Y_STEP=.5;
+const SERVER_SURFACE_TOLERANCE=.28;
 const SERVER_STAGE_POLYGON=[[48,-30.4],[14,-72],[0.5,-38.4],[-3.5,-44.8],[-19,-20.8],[-20.5,-33.6],[-20.5,-17.6],[-14,-3.2],[-36.5,3.2],[-47.5,20.8],[-48,35.2],[-14,72],[-4,46.4],[4,48],[20.5,24],[20,8],[19,20.8],[13.5,9.6],[36,0],[48,-17.6]];
 const SERVER_PLAYABLE_HALF_X=52;
 const SERVER_PLAYABLE_HALF_Z=76;
@@ -189,15 +191,10 @@ const SERVER_SPECIAL_BY_WEAPON={
 function serverPointInStage(x,z){
   x=Number(x);z=Number(z);
   if(!Number.isFinite(x)||!Number.isFinite(z))return false;
-  if(x<-SERVER_PLAYABLE_HALF_X||x>SERVER_PLAYABLE_HALF_X||z<-SERVER_PLAYABLE_HALF_Z||z>SERVER_PLAYABLE_HALF_Z)return false;
-  let inside=false;
-  for(let i=0,j=SERVER_STAGE_POLYGON.length-1;i<SERVER_STAGE_POLYGON.length;j=i++){
-    const xi=SERVER_STAGE_POLYGON[i][0],zi=SERVER_STAGE_POLYGON[i][1];
-    const xj=SERVER_STAGE_POLYGON[j][0],zj=SERVER_STAGE_POLYGON[j][1];
-    const hit=((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/(zj-zi||1e-9)+xi);
-    if(hit)inside=!inside;
-  }
-  return inside;
+  /* The client stage became a full rectangular platform in V67.
+     The server must use the same boundary or paint/hazard state diverges. */
+  return x>=-SERVER_PLAYABLE_HALF_X && x<=SERVER_PLAYABLE_HALF_X &&
+         z>=-SERVER_PLAYABLE_HALF_Z && z<=SERVER_PLAYABLE_HALF_Z;
 }
 function serverCellKey(x,z,y){
   return Math.floor(Number(x)/SERVER_CELL)+','+Math.floor(Number(z)/SERVER_CELL)+','+Math.round(Number(y||0)/SERVER_Y_STEP);
@@ -234,13 +231,28 @@ function seedServerSpawnInk(room){
   }
 }
 function serverInkTeamAt(room,p){
-  if(!room.inkCells)return null;
-  const gx=Math.floor(p.x/SERVER_CELL),gz=Math.floor(p.z/SERVER_CELL),gy=Math.round((Number(p.y)||0)/SERVER_Y_STEP);
-  for(let dy=-1;dy<=1;dy++){
-    const team=room.inkCells.get(gx+','+gz+','+(gy+dy));
-    if(team)return team;
+  if(!room.inkCells||!p)return null;
+  const gx=Math.floor(Number(p.x)/SERVER_CELL);
+  const gz=Math.floor(Number(p.z)/SERVER_CELL);
+  const py=Number(p.y)||0;
+  const gy=Math.round(py/SERVER_Y_STEP);
+
+  /* Choose the nearest painted surface layer instead of "first hit in ±1".
+     This prevents lower/upper platforms sharing the same X/Z cell from
+     making enemy-ink detection jump to the wrong floor. */
+  let best=null,bestDistance=Infinity;
+  for(let dy=-2;dy<=2;dy++){
+    const layerGy=gy+dy;
+    const layerY=layerGy*SERVER_Y_STEP;
+    const distance=Math.abs(layerY-py);
+    if(distance>SERVER_SURFACE_TOLERANCE||distance>=bestDistance)continue;
+    const team=room.inkCells.get(gx+','+gz+','+layerGy);
+    if(team){
+      best=team;
+      bestDistance=distance;
+    }
   }
-  return null;
+  return best;
 }
 function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   const abx=bx-ax,aby=by-ay,abz=bz-az,apx=px-ax,apy=py-ay,apz=pz-az,den=abx*abx+aby*aby+abz*abz||1;
@@ -621,6 +633,7 @@ function broadcastGlobalOnlineCount() {
   for (const player of sockets.values()) send(player.ws, payload);
 }
 
+console.log('[SPLATOON ONLINE][V104] 1m paint grid + exact stacked-surface server ink');
 const ONLINE_INK_COLORS={A:0xe3ff00,B:0xff2255};
 function canonicalInkColor(player){
   return player?.team==='B'?ONLINE_INK_COLORS.B:ONLINE_INK_COLORS.A;
