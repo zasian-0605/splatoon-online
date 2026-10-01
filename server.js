@@ -1124,7 +1124,8 @@ wss.on('connection', ws => {
       const originalX=x,originalY=rawY,originalZ=z;
       x=Math.max(-SERVER_PLAYABLE_HALF_X,Math.min(SERVER_PLAYABLE_HALF_X,x));
       z=Math.max(-SERVER_PLAYABLE_HALF_Z,Math.min(SERVER_PLAYABLE_HALF_Z,z));
-      rawY=Math.max(0,Math.min(8,rawY));
+      /* V105 sync fix: preserve the client's squid rest height on the floor. */
+      rawY=Math.max(-0.5,Math.min(8,rawY));
       let corrected=false;
       if(x!==originalX||z!==originalZ||rawY!==originalY){
         corrected=true;
@@ -1144,26 +1145,27 @@ wss.on('connection', ws => {
            * false corrections during perfectly normal ink-swim movement.
            */
           const requestedSquid=!!m.squid;
-          const maxSpeed=requestedSquid ? 30 : 18;
+          const maxSpeed=requestedSquid ? 32 : 20;
           const baseStep=requestedSquid ? 1.05 : .95;
           const maxStep=m.superJump
-            ? Math.min(14,Math.max(3.2,baseStep+dt*150))
-            : Math.min(7,Math.max(2.8,baseStep+dt*maxSpeed));
-          if(d>maxStep){
+            ? Math.min(16,Math.max(4.0,baseStep+dt*maxSpeed*2.2))
+            : Math.min(12,Math.max(3.0,baseStep+dt*maxSpeed*1.8));
+          // Normal movement must not be corrected back every few packets.
+          // Only a truly huge jump is clamped.
+          const hardJump=maxStep*2.5;
+          if(d>hardJump){
             player.speedViolations=(player.speedViolations||0)+1;
             if(now-(player.lastSpeedWarnAt||0)>3000){
               player.lastSpeedWarnAt=now;
-              console.warn('[WS SPEED CLAMP] '+player.id+' d='+d.toFixed(2)+' max='+maxStep.toFixed(2)+' squid='+requestedSquid);
+              console.warn('[WS SPEED CLAMP] '+player.id+' d='+d.toFixed(2)+' hardMax='+hardJump.toFixed(2)+' squid='+requestedSquid);
             }
-            const scale=maxStep/Math.max(d,.0001);
+            const scale=hardJump/Math.max(d,.0001);
             x=player.serverPos.x+(x-player.serverPos.x)*scale;
             z=player.serverPos.z+(z-player.serverPos.z)*scale;
             corrected=true;
-            /* Movement correction is silent; only truly invalid coordinates notify. */
           }else{
             player.speedViolations=0;
-          }
-        }
+          }        }
         player.serverPos={x,y,z}; player.lastStateAt=now;
       }
       const prevInkAt=player.serverInkLastAt||now;
