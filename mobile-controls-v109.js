@@ -77,6 +77,11 @@
   /* ---------- How To Play: reliable U key + pointer/touch activation ---------- */
   function openHowTo(){
     if(!battle()) return false;
+    const overlay=document.getElementById('v107-howto-overlay');
+    if(overlay && overlay.style.display==='flex'){
+      overlay.style.display='none';
+      return true;
+    }
     const fn=howto();
     if(typeof fn!=='function') return false;
     try{ document.exitPointerLock?.(); }catch(_){}
@@ -336,6 +341,68 @@
     ()=>once('cmon',()=>window.sendCallout?.('cmon')),
     null
   );
+
+  /* Block the older button touch/click handlers and handle each mobile button once.
+     This prevents one tap from firing two subs/specials/callouts on touch browsers. */
+  function mobileButtonAction(id){
+    switch(id){
+      case 'btn-sub': once('sub-touch',()=>doPlayerSubThrow()); break;
+      case 'btn-special': once('special-touch',()=>fireSpecial(playerFighter)); break;
+      case 'btn-map': once('map-touch',()=>{
+        const fn=window.__V10?.showMaps;
+        if(typeof fn==='function') fn();
+        else { const full=document.getElementById('fullmap'); if(full) full.style.display='flex'; }
+      }); break;
+      case 'btn-nice': once('nice-touch',()=>window.sendCallout?.('nice')); break;
+      case 'btn-cmon': once('cmon-touch',()=>window.sendCallout?.('cmon')); break;
+    }
+  }
+
+  document.addEventListener('touchstart',e=>{
+    if(!isMobile()||!battle()) return;
+    const el=e.target.closest?.('.mobile-btn');
+    if(!el) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(el.id==='btn-squid') keys.shift=true;
+    else if(el.id==='btn-jump') keys.space=true;
+    else mobileButtonAction(el.id);
+  },true);
+
+  document.addEventListener('touchend',e=>{
+    const el=e.target.closest?.('.mobile-btn');
+    if(!el) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(el.id==='btn-squid') keys.shift=false;
+    if(el.id==='btn-jump') keys.space=false;
+  },true);
+
+  document.addEventListener('touchcancel',e=>{
+    const el=e.target.closest?.('.mobile-btn');
+    if(!el) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(el.id==='btn-squid') keys.shift=false;
+    if(el.id==='btn-jump') keys.space=false;
+  },true);
+
+  document.addEventListener('click',e=>{
+    if(!isMobile()||!battle()) return;
+    const el=e.target.closest?.('.mobile-btn');
+    if(!el) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(el.id==='btn-sub') once('sub-click',()=>doPlayerSubThrow());
+    else if(el.id==='btn-special') once('special-click',()=>fireSpecial(playerFighter));
+    else if(el.id==='btn-map') once('map-click',()=>{
+      const fn=window.__V10?.showMaps;
+      if(typeof fn==='function') fn();
+      else { const full=document.getElementById('fullmap'); if(full) full.style.display='flex'; }
+    });
+    else if(el.id==='btn-nice') once('nice-click',()=>window.sendCallout?.('nice'));
+    else if(el.id==='btn-cmon') once('cmon-click',()=>window.sendCallout?.('cmon'));
+  },true);
 
   /* Stop browser long-press context menus/scrolling on all mobile controls. */
   document.addEventListener('contextmenu',e=>{
