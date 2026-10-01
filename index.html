@@ -10636,9 +10636,12 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     if(now-(f.lastShot||0)<(w.rate||100))return false;
 
     const d=dir&&dir.clone?dir.clone():new THREE.Vector3(0,0,1);
-    d.y=0;
+    d.y=Math.max(-.65,Math.min(.65,Number(d.y)||0));
     if(d.lengthSq()<.0001)d.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
     d.normalize();
+    const safeRange=typeof window.__V82_WEAPON_RANGE==='function'
+      ? window.__V82_WEAPON_RANGE(w)
+      : Math.min(22,Math.max(9,(Number(w.range)||18)*.58));
 
     let cost=Number(w.inkCost);
     if(!Number.isFinite(cost)||cost<=0)cost=1;
@@ -10652,7 +10655,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         rawSpawn(f,d,{
           speed:w.speed||25,damage:w.damage||80,gravity:0,radius:.22,life:2.5,
           paintRadius:(w.paintRadius||1.35)*.62,
-          trajectory:'flat-drop',straightDistance:w.range||24,maxRange:w.range||24,
+          trajectory:'flat-drop',straightDistance:safeRange,maxRange:safeRange,
           dropSpeed:34,explosive:true,explosionRadius:w.explosionRadius||2.4,
           splashDamage:w.splashDamage||35,kind:'blaster'
         });
@@ -10663,8 +10666,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
             speed:w.speed||35,damage:w.damage||20,gravity:18,radius:.14,
             life:w.life||1.5,paintRadius:w.paintRadius||.8,
             trajectory:'delayed-gravity',
-            straightDistance:Math.min(7.5,(w.range||30)*.28),
-            maxRange:w.range||30,kind:'dualies'
+            straightDistance:0,maxRange:safeRange,
+            rangeDrop:true,dropSpeed:34,gravity:0,kind:'dualies'
           });
           if(q?.mesh){
             q.mesh.position.x+=-d.z*.15*side;
@@ -10688,22 +10691,22 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           const dd=d.clone().applyAxisAngle(new THREE.Vector3(0,1,0),(i-(pellets-1)/2)*.075);
           rawSpawn(f,dd,{
             speed:w.speed||30,damage:w.damage||18,gravity:18,radius:.14,
-            life:w.life||1.5,paintRadius:(w.paintRadius||.8)*.72,
+            life:1.3,paintRadius:(w.paintRadius||.8)*.72,
             trajectory:'delayed-gravity',
-            straightDistance:Math.min(7.5,(w.range||30)*.28),
-            maxRange:w.range||30,kind:'brella'
+            straightDistance:0,maxRange:safeRange,
+            rangeDrop:true,dropSpeed:34,gravity:0,kind:'brella'
           });
         }
       }else{
         rawSpawn(f,d,{
-          speed:w.speed||35,damage:w.damage||30,gravity:18,radius:.14,
-          paintRadius:w.paintRadius||.8,life:w.life||1.5,
+          speed:w.speed||35,damage:w.damage||30,gravity:0,radius:.14,
+          paintRadius:w.paintRadius||.8,life:1.3,
           trajectory:'delayed-gravity',
-          straightDistance:Math.min(7.5,(w.range||30)*.28),
-          maxRange:w.range||30,kind:'shooter'
+          straightDistance:0,maxRange:safeRange,
+          rangeDrop:true,dropSpeed:34,kind:'shooter'
         });
       }
-      rawShotPaint(f,d);
+      /* V102: no extra flat paint patch; the real projectile paints the correct surface. */
 
       try{
         if(onlineActive&&onlineStarted&&typeof window.__v93SendShot==='function'){
@@ -10733,7 +10736,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const now=performance.now();
     const dir=new THREE.Vector3();
     try{camera.getWorldDirection(dir);}catch(_){}
-    dir.y=0;
+    dir.y=Math.max(-.65,Math.min(.65,Number(dir.y)||0));
     if(dir.lengthSq()<.0001)dir.set(Math.sin(f.root.rotation.y),0,Math.cos(f.root.rotation.y));
     dir.normalize();
     /*
@@ -11778,7 +11781,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     }
     d.normalize();
     const h=Math.max(.001,Math.hypot(d.x,d.z));
-    const pitch=Math.atan2(clamp(d.y,-.22,.22),h)+THREE.MathUtils.degToRad(Number(angleDeg)||0);
+    const pitch=Math.atan2(clamp(d.y,-.65,.65),h)+THREE.MathUtils.degToRad(Number(angleDeg)||0);
     const yawD=Math.atan2(d.x,d.z),cp=Math.cos(pitch);
     return new THREE.Vector3(
       Math.sin(yawD)*cp,Math.sin(pitch),Math.cos(yawD)*cp
@@ -11800,6 +11803,9 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 
     const b={
       mesh,velocity:launch.multiplyScalar(speed),age:0,travelled:0,maxRange:range,
+      launchDir:launch.clone(),
+      rangeDrop:!!o?.rangeDrop,
+      dropSpeed:Math.max(8,num(o?.dropSpeed,34)),
       straightTime:num(o?.straightTime,.09),
       gravity:num(o?.gravity,6),drag:num(o?.drag,.035),
       life:clamp(num(o?.life,range/speed+.35),.35,2.2),
@@ -11843,53 +11849,59 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     }
   }
 
-  function findPaintSurfaceV82(x,z,projectileY){
-    let best=0;
+  function findPaintSurfaceInfoV82(x,z,projectileY){
+    let bestY=0,bestBlock=null;
     for(const block of collidableBlocks||[]){
       if(x<block.minX||x>block.maxX||z<block.minZ||z>block.maxZ)continue;
-      /* 弾より上にある台は「下から塗る」対象にしない。 */
       if(block.maxY>projectileY+.38)continue;
-      if(block.maxY>best)best=block.maxY;
+      if(block.maxY>bestY){bestY=block.maxY;bestBlock=block;}
     }
-    return best;
+    return {y:bestY,block:bestBlock};
   }
 
-  function v82PaintTravelDrop(b,p,force=false){
+  function paintTrailSurfaceV82(b,p,force=false){
     if(!b||!b.sourceFighter||!p)return;
-    const kind=String(b.kind||'shooter');
-    /* 連続線ではなく、弾道に沿った「飛沫」を一定間隔で落とす。 */
-    const baseSpacing =
-      kind==='blaster' ? 2.7 :
-      kind==='slosher' ? 1.35 :
-      kind==='charger' ? 2.4 :
-      kind==='brella' ? 1.55 :
-      kind==='dualies' ? 1.45 :
-      kind==='splatling' ? 1.55 : 1.55;
-    /* 飛沫の間隔は従来の約1/3。粒は小粒ではなく通常サイズ。 */
-    const spacing=Math.max(.42,baseSpacing/3);
-    const radius=clamp(num(b.paintRadius,.9)*.92,.70,1.35);
+    const info=findPaintSurfaceInfoV82(p.x,p.z,p.y);
+    const surface=info.y,gap=p.y-surface;
+    const pitchY=Number(b.launchDir?.y)||0;
+    const upward=pitchY>.08,downward=pitchY<-.08;
+    if(upward&&p.y<surface-.18)return;
+    if(downward&&gap>1.10)return;
+    if(!upward&&!downward&&gap>1.05)return;
+    if(gap<-.08)return;
 
-    b.__v82PaintDistance=num(b.__v82PaintDistance,0);
-    b.__v82PaintDistance += force ? spacing : 0;
-    if(!force && b.__v82PaintDistance<spacing)return;
+    const sameSurface=
+      b.__v82LastPaintBlock===info.block &&
+      Math.abs((Number(b.__v82LastPaintSurface)||0)-surface)<.08;
 
-    const surface=findPaintSurfaceV82(p.x,p.z,p.y);
-    const verticalGap=p.y-surface;
-    /* 空中のかなり高いところには塗らず、弾の飛沫が届く高さだけ塗る。 */
-    if(verticalGap<-.05||verticalGap>1.65)return;
+    if(!sameSurface){
+      b.__v82LastPaintBlock=info.block;
+      b.__v82LastPaintSurface=surface;
+      b.__v82LastPaintPoint=p.clone();
+      b.__v82PaintDistance=0;
+      if(!force)return;
+    }
 
+    const moved=b.__v82LastPaintPoint
+      ? Math.hypot(p.x-b.__v82LastPaintPoint.x,p.z-b.__v82LastPaintPoint.z)
+      : Infinity;
+    b.__v82PaintDistance=Number(b.__v82PaintDistance||0)+(Number.isFinite(moved)?moved:0);
+    const spacing=.50;
+    if(!force&&b.__v82PaintDistance<spacing)return;
+
+    const radius=clamp(num(b.paintRadius,.9)*.88,.72,1.30);
+    const from=b.__v82LastPaintPoint?.clone()||p.clone();
+    const dist=Math.hypot(p.x-from.x,p.z-from.z);
+    const steps=Math.max(1,Math.min(18,Math.ceil(dist/.26)));
+    for(let i=1;i<=steps;i++){
+      const q=from.clone().lerp(p,i/steps);
+      paintGroundV82(q.x,q.z,radius,b.colorHex,{
+        surfaceY:surface,yHint:q.y,team:b.team,
+        sourceFighter:b.sourceFighter,noNetwork:true
+      });
+    }
+    b.__v82LastPaintPoint=p.clone();
     b.__v82PaintDistance=0;
-    const jitter=.16;
-    const px=p.x+(Math.random()-.5)*jitter;
-    const pz=p.z+(Math.random()-.5)*jitter;
-    paintGroundV82(
-      px,pz,radius,b.colorHex,{
-        surfaceY:surface,
-        yHint:p.y,
-        team:b.team,
-        sourceFighter:b.sourceFighter
-      }
-    );
   }
 
   function updateV82(dt){
@@ -11897,23 +11909,48 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
       const b=v82Bullets[i],prev=b.mesh.position.clone();
       b.age+=dt;
 
-      if(b.age<=b.straightTime){
+      if(b.rangeDrop&&!b.__rangeDropped){
+        const hSpeed=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
+        const remain=Math.max(0,b.maxRange-b.travelled);
+        const move=Math.min(hSpeed*dt,remain);
+        const t=move/hSpeed;
+        b.mesh.position.x+=b.velocity.x*t;
+        b.mesh.position.y+=b.velocity.y*t;
+        b.mesh.position.z+=b.velocity.z*t;
+        b.travelled+=move;
+
+        if(b.travelled>=b.maxRange-.0001){
+          b.travelled=b.maxRange;
+          b.__rangeDropped=true;
+          b.__v82RangeDropped=true;
+          b.__v82RangeAt=b.age;
+          /* 射程端で前進力を6%に落とし、真下への落下へ切り替える。 */
+          b.velocity.x*=3/50;
+          b.velocity.z*=3/50;
+          b.velocity.y=-Math.max(Math.abs(Number(b.velocity.y)||0),b.dropSpeed);
+          b.gravity=Math.max(Number(b.gravity)||0,26);
+          b.life=Math.max(Number(b.life)||0,b.age+.38);
+        }
+      }else if(b.rangeDrop&&b.__rangeDropped){
+        b.velocity.x*=clamp(1-.18*dt,.80,1);
+        b.velocity.z*=clamp(1-.18*dt,.80,1);
+        b.velocity.y-=Math.max(26,Number(b.gravity)||26)*dt;
+        b.mesh.position.addScaledVector(b.velocity,dt);
+      }else if(b.age<=b.straightTime){
         b.mesh.position.addScaledVector(b.velocity,dt);
       }else{
         const drag=clamp(1-b.drag*dt,.70,1);
-        b.velocity.x*=drag;
-        b.velocity.z*=drag;
+        b.velocity.x*=drag;b.velocity.z*=drag;
         b.velocity.y-=b.gravity*dt;
         b.mesh.position.addScaledVector(b.velocity,dt);
       }
+
       const stepXZ=Math.hypot(
         b.mesh.position.x-prev.x,b.mesh.position.z-prev.z
       );
-      b.travelled+=stepXZ;
-      b.__v82PaintDistance=num(b.__v82PaintDistance,0)+stepXZ;
+      if(!b.rangeDrop)b.travelled+=stepXZ;
 
-      /* 弾道の実際の位置から、低い範囲だけ小さな飛沫を落とす。 */
-      v82PaintTravelDrop(b,b.mesh.position,false);
+      paintTrailSurfaceV82(b,b.mesh.position,false);
 
       let hitFighter=null,hitPoint=null,bestT=Infinity;
       for(const f of fighters||[]){
@@ -11996,8 +12033,13 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
   }
 
   function weaponRangeV82(w){
-    return clamp(num(w?.range,18)*.78,10,30);
+    const c=String(w?.category||''),raw=num(w?.range,18);
+    if(c==='charger')return clamp(raw*.72,16,34);
+    if(c==='blaster')return clamp(raw*.62,8,19);
+    if(c==='slosher')return clamp(raw*.66,7,19);
+    return clamp(raw*.58,9,22);
   }
+  window.__V82_WEAPON_RANGE=weaponRangeV82;
 
   function fireBasicV82(f,dir,now){
     if(!f||!f.alive)return false;
@@ -12045,9 +12087,9 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
           UP,side*clamp(num(w.spread,.05),.015,.11)
         );
         emit(d,{
-          speed:clamp(num(w.speed,35),20,45),gravity:4.8,drag:.04,radius:.13,
+          speed:clamp(num(w.speed,35),20,45),gravity:0,drag:0,radius:.13,
           paintRadius:num(w.paintRadius,.8),damage:num(w.damage,18),
-          life:1.05,kind:'dualies'
+          life:1.3,rangeDrop:true,dropSpeed:34,kind:'dualies'
         });
         fired++;
       }
@@ -12058,9 +12100,9 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
           UP,(i-(count-1)/2)*.055
         );
         emit(d,{
-          speed:clamp(num(w.speed,30),18,40),gravity:4.8,drag:.05,radius:.13,
+          speed:clamp(num(w.speed,30),18,40),gravity:0,drag:0,radius:.13,
           paintRadius:num(w.paintRadius,.7),damage:num(w.damage,18),
-          life:1.0,kind:'brella'
+          life:1.3,rangeDrop:true,dropSpeed:34,kind:'brella'
         });
         fired++;
       }
@@ -12072,11 +12114,9 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
           UP,(i-(count-1)/2)*.028
         );
         emit(d,{
-          speed:clamp(num(w.speed,34),22,44),gravity:5.2,drag:.045,radius:.13,
+          speed:clamp(num(w.speed,34),22,44),gravity:0,drag:0,radius:.13,
           paintRadius:num(w.paintRadius,.9),damage:num(w.damage,28),
-          life:Math.min(
-            1.15,range/Math.max(22,num(w.speed,34))+.32
-          ),
+          life:1.3,rangeDrop:true,dropSpeed:34,
           kind:w.category==='spinner'?'splatling':'shooter'
         });
         fired++;
@@ -12131,9 +12171,10 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
       const baseOpt={
         maxRange:weaponRangeV82(wp),
         speed:clamp(num(wp.speed,34),18,44),
-        gravity:5.2,drag:.045,radius:.13,
+        gravity:0,drag:0,radius:.13,
         paintRadius:num(wp.paintRadius,.9),
-        damage:num(wp.damage,28),life:1.0,kind:'shooter'
+        damage:num(wp.damage,28),life:1.3,
+        rangeDrop:true,dropSpeed:34,kind:'shooter'
       };
 
       if(wp.category==='blaster'){
