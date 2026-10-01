@@ -10,6 +10,26 @@ const DATA_DIR = path.join(ROOT, 'data');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
+/* V111: only explicitly public web assets may be served. */
+const PUBLIC_FILES = new Set([
+  'index.html',
+  'about.html',
+  'online-v93.js',
+  'online-v95.js',
+  'online-v96.js',
+  'specials-v102.js',
+  'canonical-runtime-v108.js',
+  'paint-sync-v110.js'
+]);
+const PUBLIC_THREE_FILE = 'node_modules/three/build/three.min.js';
+
+process.on('uncaughtException', err => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+});
+process.on('unhandledRejection', err => {
+  console.error('[UNHANDLED REJECTION]', err);
+});
+
 function loadAccounts() {
   try { return JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8')); }
   catch { return {}; }
@@ -85,8 +105,16 @@ function json(res, status, obj) {
   res.end(body);
 }
 async function readBody(req) {
-  let s = ''; for await (const chunk of req) { s += chunk; if (s.length > 64 * 1024) throw new Error('too large'); }
-  return JSON.parse(s || '{}');
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+    total += buf.length;
+    if (total > 64 * 1024) throw new Error('too large');
+    chunks.push(buf);
+  }
+  const body = Buffer.concat(chunks).toString('utf8');
+  return JSON.parse(body || '{}');
 }
 function sessionForToken(token) {
   token=String(token||'');
@@ -799,7 +827,12 @@ function updateAccountResult(player, winnerTeam) {
 }
 
 const server = http.createServer(async (req, res) => {
-  let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  let p;
+  try {
+    p = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch {
+    return json(res, 400, { ok:false, error:'不正なURLです。' });
+  }
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -844,9 +877,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, profile: profile(accounts[s.name]) });
   }
   if (req.method === 'POST' && p === '/api/account/result') {
-    const s = getSession(req); if (!s || !accounts[s.name]) return json(res, 401, { ok: false });
-    const b = await readBody(req).catch(() => ({})); const winner = String(b.winnerTeam || 'DRAW');
-    return json(res, 200, { ok: true, profile: updateAccountResult({ accountName: s.name, team: b.team || 'A' }, winner) });
+    return json(res, 410, { ok:false, error:'このエンドポイントは利用できません。対戦結果はサーバー側で確定します。' });
   }
   if (req.method === 'POST' && p === '/api/feedback') {
     try {
@@ -875,15 +906,15 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/') p = '/index.html';
   const file = path.resolve(ROOT, p.replace(/^\/+/, ''));
-  const relativeFile = path.relative(ROOT, file);
+  const relativeFile = path.relative(ROOT, file).split(path.sep).join('/');
   if (relativeFile.startsWith('..') || path.isAbsolute(relativeFile)) return res.writeHead(403).end();
+  if (!PUBLIC_FILES.has(relativeFile) && relativeFile !== PUBLIC_THREE_FILE) {
+    return res.writeHead(404).end('Not found');
+  }
   fs.readFile(file, (err, data) => {
     if (err) return res.writeHead(404).end('Not found');
     const ext = path.extname(file).toLowerCase();
     const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'text/javascript; charset=utf-8' : 'application/octet-stream';
-    if(relativeFile === 'index.html'){
-      data=Buffer.from(data.toString('utf8').replace('</body>', '<script src="/paint-sync-v110.js"></script></body>'), 'utf8');
-    }
     res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'no-store' }); res.end(data);
   });
 });
