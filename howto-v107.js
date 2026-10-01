@@ -176,7 +176,7 @@
   const button=document.createElement('button');
   button.id='v107-howto-button';
   button.type='button';
-  button.textContent='📖 遊び方・キー操作';
+  button.textContent='U / 遊び方';
   document.body.appendChild(button);
 
   const overlay=document.createElement('div');
@@ -184,7 +184,7 @@
   overlay.innerHTML=`
     <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="遊び方・キー操作">
       <div id="v107-howto-title">📖 遊び方・キー操作</div>
-      <div id="v107-howto-subtitle">試合中いつでもこのボタンから開けます。操作を忘れたときに見てください。</div>
+      <div id="v107-howto-subtitle">U / 遊び方 でいつでも開けます。操作を忘れたときに見てください。</div>
 
       <div id="v107-howto-body">
         <div class="v107-help-box">
@@ -325,12 +325,12 @@
         </div>
 
         <div class="v107-help-box full">
-          <b>📖 遊び方を開く・閉じる</b>
+          <b>📖 遊び方</b>
           <div class="v107-help-row">
             <span class="v107-key">U</span>
-            <span>遊び方を開く / もう一度Uで閉じる</span>
+            <span>/ 遊び方（もう一度Uで閉じる）</span>
           </div>
-          <div class="v107-note">画面右上の「📖 遊び方・キー操作」ボタンが押せないときも、Uキーで開けます。ESCでも閉じられます。</div>
+          <div class="v107-note">画面の「U / 遊び方」が押せないときも、Uキーで開けます。ESCでも閉じられます。</div>
         </div>
 
         <div class="v107-help-box full">
