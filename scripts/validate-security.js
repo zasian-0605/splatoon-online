@@ -24,7 +24,7 @@ for(const old of ['online-v93.js','online-v95.js','online-v96.js','canonical-run
 }
 must(!fs.existsSync('sitemap.xml'),'sitemap.xml still exists');
 must(fs.existsSync('scripts/validate-html-js.js'),'scripts/validate-html-js.js missing');
-must(pkg.includes('"validate": "node scripts/validate-html-js.js"'),'package.json validate path mismatch');
+must(pkg.includes('"validate": "node scripts/validate-html-js.js && node scripts/validate-security.js"'),'package.json validate path mismatch');
 
 const readBody=server.slice(server.indexOf('async function readBody'),server.indexOf('function sessionForToken'));
 must(readBody.includes('Buffer.isBuffer(chunk)'), 'readBody: byte-buffer accumulation missing');
