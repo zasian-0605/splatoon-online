@@ -14,4 +14,4 @@ jobs:
         with:
           node-version: 20
       - run: node --check server.js
-      - run: node scripts/validate-html-js.js
+      - run: npm run validate
