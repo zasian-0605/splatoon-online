@@ -728,7 +728,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V96-SERVER-2026-10-01', time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V98-SERVER-MOVEMENT-SYNC-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
@@ -818,15 +818,20 @@ function saneWorldPosition(x,y,z){
     && Number(z)>=-80 && Number(z)<=80
     && Number(y)>=-0.5 && Number(y)<=8;
 }
-function messageBudget(player){
+function messageBudget(player,type='gameplay'){
   const now=Date.now();
   if(!player.msgWindowStart || now-player.msgWindowStart>=1000){
     player.msgWindowStart=now; player.msgCount=0; player.msgRateDrops=0;
   }
   player.msgCount++;
+  /*
+   * V98: state is the heartbeat of movement synchronization. Dropping a state
+   * packet can make the other client look completely frozen even though the
+   * WebSocket itself is still alive. State traffic is tiny (~20/s/client), so
+   * always allow it and apply the normal budget to lower-priority gameplay.
+   */
+  if(type==='state')return true;
   if(player.msgCount<=240)return true;
-  // Excess gameplay packets are dropped instead of disconnecting a healthy client.
-  // This avoids false positives when paint + state + action packets overlap.
   player.msgRateDrops=(player.msgRateDrops||0)+1;
   return false;
 }
@@ -863,7 +868,7 @@ wss.on('connection', ws => {
       if(clientSeq<=player.lastClientSeq)return;
       player.lastClientSeq=clientSeq;
     }
-    if(!messageBudget(player)){
+    if(!messageBudget(player,m.type)){
       if((player.msgRateDrops||0)===1)console.warn('[WS RATE DROP] '+player.id+' account='+(player.accountName||'-'));
       return;
     }    if (m.type === 'bindAccount') {
@@ -1040,41 +1045,47 @@ wss.on('connection', ws => {
     }
     if (m.type === 'state') {
       const now=Date.now(); if(now-player.lastStateAt<28)return;
-      const x=Number(m.x),rawY=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
-      if(!saneWorldPosition(x,rawY,z)||!Number.isFinite(yaw)){
+      let x=Number(m.x),rawY=Number(m.y),z=Number(m.z),yaw=Number(m.yaw);
+      if(!Number.isFinite(x)||!Number.isFinite(rawY)||!Number.isFinite(z)||!Number.isFinite(yaw)){
         console.warn('[WS STATE DROP] '+player.id+' invalid-position');
         return;
       }
-      if(rawY<-1||rawY>14){
-        console.warn('[WS STATE DROP] '+player.id+' invalid-height='+rawY);
-        return;
+
+      /*
+       * V98: never let a recoverable movement discrepancy freeze the remote
+       * player. Keep coordinates inside the known world envelope instead of
+       * dropping the complete synchronization frame.
+       */
+      const originalX=x,originalY=rawY,originalZ=z;
+      x=Math.max(-SERVER_PLAYABLE_HALF_X,Math.min(SERVER_PLAYABLE_HALF_X,x));
+      z=Math.max(-SERVER_PLAYABLE_HALF_Z,Math.min(SERVER_PLAYABLE_HALF_Z,z));
+      rawY=Math.max(0,Math.min(8,rawY));
+      let corrected=false;
+      if(x!==originalX||z!==originalZ||rawY!==originalY){
+        corrected=true;
+        securityStrike(player,'state-position-clamped');
       }
-      if(x<-SERVER_PLAYABLE_HALF_X||x>SERVER_PLAYABLE_HALF_X||z<-SERVER_PLAYABLE_HALF_Z||z>SERVER_PLAYABLE_HALF_Z){
-        // 水場の外や明らかなワールド外だけを拒否する。細かいステージ形状はクライアント衝突判定に任せる。
-        securityStrike(player,'outside-playable-area');
-        return;
-      }
-      const y=Math.max(0,rawY);
+
+      const y=rawY;
       if(player.serverHp==null)player.serverHp=100; if(player.serverAlive==null)player.serverAlive=true; if(player.serverInk==null)player.serverInk=100;
       if(player.serverAlive){
         if(player.serverPos){
-          const dt=Math.max(.028,(now-player.lastStateAt)/1000),d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z);
-          // Super-jump is a legitimate large 2D displacement over ~1 second.
-          // Normal movement keeps the strict speed gate; a flagged super-jump gets
-          // a larger temporary allowance instead of being disconnected.
+          const dt=Math.max(.028,(now-player.lastStateAt)/1000);
+          const d=Math.hypot(x-player.serverPos.x,z-player.serverPos.z);
           const maxStep=m.superJump ? Math.min(12,.82+dt*150) : Math.min(2.8,.82+dt*42);
           if(d>maxStep){
             player.speedViolations=(player.speedViolations||0)+1;
-            // 通常の移動・ジャンプ・高低差で一時的に大きな差が出ても、
-            // 速度判定だけでWebSocketを強制切断しない。
-            // サーバー側の直前位置を維持し、このパケットだけ破棄する。
             if(now-(player.lastSpeedWarnAt||0)>3000){
               player.lastSpeedWarnAt=now;
-              console.warn('[WS SPEED DROP] '+player.id+' d='+d.toFixed(2)+' max='+maxStep.toFixed(2));
+              console.warn('[WS SPEED CLAMP] '+player.id+' d='+d.toFixed(2)+' max='+maxStep.toFixed(2));
             }
-            return;
+            const scale=maxStep/Math.max(d,.0001);
+            x=player.serverPos.x+(x-player.serverPos.x)*scale;
+            z=player.serverPos.z+(z-player.serverPos.z)*scale;
+            corrected=true;
+          }else{
+            player.speedViolations=0;
           }
-          player.speedViolations=0;
         }
         player.serverPos={x,y,z}; player.lastStateAt=now;
       }
@@ -1090,7 +1101,7 @@ wss.on('connection', ws => {
       }
       const serverPos=player.serverPos||player.spawn,enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
       player.serverSquid=!!m.squid&&!enemyInk;
-      const packet={type:'state',seq:++player.stateSeq,id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,
+      const packet={type:'state',seq:++player.stateSeq,id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,corrected,
         hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId,colorHex:applyCanonicalPlayerColor(player)};
       broadcast(room,packet,player.id); send(player.ws,packet); return;
     }
