@@ -11866,8 +11866,8 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
     const pitchY=Number(b.launchDir?.y)||0;
     const upward=pitchY>.08,downward=pitchY<-.08;
     if(upward&&p.y<surface-.18)return;
-    if(downward&&gap>1.10)return;
-    if(!upward&&!downward&&gap>1.05)return;
+    if(downward&&gap>1.90)return;
+    if(!upward&&!downward&&gap>2.70)return;
     if(gap<-.08)return;
 
     const sameSurface=
@@ -12024,7 +12024,7 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
       if(crossed||b.mesh.position.y<=ground+.01||rangeExpired||b.age>b.life){
         const p=b.mesh.position.clone();
         p.y=Math.max(p.y,ground+.02);
-        v82PaintTravelDrop(b,p,true);
+        paintTrailSurfaceV82(b,p,true);
         impactV82(b,p);
         scene.remove(b.mesh);
         v82Bullets.splice(i,1);
