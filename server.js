@@ -591,7 +591,7 @@ function serverResolveSpecial(room,player,m){
    * to deal damage at activation and then again during their real duration.
    */
   return true;
-}}
+}
 function finishServerMatch(room){
   if(!room||room.resultReported)return;
   room.resultReported=true;let a=0,b=0;
