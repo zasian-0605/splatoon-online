@@ -13864,11 +13864,24 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
   }
 
   function nearestVisionEnemy(f,now){
-    renderVision(now);
-    const marks=visibleEnemies2D(f);
-    if(!marks.length)return null;
-    const m=marks[0];
-    return {x:m.x,y:0,z:m.z};
+    /* V105: enemy visibility must not depend on a single marker color.
+       V94 rendered the player as white, so AI on team B could never detect
+       the player through visibleEnemies2D(), causing half the CPUs to idle. */
+    const enemies=(fighters||[]).filter(o=>o&&o!==f&&o.alive&&o.team!==f.team);
+    if(!enemies.length)return null;
+
+    let best=null,bestScore=Infinity;
+    for(const o of enemies){
+      const d=Math.hypot(o.pos.x-f.pos.x,o.pos.z-f.pos.z);
+      const revealed=(o.revealedUntil&&now<o.revealedUntil);
+      /* Nearby targets are favored; revealed targets get a small priority. */
+      const score=d-(revealed?3:0)-(o.isPlayer?2:0);
+      if(score<bestScore){
+        bestScore=score;
+        best=o;
+      }
+    }
+    return best?{x:best.pos.x,y:best.pos.y||0,z:best.pos.z}:null;
   }
 
   function brain(f,now){
@@ -14066,7 +14079,8 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
   updateAI=updateAI2D;
   window.updateAI=updateAI2D;
   window.__V94_AI='2D-TOP-DOWN-IMAGE-VISION-2026-09-30';
-  console.log('[SPLATOON ONLINE][V94] 2D top-down image AI active');
+  window.__V105_AI_TARGET_FIX=true;
+  console.log('[SPLATOON ONLINE][V105] AI target detection uses actual enemy entities');
 })();
 </script>
 
