@@ -881,6 +881,9 @@ const server = http.createServer(async (req, res) => {
     if (err) return res.writeHead(404).end('Not found');
     const ext = path.extname(file).toLowerCase();
     const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'text/javascript; charset=utf-8' : 'application/octet-stream';
+    if(relativeFile === 'index.html'){
+      data=Buffer.from(data.toString('utf8').replace('</body>', '<script src="/paint-sync-v110.js"></script></body>'), 'utf8');
+    }
     res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'no-store' }); res.end(data);
   });
 });
