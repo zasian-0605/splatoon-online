@@ -19,6 +19,23 @@
 
   const $=id=>document.getElementById(id);
   const log=(tag,data)=>{try{console.log('[SPLATOON ONLINE]['+BUILD+']['+tag+']',data);}catch(_){}};
+  function persistentGuestId(){
+    const key='splatoonGuestIdV110';
+    let id='';
+    try{id=String(localStorage.getItem(key)||'');}catch(_){}
+    if(!/^[A-Za-z0-9_-]{12,64}$/.test(id)){
+      try{
+        if(globalThis.crypto?.randomUUID) id=globalThis.crypto.randomUUID().replace(/-/g,'');
+        else id='g'+Date.now().toString(36)+Math.random().toString(36).slice(2);
+      }catch(_){id='g'+Date.now().toString(36)+Math.random().toString(36).slice(2);}
+      id=id.replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);
+      try{localStorage.setItem(key,id);}catch(_){}
+    }
+    return id;
+  }
+  function storedAuthToken(){
+    try{return String(localStorage.getItem('splatoonAccountToken')||'');}catch(_){return '';}
+  }
 
   function getPlayer(){
     try{if(typeof playerFighter!=='undefined'&&playerFighter)return playerFighter;}catch(_){}
@@ -234,13 +251,36 @@
         log('HELLO',{id:m.id});
         state.playerId=String(m.id||'');
         setVars();
-        const token=localStorage.getItem('splatoonAccountToken');
-        if(token)rawSend('bindAccount',{token});else join();
+        const token=storedAuthToken();
+        const guestId=persistentGuestId();
+        if(token){
+          rawSend('bindAccount',{token});
+        }else{
+          rawSend('identify',{guestId});
+        }
         break;
       }
       case 'accountBound':
-        if(m.error){setStatus('ログイン情報が切れています');try{localStorage.removeItem('splatoonAccountToken');}catch(_){}return;}
-        try{window.showOnlineProfile?.(m.profile);}catch(_){}
+        if(m.error){
+          setStatus('ログイン情報が切れています');
+          try{localStorage.removeItem('splatoonAccountToken');}catch(_){}
+          try{window.showToast?.('ログイン情報が切れています。ログイン画面で入り直してください');}catch(_){}
+          return;
+        }
+        try{
+          if(m.profile){
+            window.playerAccount=window.playerAccount||{};
+            window.playerAccount.profile=m.profile;
+            window.playerAccount.online=true;
+            localStorage.setItem('splatoonAccountProfile',JSON.stringify(m.profile));
+            localStorage.setItem('splatoonAccountName',String(m.profile.name||''));
+            window.updateAccountProfileUI?.(m.profile);
+            window.showOnlineProfile?.(m.profile);
+            if(typeof playerFighter!=='undefined'&&playerFighter)playerFighter.displayName=String(m.profile.name||'');
+          }
+        }catch(_){}
+        join();break;
+      case 'guestIdentified':
         join();break;
       case 'roomState': {
         state.roomId=String(m.roomId||'');state.phase='room';
@@ -333,7 +373,10 @@
     state.phase='connecting';
     const cfg=Object.assign({},getConfig()),f=getPlayer();
     const weapon=Number(f?.weapon?.id??cfg.weapon??0);
-    setStatus('ルームを検索中');return rawSend('joinQueue',{weaponId:weapon,config:cfg});
+    setStatus('ルームを検索中');
+    const token=storedAuthToken();
+    const guestId=persistentGuestId();
+    return rawSend('joinQueue',{weaponId:weapon,config:cfg,token,guestId});
   }
   function disconnect(reason){
     const ws=state.socket;if(!ws)return;
