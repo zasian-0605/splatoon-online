@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "validate": "node scripts/validate-html-js.js && node scripts/validate-security.js"
+    "validate": "node scripts/validate-html-js.js && node scripts/validate-security.js && node scripts/validate-server.js"
   },
   "engines": {
     "node": ">=18"
