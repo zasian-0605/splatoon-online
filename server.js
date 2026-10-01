@@ -635,10 +635,11 @@ function waitingRoomFor() {
   return createWaitingRoom();
 }
 function assignTeamsAndStart(room) {
-  // オンライン対戦は2人以上そろったら自動で開始する。
-  // 「準備OK」を押し忘れて待機し続ける状態を防ぎ、人数表示と実際の開始条件を一致させる。
+  // 2〜7人: 全員が「準備OK」になるまで待機。
+  // 8人: 全員Readyを待たず、自動で開始。
   if (room.started || room.players.size < 2) return;
   const ps = [...room.players.values()];
+  if (room.players.size < 8 && !ps.every(p => p.ready)) return;
   ps.forEach((p, i) => {
     p.team = i % 2 === 0 ? 'A' : 'B';
     const slot = Math.floor(i / 2);
@@ -670,7 +671,8 @@ function joinRoom(player) {
   const roomPayload = { type: 'roomState', roomId: room.id, players, count: players.length, minPlayers: 2, maxPlayers: 8 };
   for (const p of room.players.values()) send(p.ws, roomPayload);
   console.log(`[MATCH] ${room.id}: ${players.length}/8 players joined | player=${player.id} account=${player.accountName || '-'} totalSockets=${sockets.size} waitingRooms=${[...rooms.values()].filter(r=>!r.started).map(r=>r.id+':'+r.players.size).join(',') || '-'}`);
-  // 2人目が入った瞬間にマッチを開始する。
+  // 人数が8人になった場合だけ、この呼び出しで即時自動開始する。
+  // 2〜7人では assignTeamsAndStart() 内のReady条件で待機する。
   assignTeamsAndStart(room);
   return room;
 }
@@ -833,7 +835,8 @@ function messageBudget(player){
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
   ws.isAlive=true;
-  ws.on('pong',()=>{ws.isAlive=true;});
+  ws.missedHeartbeats=0;
+  ws.on('pong',()=>{ws.isAlive=true;ws.missedHeartbeats=0;});
   ws.on('error',err=>console.warn('[WS ERROR]',err?.message||err));
   const id = `Player_${String(nextPlayerNo++).padStart(4, '0')}`;
   const player = {
@@ -1053,9 +1056,12 @@ wss.on('connection', ws => {
           const maxStep=m.superJump ? Math.min(12,.82+dt*150) : Math.min(2.8,.82+dt*42);
           if(d>maxStep){
             player.speedViolations=(player.speedViolations||0)+1;
-            if(player.speedViolations>3&&now-(player.lastSpeedStrikeAt||0)>1200){
-              player.lastSpeedStrikeAt=now;
-              securityStrike(player,'server-speed='+d.toFixed(2)+' max='+maxStep.toFixed(2));
+            // 通常の移動・ジャンプ・高低差で一時的に大きな差が出ても、
+            // 速度判定だけでWebSocketを強制切断しない。
+            // サーバー側の直前位置を維持し、このパケットだけ破棄する。
+            if(now-(player.lastSpeedWarnAt||0)>3000){
+              player.lastSpeedWarnAt=now;
+              console.warn('[WS SPEED DROP] '+player.id+' d='+d.toFixed(2)+' max='+maxStep.toFixed(2));
             }
             return;
           }
@@ -1124,8 +1130,13 @@ const WS_HEARTBEAT=setInterval(()=>{
     const ws=player.ws;
     if(ws.readyState!==1)continue;
     if(ws.isAlive===false){
-      console.warn('[WS HEARTBEAT TIMEOUT] '+player.id);
-      try{ws.terminate();}catch(_){}
+      ws.missedHeartbeats=(ws.missedHeartbeats||0)+1;
+      if(ws.missedHeartbeats>=3){
+        console.warn('[WS HEARTBEAT TIMEOUT] '+player.id+' missed='+ws.missedHeartbeats);
+        try{ws.terminate();}catch(_){}
+      }else{
+        console.warn('[WS HEARTBEAT MISS] '+player.id+' missed='+ws.missedHeartbeats);
+      }
       continue;
     }
     ws.isAlive=false;
