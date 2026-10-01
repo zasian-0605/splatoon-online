@@ -276,6 +276,8 @@
         const x2=Number(m.x2),z2=Number(m.z2);
         const o={mult:m.mult||1,remote:true,team:m.team,surfaceY:Number.isFinite(Number(m.y))?Number(m.y):undefined};
         if(Number.isFinite(x2)&&Number.isFinite(z2))o.to={x:x2,z:z2};
+        const nx=Number(m.nx),ny=Number(m.ny),nz=Number(m.nz);
+        if([nx,ny,nz].every(Number.isFinite))o.normal=new THREE.Vector3(nx,ny,nz);
         try{window.paintGround?.(m.x,m.z,m.radius,m.colorHex,o);}catch(_){}
         break;
       }
@@ -420,3 +422,6 @@
   try{window.onlineSocket=null;}catch(_){}
   log('READY',{server:WS_URL});
 })();
+
+/* V107: preserve paint surface normals from the authoritative server. */
+window.__V107_ONLINE_PAINT_NORMALS=true;
