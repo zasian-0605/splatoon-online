@@ -64,7 +64,7 @@
     #joystick-knob{
       transition:transform .03s linear;
     }
-    @media(max-width:800px){
+    .mobile-btn{z-index:25 !important;}\n    @media(max-width:800px){
       #v109-mobile-hint{display:none;}
       #v107-howto-button{touch-action:none !important;}
     }
