@@ -163,16 +163,28 @@ const SERVER_WEAPON_INK_COST=[
   1.30,1.50,1.90,.75,2.60,2.20,6.00,4.80,6.50,7.20,1.80,3.20,3.60,4.80
 ];
 const SERVER_SPECIAL_BY_WEAPON={
-  0:'ウルトラショット',1:'メガホンレーザー5.1ch',2:'エナジースタンド',3:'カニタンク',4:'テイオウイカ',
-  5:'ショクワンダー',6:'ウルトラハンコ',7:'トリプルトルネード',8:'キューインキ',
-  9:'トリプルトルネード',10:'アメフラシ',11:'メガホンレーザー5.1ch',12:'ウルトラハンコ',13:'エナジースタンド',
-  14:'メガホンレーザー5.1ch',15:'エナジースタンド',16:'ホップソナー',17:'デコイチラシ',18:'トリプルトルネード',
-  19:'エナジースタンド',20:'アメフラシ',21:'キューインキ',22:'ショクワンダー',23:'ショクワンダー',
-  24:'カニタンク',25:'サメライド',26:'ウルトラハンコ',27:'エナジースタンド',28:'グレートバリア',
-  29:'ウルトラショット',30:'ショクワンダー',31:'ウルトラハンコ',32:'ホップソナー',33:'ナイスダマ',
-  34:'カニタンク',35:'グレートバリア',36:'ホップソナー',37:'メガホンレーザー5.1ch',38:'マルチミサイル',
-  39:'グレートバリア',40:'ウルトラハンコ',41:'メガホンレーザー5.1ch',42:'ホップソナー',
-  43:'ナイスダマ',44:'ナイスダマ'
+  0:'ウルトラショット',
+  1:'カニタンク',
+  2:'エナジースタンド',
+  3:'トリプルトルネード',
+  4:'ナイスダマ',
+  5:'ウルトラハンコ',
+  6:'デコイチラシ',
+  7:'メガホンレーザー5.1ch',
+  8:'テイオウイカ',
+  9:'キューインキ',
+  10:'ホップソナー',
+  11:'ジェットパック',
+  12:'グレートバリア',
+  13:'アメフラシ',
+  14:'ショクワンダー',
+  15:'サメライド',
+  16:'メガホンレーザー5.1ch',
+  17:'スミナガシート',
+  18:'マルチミサイル',
+  19:'デコイチラシ',
+  20:'ウルトラチャクチ',
+  21:'エナジースタンド'
 };
 function serverPointInStage(x,z){
   x=Number(x);z=Number(z);
@@ -533,7 +545,20 @@ function serverApplySensorPulse(room,viewer,center,radius,specialName,durationMs
 
 function serverResolveSpecial(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return false;
-  const name=String(m.specialName||''),spec=SERVER_SPECIALS[name];if(!spec)return false;
+  /*
+   * V103: the server is authoritative for activation/validation and event
+   * delivery. Continuous special behavior is simulated by the canonical
+   * client runtime so placed specials (barrier/stand/sonar/storm/sheet)
+   * remain alive instead of being reduced to one instant AoE.
+   */
+  const OFFICIAL_SPECIALS=new Set([
+    'ウルトラショット','エナジースタンド','カニタンク','キューインキ','グレートバリア',
+    'サメライド','ショクワンダー','トリプルトルネード','ホップソナー','メガホンレーザー5.1ch',
+    'テイオウイカ','デコイチラシ','スミナガシート','アメフラシ','ウルトラハンコ','ジェットパック',
+    'ナイスダマ','マルチミサイル','ウルトラチャクチ'
+  ]);
+  const name=String(m.specialName||'');
+  if(!OFFICIAL_SPECIALS.has(name))return false;
   const expected=SERVER_SPECIAL_BY_WEAPON[Number(player.weaponId)];
   if(expected && name!==expected)return false;
   const me=player.serverPos||player.spawn;let x=Number(m.x),z=Number(m.z);
@@ -542,16 +567,14 @@ function serverResolveSpecial(room,player,m){
   if(dist>45){const scale=45/dist;x=me.x+(x-me.x)*scale;z=me.z+(z-me.z)*scale;}
   if(!serverPointInStage(x,z))return false;
 
-  const sensorAlias=name==='パルスノード';
-  const sensorHop=name==='ホップソナー'||sensorAlias;
-  const sensorMega=name==='メガホンレーザー5.1ch'||name==='オムニレーザー';
-  const sensorMissile=name==='センチネルミサイル';
+  const sensorHop=name==='ホップソナー';
+  const sensorMega=name==='メガホンレーザー5.1ch';
+  const sensorMissile=name==='マルチミサイル';
+  const center={x,y:Number(m.y)||0,z};
 
   if(sensorMega){
-    serverApplySensorPulse(room,player,{x,y:Number(m.y)||0,z},45,name,3000,3);
+    serverApplySensorPulse(room,player,center,45,name,3000,3);
   }else if(sensorHop){
-    /* ホップソナーはウェーブごとに再索敵する。 */
-    const center={x,y:Number(m.y)||0,z};
     serverApplySensorPulse(room,player,center,20,name,8000,99);
     [1600,4100,6600].forEach(delay=>{
       setTimeout(()=>{
@@ -560,12 +583,15 @@ function serverResolveSpecial(room,player,m){
       },delay);
     });
   }else if(sensorMissile){
-    serverApplySensorPulse(room,player,{x,y:Number(m.y)||0,z},45,name,4000,3);
+    serverApplySensorPulse(room,player,center,60,name,4000,5);
   }
-
-  serverApplyAoE(room,{x,y:Number(m.y)||0,z},spec[1],spec[0],player.team,player,'special:'+name);
+  /*
+   * Do not apply a generic AoE here. Every official special has its own
+   * runtime behavior on both clients, and generic AoE caused placed specials
+   * to deal damage at activation and then again during their real duration.
+   */
   return true;
-}
+}}
 function finishServerMatch(room){
   if(!room||room.resultReported)return;
   room.resultReported=true;let a=0,b=0;
@@ -757,7 +783,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V100-SERVER-RANKING-2026-10-01', time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V103-SERVER-SPECIAL-AUTH-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
