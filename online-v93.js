@@ -46,7 +46,37 @@
   }
   function setStatus(s){try{window.setOnlineConnecting?.(s);}catch(_){}try{window.setOnlineStatus?.(s);}catch(_){}}
   function setCount(n,note){try{window.setOnlineCount?.(n,note);}catch(_){}}
-  function renderRoom(players){window.__V93_LAST_ROOM_PLAYERS=players||[];try{window.renderOnlineRoom?.(players||[]);}catch(_){}}
+  function renderRoom(players){
+    const ps=Array.isArray(players)?players:[];
+    window.__V93_LAST_ROOM_PLAYERS=ps;
+    /* V97: V93 owns the real socket/state, so the Ready button must not depend
+       on an older inline socket variable or an older panel-opening wrapper. */
+    try{window.renderOnlineRoom?.(ps);}catch(_){}
+    try{
+      const roomEl=$('online-room');
+      const lines=ps.map(p=>{
+        const mark=p.ready?'✓':'　';
+        const name=String(p.name||p.id||'');
+        const team=p.team?' ['+p.team+']':'';
+        const you=String(p.id||'')===String(state.playerId||'')?' ← YOU':'';
+        return '['+mark+'] '+name+team+you;
+      }).join('\n');
+      if(roomEl)roomEl.textContent='部屋 '+(state.roomId||'----')+'\n'+ps.length+'/8人\n'+(lines||'まだ誰もいません');
+      const ready=$('online-ready');
+      if(ready){
+        const canReady=state.phase==='room' && !!state.roomId && !!state.socket
+          && state.socket.readyState===WebSocket.OPEN && ps.length>=2 && ps.length<8;
+        ready.disabled=!canReady;
+        ready.textContent=state.ready?'準備解除':'準備OK';
+        ready.classList.toggle('ready',!!state.ready);
+      }
+      if(ps.length>=2 && ps.length<8){
+        const msg=state.ready?'準備済み。ほかのプレイヤーを待っています':'2人以上参加中。準備OKを押してください';
+        setStatus(msg);
+        setCount(ps.length,msg);
+      }
+    }catch(_){}
+  }
 
   function cleanPayload(m){
     const out={};
