@@ -633,7 +633,7 @@ function broadcastGlobalOnlineCount() {
   for (const player of sockets.values()) send(player.ws, payload);
 }
 
-console.log('[SPLATOON ONLINE][V104] 1m paint grid + exact stacked-surface server ink');
+console.log('[SPLATOON ONLINE][V108] canonical server paint grid + stacked-surface sync');
 const ONLINE_INK_COLORS={A:0xe3ff00,B:0xff2255};
 function canonicalInkColor(player){
   return player?.team==='B'?ONLINE_INK_COLORS.B:ONLINE_INK_COLORS.A;
@@ -801,7 +801,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === 'GET' && p === '/health') {
-    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V103-SERVER-SPECIAL-AUTH-2026-10-01', time: new Date().toISOString() });
+    return json(res, 200, { ok: true, service: 'splatoon-like-web-online', websocket: true, build: 'V108-CANONICAL-SERVER-2026-10-01', time: new Date().toISOString() });
   }
   if (req.method === 'POST' && (p === '/api/account/register' || p === '/api/account/login')) {
     try {
