@@ -10522,7 +10522,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       gravity:0,radius:.12,
       paintRadius:(w.paintRadius||.9)*(.70+.35*q),life:2.6,
       trajectory:'flat-drop',straightDistance:w.range||55,maxRange:w.range||55,
-      dropSpeed:46,kind:'charger',paintTrail:true,paintEvery:.16
+      rangeDrop:true,dropSpeed:46,kind:'charger',paintTrail:true,paintEvery:.16
     });
     sendShot(f,d,'charger',q);
     f.specialGauge=Math.min(100,f.specialGauge+7+7*q);
@@ -10656,7 +10656,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
           speed:w.speed||25,damage:w.damage||80,gravity:0,radius:.22,life:2.5,
           paintRadius:(w.paintRadius||1.35)*.62,
           trajectory:'flat-drop',straightDistance:safeRange,maxRange:safeRange,
-          dropSpeed:34,explosive:true,explosionRadius:w.explosionRadius||2.4,
+          rangeDrop:true,dropSpeed:34,explosive:true,explosionRadius:w.explosionRadius||2.4,
           splashDamage:w.splashDamage||35,kind:'blaster'
         });
       }else if(w.category==='maneuver'){
@@ -12067,9 +12067,10 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
 
     if(w.category==='blaster'){
       emit(base,{
-        speed:clamp(num(w.speed,22),12,30),gravity:5.8,drag:.04,radius:.23,
+        speed:clamp(num(w.speed,22),12,30),gravity:0,drag:0,radius:.23,
         paintRadius:num(w.paintRadius,1.35),damage:num(w.damage,70),
-        life:1.2,explosive:true,explosionRadius:num(w.explosionRadius,2.5),
+        life:1.3,rangeDrop:true,dropSpeed:34,
+        explosive:true,explosionRadius:num(w.explosionRadius,2.5),
         splashDamage:num(w.splashDamage,40),kind:'blaster'
       });
       fired=1;
