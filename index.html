@@ -11099,10 +11099,24 @@ paintWallSurface=function(block,hitPos,c,team,size){
 spawnDecal=function(pos,normal,c,size){paintInk(pos.x,pos.z,Math.min(4,Math.max(1.35,Number(size)||1)),c,{surfaceY:pos.y,normal,forceVisual:true,noNetwork:true});};window.spawnDecal=spawnDecal;
 
 function aim(dir,f,angle){
-  const d=dir?.clone?dir.clone():new THREE.Vector3();d.y=0;
-  if(d.lengthSq()<.0001){const y=f?.root?.rotation?.y||0;d.set(Math.sin(y),0,Math.cos(y));}
-  d.normalize();const a=THREE.MathUtils.degToRad(Number(angle)||0);
-  return new THREE.Vector3(d.x*Math.cos(a),Math.sin(a),d.z*Math.cos(a)).normalize();
+  const d=dir?.clone?dir.clone():new THREE.Vector3();
+  if(d.lengthSq()<.0001){
+    const y=f?.root?.rotation?.y||0;
+    d.set(Math.sin(y),0,Math.cos(y));
+  }
+  d.normalize();
+
+  // V104: keep the camera's vertical aim. V79 incorrectly discarded d.y.
+  const basePitch=Math.asin(Math.max(-1,Math.min(1,d.y)));
+  const shotPitch=basePitch+THREE.MathUtils.degToRad(Number(angle)||0);
+  const horiz=Math.max(0,Math.cos(shotPitch));
+  const shotYaw=Math.atan2(d.x,d.z);
+
+  return new THREE.Vector3(
+    Math.sin(shotYaw)*horiz,
+    Math.sin(shotPitch),
+    Math.cos(shotYaw)*horiz
+  ).normalize();
 }
 function spawn79(f,dir,o){
   const launch=aim(dir,f,Number(o.angleDeg)||0),speed=Math.max(1,Number(o.speed)||30),s=f.pos.clone();
@@ -14037,5 +14051,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 <script src="/online-v96.js"></script>
 <script src="/specials-v102.js"></script>
 <script src="/obstacle-squid-top-fix-v103.js"></script>
+<script src="/camera-aim-collision-v104.js"></script>
 </body>
 </html>
