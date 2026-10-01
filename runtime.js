@@ -29,12 +29,16 @@ try{
   };
   window.buildStage=buildStage;
 }catch(_){}
+/* A support is allowed to be a small step above the current feet.  The old
+   .18 tolerance made the low stage humps impossible to mount and selected the
+   wrong floor while crossing stacked platforms. */
+const PLAYER_STEP_HEIGHT=.62;
 function supportHeight(x,z,y=0){
   const px=n(x),pz=n(z),hint=n(y);
   let best=0;
   for(const b of collidableBlocks||[]){
     if(px<b.minX||px>b.maxX||pz<b.minZ||pz>b.maxZ)continue;
-    if(n(b.maxY)>hint+.18)continue;
+    if(b.mesh?.visible===false||n(b.maxY)>hint+PLAYER_STEP_HEIGHT)continue;
     if(n(b.maxY)>best)best=n(b.maxY);
   }
   return best;
@@ -301,6 +305,89 @@ try{onFighterInk=canonicalOnInk;}catch(_){}
 window.onFighterInk=canonicalOnInk;
 try{isEnemyInkAt=canonicalEnemyInk;}catch(_){}
 window.isEnemyInkAt=canonicalEnemyInk;
+
+/* ---------- one movement/collision/wall-climb owner ---------- */
+function wallInkAt(block,face,x,y,z,team){
+  if(!block||!team)return false;
+  for(const m of block.__v108Marks||[]){
+    if(m.team!==team||m.face!==face)continue;
+    const r=n(m.r,.8)+.72;
+    if((face==='minX'||face==='maxX')
+      ? Math.hypot(z-n(m.z),y-n(m.y))<=r
+      : Math.hypot(x-n(m.x),y-n(m.y))<=r)return true;
+  }
+  return block.paintTeam===team&&n(block.paintLevel)>=20;
+}
+function nearestWallFace(block,x,z){
+  const faces=[
+    ['minX',Math.abs(x-block.minX)],['maxX',Math.abs(x-block.maxX)],
+    ['minZ',Math.abs(z-block.minZ)],['maxZ',Math.abs(z-block.maxZ)]
+  ];
+  faces.sort((a,b)=>a[1]-b[1]);return faces[0][0];
+}
+function climbWallNear(f,x,z,y,vx,vz){
+  let best=null;
+  for(const b of collidableBlocks||[]){
+    if(!b||b.mesh?.visible===false||b.climbable===false||n(b.maxY)-n(b.minY)<1.3)continue;
+    if(y>=n(b.maxY)-.04||y+1.65<=n(b.minY))continue;
+    const face=nearestWallFace(b,x,z);
+    const fx=face==='minX'?b.minX:face==='maxX'?b.maxX:clamp(x,b.minX,b.maxX);
+    const fz=face==='minZ'?b.minZ:face==='maxZ'?b.maxZ:clamp(z,b.minZ,b.maxZ);
+    const d=Math.hypot(x-fx,z-fz);
+    if(d>.82||!wallInkAt(b,face,fx,y,fz,f.team))continue;
+    /* The swimmer must be travelling into the selected face. */
+    const toward=face==='minX'?vx:face==='maxX'?-vx:face==='minZ'?vz:-vz;
+    if(toward<-.001)continue;
+    if(!best||d<best.d)best={b,face,d};
+  }
+  return best;
+}
+function placeOnWall(f,b,face,v,dt){
+  const gap=.34;
+  if(face==='minX'||face==='maxX'){
+    f.pos.x=(face==='minX'?b.minX-gap:b.maxX+gap);
+    f.pos.z=clamp(f.pos.z+n(v.z)*dt,b.minZ+gap,b.maxZ-gap);
+  }else{
+    f.pos.z=(face==='minZ'?b.minZ-gap:b.maxZ+gap);
+    f.pos.x=clamp(f.pos.x+n(v.x)*dt,b.minX+gap,b.maxX-gap);
+  }
+}
+function topOutWall(f,b,face){
+  const inset=.48;
+  f.pos.y=b.maxY+.06;
+  /* Move onto the top face, not back away from it.  Moving outward was the
+     reason a completed wall climb immediately dropped to the lower floor. */
+  if(face==='minX')f.pos.x=b.minX+inset;
+  else if(face==='maxX')f.pos.x=b.maxX-inset;
+  else if(face==='minZ')f.pos.z=b.minZ+inset;
+  else f.pos.z=b.maxZ-inset;
+  f.__canonicalWall=null;
+}
+function canonicalMoveWithCollision(f,vel,dt,isSquid){
+  if(!f?.pos)return false;
+  const rawX=f.pos.x+n(vel?.x)*dt,rawZ=f.pos.z+n(vel?.z)*dt;
+  const bounded=typeof clampStageXY==='function'?clampStageXY(rawX,rawZ):{x:rawX,z:rawZ};
+  if(typeof marketPointInPolygon==='function'&&!marketPointInPolygon(rawX,rawZ)&&Math.hypot(rawX-bounded.x,rawZ-bounded.z)>1.6)return false;
+  let wall=f.__canonicalWall;
+  if(wall&&(!isSquid||!wallInkAt(wall.b,wall.face,f.pos.x,f.pos.y,f.pos.z,f.team)))wall=null;
+  if(!wall&&isSquid&&(Math.abs(n(vel?.x))+Math.abs(n(vel?.z))>.001))wall=climbWallNear(f,bounded.x,bounded.z,f.pos.y,n(vel?.x),n(vel?.z));
+  if(wall){
+    placeOnWall(f,wall.b,wall.face,vel,dt);
+    f.pos.y=Math.min(wall.b.maxY+.06,f.pos.y+10.5*dt);
+    if(f.pos.y>=wall.b.maxY-.04)topOutWall(f,wall.b,wall.face);
+    else f.__canonicalWall=wall;
+    return true;
+  }
+  f.__canonicalWall=null;
+  const blocks=(collidableBlocks||[]).filter(b=>b&&b.mesh?.visible!==false&&n(b.maxY)-n(b.minY)>=1.3&&f.pos.y<b.maxY-.08&&f.pos.y+1.5>b.minY);
+  const blocked=(x,z)=>blocks.some(b=>x>b.minX-.28&&x<b.maxX+.28&&z>b.minZ-.28&&z<b.maxZ+.28);
+  const moveX=!blocked(bounded.x,f.pos.z),moveZ=!blocked(f.pos.x,bounded.z);
+  if(moveX)f.pos.x=bounded.x;
+  if(moveZ)f.pos.z=bounded.z;
+  return false;
+}
+try{tryMoveWithCollision=canonicalMoveWithCollision;}catch(_){}
+window.tryMoveWithCollision=canonicalMoveWithCollision;
 
 /* ---------- canonical projectile creation / firing ---------- */
 function aim(f,d){
