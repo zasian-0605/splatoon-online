@@ -157,12 +157,32 @@ function updateAI95(f,dt,now){
 try{updateAI=updateAI95;}catch(_){}
 window.updateAI=updateAI95;
 
-/* One firing direction: the weapon always uses the fighter's current forward. */
+/* V95 firing-direction fix:
+   - Player shots preserve the aim supplied by the normal input path.
+   - AI shots may still use the fighter's forward direction when no aim is supplied.
+   - Never replace a live player camera aim with a potentially stale root/human rotation. */
+function v95ShotDirection(f, supplied){
+  if(f?.isPlayer && supplied?.clone){
+    const d=supplied.clone();
+    d.y=0;
+    if(d.lengthSq()>.0001)return d.normalize();
+    try{
+      const c=new THREE.Vector3();
+      camera?.getWorldDirection(c);
+      c.y=0;
+      if(c.lengthSq()>.0001)return c.normalize();
+    }catch(_){}
+  }
+  return front(f);
+}
 try{
   const baseTry=tryShoot;
   if(!baseTry.__v95Wrapped){
-    tryShoot=function(f,_aim,now){return baseTry(f,front(f),now);};
-    tryShoot.__v95Wrapped=true;window.tryShoot=tryShoot;
+    tryShoot=function(f,aimDir,now){
+      return baseTry(f,v95ShotDirection(f,aimDir),now);
+    };
+    tryShoot.__v95Wrapped=true;
+    window.tryShoot=tryShoot;
   }
 }catch(_){}
 
