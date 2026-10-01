@@ -108,6 +108,7 @@ function faceName(normal){
   return normal.z>0?'maxZ':'minZ';
 }
 const visualInk=[];
+const MAX_VISUAL_INK=50000;
 function visualStamp(block,p,normal,r,c,team){
   if(!block)return;
   ensureInkState(block);
@@ -116,11 +117,16 @@ function visualStamp(block,p,normal,r,c,team){
   if(block.__v108Marks.length>5000)block.__v108Marks.splice(0,block.__v108Marks.length-5000);
   if(normal.y>.7){
     const set=team==='B'?block.__v108CellsB:block.__v108CellsA;
+    const other=team==='B'?block.__v108CellsA:block.__v108CellsB;
     const ix0=Math.floor(p.x-rr-block.minX),ix1=Math.ceil(p.x+rr-block.minX);
     const iz0=Math.floor(p.z-rr-block.minZ),iz1=Math.ceil(p.z+rr-block.minZ);
     for(let ix=ix0;ix<=ix1;ix++)for(let iz=iz0;iz<=iz1;iz++){
       const cx=block.minX+ix+.5,cz=block.minZ+iz+.5;
-      if(Math.hypot(cx-p.x,cz-p.z)<=rr+.5)set.add(ix+','+iz);
+      if(Math.hypot(cx-p.x,cz-p.z)<=rr+.5){
+        const key=ix+','+iz;
+        other.delete(key);
+        set.add(key);
+      }
     }
   }
   const geo=new THREE.CircleGeometry(1,14),pos=geo.attributes.position;
@@ -139,7 +145,7 @@ function visualStamp(block,p,normal,r,c,team){
   /* V109: p is already a world-space hit point. Never attach it as local coordinates to block.mesh. */
   scene.add(mesh);
   visualInk.push(mesh);
-  while(visualInk.length>20000){
+  while(visualInk.length>MAX_VISUAL_INK){
     const old=visualInk.shift();
     if(old?.parent)old.parent.remove(old);
     try{old.geometry.dispose();old.material.dispose();}catch(_){}
