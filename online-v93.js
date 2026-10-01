@@ -6,7 +6,7 @@
 (function(){
   'use strict';
 
-  const BUILD='V93-ONLINE-UNIFIED-2026-09-30';
+  const BUILD='V97-ONLINE-MATCH-READY-2026-10-01';
   const SERVER_ORIGIN='https://splatoon-online-8r1r.onrender.com';
   const WS_URL=SERVER_ORIGIN.replace(/^https:/,'wss:').replace(/^http:/,'ws:');
   const state={
