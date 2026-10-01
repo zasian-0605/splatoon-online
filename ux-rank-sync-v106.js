@@ -123,7 +123,7 @@
     if(!accountIsServer()||onlineActive)return null;
 
     const before=profileNow()?Object.assign({},profileNow()):null;
-    showRank(before,{});
+    showRank(before,'');
     if(hud)hud.innerHTML='<div>腕前を更新中…</div>';
 
     try{
