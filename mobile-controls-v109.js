@@ -346,15 +346,15 @@
      This prevents one tap from firing two subs/specials/callouts on touch browsers. */
   function mobileButtonAction(id){
     switch(id){
-      case 'btn-sub': once('sub-touch',()=>doPlayerSubThrow()); break;
-      case 'btn-special': once('special-touch',()=>fireSpecial(playerFighter)); break;
-      case 'btn-map': once('map-touch',()=>{
+      case 'btn-sub': once('sub',()=>doPlayerSubThrow()); break;
+      case 'btn-special': once('special',()=>fireSpecial(playerFighter)); break;
+      case 'btn-map': once('map',()=>{
         const fn=window.__V10?.showMaps;
         if(typeof fn==='function') fn();
         else { const full=document.getElementById('fullmap'); if(full) full.style.display='flex'; }
       }); break;
-      case 'btn-nice': once('nice-touch',()=>window.sendCallout?.('nice')); break;
-      case 'btn-cmon': once('cmon-touch',()=>window.sendCallout?.('cmon')); break;
+      case 'btn-nice': once('nice',()=>window.sendCallout?.('nice')); break;
+      case 'btn-cmon': once('cmon',()=>window.sendCallout?.('cmon')); break;
     }
   }
 
@@ -393,15 +393,15 @@
     if(!el) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if(el.id==='btn-sub') once('sub-click',()=>doPlayerSubThrow());
-    else if(el.id==='btn-special') once('special-click',()=>fireSpecial(playerFighter));
-    else if(el.id==='btn-map') once('map-click',()=>{
+    if(el.id==='btn-sub') once('sub',()=>doPlayerSubThrow());
+    else if(el.id==='btn-special') once('special',()=>fireSpecial(playerFighter));
+    else if(el.id==='btn-map') once('map',()=>{
       const fn=window.__V10?.showMaps;
       if(typeof fn==='function') fn();
       else { const full=document.getElementById('fullmap'); if(full) full.style.display='flex'; }
     });
-    else if(el.id==='btn-nice') once('nice-click',()=>window.sendCallout?.('nice'));
-    else if(el.id==='btn-cmon') once('cmon-click',()=>window.sendCallout?.('cmon'));
+    else if(el.id==='btn-nice') once('nice',()=>window.sendCallout?.('nice'));
+    else if(el.id==='btn-cmon') once('cmon',()=>window.sendCallout?.('cmon'));
   },true);
 
   /* Stop browser long-press context menus/scrolling on all mobile controls. */
