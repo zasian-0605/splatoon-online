@@ -305,7 +305,7 @@ window.__spawnBulletV60=spawnCanonical;
 function regularShot(f,d,t){
   if(!f||!f.alive)return false;
   const w=f.weapon||weaponList?.[0];if(!w)return false;
-  if(['charger','roller','wiper'].includes(w.category)||w.brush)return false;
+  if(['charger','roller','spinner','wiper'].includes(w.category)||w.brush)return false;
   if(t-n(f.lastShot)<Math.max(25,n(w.rate,100))||!consume(f,w))return false;
   f.lastShot=t;const base=aim(f,d),range=clamp(n(w.range,30),5,80);
   const add=o=>spawnCanonical(f,base,Object.assign({maxRange:range},o));
@@ -464,6 +464,10 @@ function updateCanonicalAI(f,dt,now){
       if(w.category==='charger'){if(!s.charge)s.charge=now;if(now-s.charge>=Math.max(300,n(w.chargeTime,800)*.65)&&now>=s.nextShot){canonicalCharger(f,dir,clamp((now-s.charge)/n(w.chargeTime,800),.45,.95));s.nextShot=now+850;s.charge=0;}}
       else if(w.category==='wiper'&&typeof fireBladeSlashV60==='function'){if(!s.charge)s.charge=now;if(now-s.charge>=Math.max(220,n(w.chargeTime,600)*.5)){fireBladeSlashV60(f,.7,dir);s.charge=0;}}
       else if(w.category==='roller'&&typeof performRollerSwing==='function')performRollerSwing(f,now);
+      else if(w.category==='spinner'&&typeof fireSplatlingBurst==='function'&&now>=s.nextShot){
+        fireSplatlingBurst(f,.65+Math.random()*.30);
+        s.nextShot=now+900;
+      }
       else canonicalTryShoot(f,dir,now);
     }catch(_){}
     if(typeof window.tryThrowSub==='function'&&now>=s.nextSub){try{window.tryThrowSub(f,dir,now);}catch(_){}s.nextSub=now+2600;}
