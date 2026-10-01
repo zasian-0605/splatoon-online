@@ -234,7 +234,7 @@ function startSpecial(f,name,target,remote=false,extra={}){
     base.mode='ultra';base.until=t+6000;base.shots=3;base.next=0;
   }else if(name==='エナジースタンド'){
     const v=makeStand(f);
-    cfg.effects.stands.push({owner:f,team:f.team,pos:f.pos.clone(),group:v.g,cans:v.cans,used:new Set(),end:t+15000});
+    cfg.effects.stands.push({owner:f,team:f.team,pos:f.pos.clone(),group:v.g,cans:4,canMeshes:v.cans,used:new Set(),end:t+15000});
     clearState(f);
   }else if(name==='カニタンク'){
     base.mode='crab';base.until=t+9000;base.next=0;base.ball=false;base.visual=(()=>{const g=new THREE.Group();const body=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),mat(0x66bbcc,.94));body.scale.set(1.28,.74,1.28);body.position.y=.9;g.add(body);for(const x of [-.45,.45]){const l=new THREE.Mesh(new THREE.CylinderGeometry(.11,.16,.85,8),mat(0x335f72,.95));l.rotation.z=x<0?-.35:.35;l.position.set(x,.2,0);g.add(l);}f.root.add(g);return g;})();
@@ -333,7 +333,7 @@ function shootSpecial(f,dir){
     if(t<s.next)return false;
     s.next=t+360;s.shots--;
     try{
-      spawnBulletV60(f,d,{speed:48,damage:220,gravity:5,radius:.30,paintRadius:2.2,life:1.55,explosive:true,explosionRadius:3.0,splashDamage:53,kind:'v102UltraShot'});
+      spawnBulletV60(f,d,{speed:48,damage:220,gravity:5,radius:.30,paintRadius:2.2,life:1.55,explosive:true,explosionRadius:3.0,splashDamage:53,kind:'v102UltraShot'}); sendSpecial(f,'ウルトラショット',f.pos,{phase:'shot',dx:d.x,dy:d.y,dz:d.z});
     }catch(_){}
     if(s.shots<=0)setTimeout(()=>{if(stateFor(f)===s)finishActive(f,false);},160);
     return true;
@@ -341,7 +341,7 @@ function shootSpecial(f,dir){
 
   if(s.mode==='jet'){
     if(t-(s.lastShot||0)<180)return false;s.lastShot=t;
-    try{spawnBulletV60(f,d,{speed:38,damage:120,gravity:4,radius:.25,paintRadius:1.5,life:1.4,explosive:true,explosionRadius:2.2,splashDamage:50,kind:'v102Jetpack'});}catch(_){}
+    try{spawnBulletV60(f,d,{speed:38,damage:120,gravity:4,radius:.25,paintRadius:1.5,life:1.4,explosive:true,explosionRadius:2.2,splashDamage:50,kind:'v102Jetpack'});sendSpecial(f,'ジェットパック',f.pos,{phase:'shot',dx:d.x,dy:d.y,dz:d.z});}catch(_){}
     return true;
   }
 
@@ -349,9 +349,9 @@ function shootSpecial(f,dir){
     if(t-(s.lastShot||0)<(keys.space?420:140))return false;s.lastShot=t;
     try{
       if(keys.space){
-        spawnBulletV60(f,d,{speed:34,damage:50,gravity:8,radius:.32,paintRadius:2.3,life:1.8,explosive:true,explosionRadius:2.7,splashDamage:30,kind:'v102CrabCannon'});
+        spawnBulletV60(f,d,{speed:34,damage:50,gravity:8,radius:.32,paintRadius:2.3,life:1.8,explosive:true,explosionRadius:2.7,splashDamage:30,kind:'v102CrabCannon'}); sendSpecial(f,'カニタンク',f.pos,{phase:'shot',cannon:true,dx:d.x,dy:d.y,dz:d.z});
       }else{
-        spawnBulletV60(f,d,{speed:44,damage:32,gravity:5,radius:.18,paintRadius:1.5,life:1.2,kind:'v102CrabShot'});
+        spawnBulletV60(f,d,{speed:44,damage:32,gravity:5,radius:.18,paintRadius:1.5,life:1.2,kind:'v102CrabShot'}); sendSpecial(f,'カニタンク',f.pos,{phase:'shot',cannon:false,dx:d.x,dy:d.y,dz:d.z});
       }
     }catch(_){}
     return true;
@@ -425,6 +425,22 @@ window.__chargeBooyahFromNice=function(){
 const oldReceive=window.__receiveOriginalSpecial;
 window.__receiveOriginalSpecial=function(f,name,p,extra){
   if(SET.has(name)){
+    const e=extra&&typeof extra==='object'?extra:{};
+    if(e.phase==='shot'&&(name==='ウルトラショット'||name==='ジェットパック'||name==='カニタンク')){
+      const d=new THREE.Vector3(n(e.dx),n(e.dy),n(e.dz));
+      if(d.lengthSq()<.001)d.copy(facing(f));else d.normalize();
+      try{
+        const opt=name==='ウルトラショット'
+          ? {speed:48,damage:220,gravity:5,radius:.30,paintRadius:2.2,life:1.55,explosive:true,explosionRadius:3.0,splashDamage:53,kind:'v102RemoteUltra'}
+          : name==='ジェットパック'
+            ? {speed:38,damage:120,gravity:4,radius:.25,paintRadius:1.5,life:1.4,explosive:true,explosionRadius:2.2,splashDamage:50,kind:'v102RemoteJet'}
+            : (e.cannon
+              ? {speed:34,damage:50,gravity:8,radius:.32,paintRadius:2.3,life:1.8,explosive:true,explosionRadius:2.7,splashDamage:30,kind:'v102RemoteCrabCannon'}
+              : {speed:44,damage:32,gravity:5,radius:.18,paintRadius:1.5,life:1.2,kind:'v102RemoteCrabShot'});
+        spawnBulletV60(f,d,opt);
+      }catch(_){ }
+      return;
+    }
     const e=extra&&typeof extra==='object'?extra:{};
     if(name==='ナイスダマ'&&e.phase==='charge'){
       const s=stateFor(f)||startSpecial(f,name,p,true,e)&&stateFor(f);
@@ -699,6 +715,12 @@ function updateCanon(dt){
 
   for(const f of fighters||[]){
     const s=stateFor(f);if(!s)continue;
+    if(t>=s.until&&['jet','crab','stamp','reef','kraken','zip','chaku','booyah'].includes(s.mode)){
+      if(!f.isPlayer&&s.mode==='reef')explosion(f,f.pos,5.0,220,5.5);
+      if(!f.isPlayer&&s.mode==='chaku')explosion(f,f.pos,5.2,220,5.8);
+      finishActive(f,s.mode==='jet'||s.mode==='zip');
+      continue;
+    }
     if(s.visual&&s.mode==='jet')s.visual.rotation.y+=dt*3;
     if(s.visual&&s.mode==='crab')s.visual.rotation.y+=dt*.5;
     if(s.visual&&s.mode==='stamp')s.visual.rotation.x=isShooting?-.06:0;
@@ -714,6 +736,9 @@ function updateCanon(dt){
 }
 
 /* Ultra / Mega line cleanup */
+/* Store stand can meshes on the effect itself; four cans are consumed independently. */
+for(const s of cfg.effects.stands){if(Array.isArray(s.cans)&&!s.canMeshes){s.canMeshes=s.cans;s.cans=s.canMeshes.length;}}
+
 const oldFinishHook=window.killFighter;
 if(typeof oldFinishHook==='function'){
   window.killFighter=function(f){
