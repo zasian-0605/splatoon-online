@@ -4581,7 +4581,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const cost=12;
     if(!consumeInk(f,inkCost(f,cost))) return false;
 
-    const dir=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+    /* V97: W-forward in this control system is the negative Z direction
+       after yaw rotation. The old vector was its exact opposite, so every
+       maneuver slide moved backward. */
+    const dir=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
     if(dir.lengthSq()<0.0001) dir.set(0,0,-1);
     dir.normalize();
 
@@ -4611,23 +4614,30 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     const slideActive=!!(f._maneuverSlideUntil && now<f._maneuverSlideUntil);
 
     if(slideActive){
-      const d=f._maneuverSlideDir||new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
-      f.human.rotation.y=yaw+Math.PI;
-      playerVelocity.x=d.x*(f._maneuverSlideSpeed||24);
-      playerVelocity.z=d.z*(f._maneuverSlideSpeed||24);
-      playerVelocity.y=0;
-      const climbed=tryMoveWithCollision(f,playerVelocity,delta,false);
-      if(!climbed){
-        const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
-        f.pos.y=floorY;
-      }
-      f.root.rotation.y=f.human.rotation.y;
-      f.squid_mode=false;
-      setSquidVisual?.(f,false);
-      updateFighterAnimation(f,true,false);
-
-      if(now>=f._maneuverSlideUntil){
+      /* A slide error must not bubble into the generic V67 shooting catch,
+         which previously produced a misleading 「射撃エラー」 toast. */
+      try{
+        const d=f._maneuverSlideDir||new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+        if(d.lengthSq()<0.0001)d.set(0,0,-1);
+        d.normalize();
+        playerVelocity.x=d.x*(f._maneuverSlideSpeed||24);
+        playerVelocity.z=d.z*(f._maneuverSlideSpeed||24);
+        playerVelocity.y=0;
+        const climbed=tryMoveWithCollision(f,playerVelocity,delta,false);
+        if(!climbed){
+          const floorY=getSupportHeight(f.pos.x,f.pos.z,f.pos.y);
+          if(Number.isFinite(floorY))f.pos.y=floorY;
+        }
+        f.human.rotation.y=yaw+Math.PI;
+        f.root.rotation.y=f.human.rotation.y;
+        f.squid_mode=false;
+        setSquidVisual?.(f,false);
+        updateFighterAnimation(f,true,false);
+      }catch(err){
+        try{console.error('[V97 MANEUVER SLIDE]',err);}catch(_){}
         f._maneuverSlideUntil=0;
+        playerVelocity.x=0;
+        playerVelocity.z=0;
       }
       return;
     }
