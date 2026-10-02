@@ -453,7 +453,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(!f?.alive||!f.weapon)return null;
     const w=f.weapon;
     let kind=String(opts.kind||w.category||'shooter');
-    const d=applyLaunchPitch(aim(f,dir));
+    const aimed=aim(f,dir);\n    const d=opts.exactDirection?aimed:applyLaunchPitch(aimed);
     /* Preserve actual up/down aim while applying the lower upward bias. */
     d.normalize();
     let speed=Math.max(8,num(opts.speed,w.speed||35));
@@ -948,7 +948,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
           config:{weapon:wp?.id}
         });
       }
-      if(!rf||!wp)return legacyReceive?.(m);
+      if(!rf||!wp)return false;
 
       rf.weapon=wp;
       const d=new THREE.Vector3(
@@ -961,7 +961,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         Number.isFinite(Number(m.y))?Number(m.y):rf.pos.y,
         Number.isFinite(Number(m.z))?Number(m.z):rf.pos.z
       );
-      const spawnAtShot=(dir,opts={})=>spawnAtShot(dir,Object.assign({origin:shotOrigin},opts));
+      const spawnAtShot=(dir,opts={})=>spawnRemoteBullet(rf,dir,Object.assign({origin:shotOrigin,yOffset:0,exactDirection:true},opts));
       const mode=String(m.mode||'');
       const charge=Math.max(0,Math.min(1,Number.isFinite(Number(m.charge))?Number(m.charge):1));
 
@@ -1067,7 +1067,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       return true;
     }catch(err){
       try{console.warn('[V117 remote shot]',err);}catch(_){}
-      try{return legacyReceive?.(m);}catch(_){return false;}
+      return false;
     }
   }
   window.__receiveOnlineShotV60=receiveRemoteShotCanonical;
