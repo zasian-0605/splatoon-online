@@ -730,9 +730,11 @@ function serverResolveShot(room,player,m){
   const trajectory=serverFindTrajectoryHit(room,origin,dir,trajectoryWeapon,hitRadius);
   const nearest=trajectory.hit;
 
-  /* V116: shots also paint the server's turf state. Remote visuals are
-     generated from the shot event, but turf/ranking must not depend on a
-     separate client-only paint message. */
+  /* V121: keep server turf authoritative, but do not paint the entire
+     shot trajectory here.  The old origin -> endpoint fill looked like a
+     half-finished bomb path on the opponent's side.  The client projectile
+     handles the visible flight/trail; the server records only its resolved
+     impact/drop point as the gameplay fallback. */
   try{
     const paintEnd=nearest
       ? nearest.hit
@@ -745,8 +747,7 @@ function serverResolveShot(room,player,m){
     );
     const paintY=Number(player.serverPos?.y)||0;
     markServerPaint(
-      room,origin.x,origin.z,paintRadius,player.team,paintY,
-      Number(paintEnd.x),Number(paintEnd.z)
+      room,Number(paintEnd.x),Number(paintEnd.z),paintRadius,player.team,paintY
     );
   }catch(_){}
 
