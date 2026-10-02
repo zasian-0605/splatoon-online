@@ -4993,6 +4993,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       for(const b of bullets||[]){
         if(b?.__v116Unified||b?.__onlineRemote)continue;
       }
+      /* Dispose every projectile left by practice/a previous match. */
+      if(Array.isArray(bullets)){
+        for(const b of bullets){
+          try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
+        }
+        bullets.length=0;
+      }
       const rp=window.__V117_REMOTE_PROJECTILES;
       if(Array.isArray(rp))for(const b of rp){
         try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
