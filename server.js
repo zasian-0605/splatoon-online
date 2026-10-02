@@ -305,7 +305,7 @@ const SERVER_SPECIALS={
   'デコイチラシ':[70,2.4],'スミナガシート':[20,3.5],'ウルトラチャクチ':[160,4.0],'ショクワンダー':[80,3.0]
 };
 const SERVER_WEAPON_INK_COST=[
-  1.0,4.8,0.75
+  0.95,4.4,0.75
 ];
 const SERVER_SPECIAL_BY_WEAPON={
   0:'ウルトラショット',
@@ -696,12 +696,8 @@ function serverResolveShot(room,player,m){
         ? trajectory.wall.wall.point
         : (trajectory.dropEnd||trajectory.straightEnd||origin);
     const paintRadius=Math.max(
-      .55,
-      Math.min(2.4,
-        w.cat==='blaster' ? 1.35 :
-        w.cat==='slosher' ? 1.45 :
-        w.cat==='charger' ? 1.05 : 1.0
-      )
+      .30,
+      Math.min(2.40,Number(w.paintRadius)||.9)
     );
     const paintY=Number(player.serverPos?.y)||0;
     markServerPaint(
