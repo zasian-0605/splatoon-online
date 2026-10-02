@@ -145,8 +145,9 @@
       const r=roleRange(f.weapon);
       let ideal=(r[0]+r[1])*.5;
 
-      // Retreat when hurt or standing in enemy ink.
-      if(f.hp<25||enemyInkAtSafe(f)){
+      // Retreat only when genuinely in danger. The old threshold made the CPU retreat
+      // so often that it looked frightened even when it still had plenty of HP.
+      if(f.hp<14 || (enemyInkAtSafe(f) && f.hp<38)){
         const dx=f.pos.x-target.pos.x,dz=f.pos.z-target.pos.z;
         const len=Math.hypot(dx,dz)||1;
         return {x:f.pos.x+dx/len*8,z:f.pos.z+dz/len*8};
@@ -169,7 +170,7 @@
 
     // No target: advance toward center/front while keeping role separation.
     const role=f.weapon?.category;
-    if(role==='charger'||role==='spinner')return {x:0,z:sign*10};
+    if(role==='charger'||role==='spinner')return {x:0,z:sign*18};
     if(role==='roller'||role==='wiper')return {x:0,z:sign*28};
     return {x:0,z:sign*20};
   }
@@ -177,7 +178,7 @@
   function shouldSquid(f,destination,target){
     if(!ownInkAt(f)||f.ink<25)return false;
     if(enemyInkAtSafe(f))return false;
-    if(target&&dist2D(f,target.pos)<14)return false;
+    if(target&&dist2D(f,target.pos)<20)return false;
     if(!destination)return false;
     return dist2D(f.pos,destination)>6;
   }
@@ -257,10 +258,13 @@
 
       if(w.category==='spinner'){
         if(!s.chargeStart)s.chargeStart=now;
-        const need=Math.max(220,(w.chargeTime||650)*.52);
+        const need=Math.max(180,(w.chargeTime||650)*.45);
         if(now-s.chargeStart>=need&&now>=s.nextShot){
-          s.nextShot=now+520;
-          if(typeof tryShoot==='function')tryShoot(f,dir,now);
+          s.nextShot=now+Math.max(360,Math.min(760,(w.rate||60)*8));
+          const frac=clamp((now-s.chargeStart)/(w.chargeTime||650),.45,1);
+          if(typeof fireSplatlingBurst==='function'){
+            fireSplatlingBurst(f,frac,dir);
+          }
           s.chargeStart=0;
         }
         return;
