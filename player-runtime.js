@@ -845,6 +845,7 @@
   overlay.id='v107-howto-overlay';
   overlay.innerHTML=`
     <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="キーボード操作">
+      <div style="text-align:center;color:#e3ff00;font:900 16px Arial,Meiryo,sans-serif;margin-bottom:10px;">Uで閉じる</div>
       <div class="v107-keyboard">
         <div class="v107-krow">
           <div class="v107-kitem"><span class="v107-key">Q</span><i></i><small>サブ</small></div>
