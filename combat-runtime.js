@@ -848,6 +848,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   try{tryShoot=fireBasic;}catch(_){}
   window.fireChargerShot=fireCharger;
   try{fireChargerShot=fireCharger;}catch(_){}
+  window.fireChargerShotV60=fireCharger;
+  try{fireChargerShotV60=fireCharger;}catch(_){}
+  window.fireStringerShot=fireCharger;
+  try{fireStringerShot=fireCharger;}catch(_){}
   window.fireSplatlingBurst=fireSplatling;
   try{fireSplatlingBurst=fireSplatling;}catch(_){}
   window.__V67_SIMPLE_SAFE_SHOT=fireBasic;
@@ -1083,7 +1087,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const chargeTime=Math.max(120,Number(st.time)||800);
     /* A heavy weapon must have a real charge period; accidental micro-clicks
        no longer become full/rapid shots. */
-    if(elapsed<Math.min(180,chargeTime*.18))return;
+    if(elapsed<60)return;
     const heavyCooldown=num(f?.__canonicalHeavyNextAt,0);
     if(performance.now()<heavyCooldown)return;
     const frac=Math.max(0,Math.min(1,elapsed/chargeTime));
@@ -1141,6 +1145,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       /* A stale heavy state must never block the next press.
          Replace it with the newest valid charge state. */
       if(heavy){
+        if(heavy.kind===w.category)return;
         heavy=null;
         clearLegacyHeavyFlags(f);
       }
