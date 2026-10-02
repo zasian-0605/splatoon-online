@@ -600,6 +600,30 @@ function serverResolveShot(room,player,m){
   const trajectory=serverFindTrajectoryHit(room,origin,dir,w,hitRadius);
   const nearest=trajectory.hit;
 
+  /* V116: shots also paint the server's turf state. Remote visuals are
+     generated from the shot event, but turf/ranking must not depend on a
+     separate client-only paint message. */
+  try{
+    const paintEnd=nearest
+      ? nearest.hit
+      : trajectory.wall
+        ? trajectory.wall.wall.point
+        : (trajectory.dropEnd||trajectory.straightEnd||origin);
+    const paintRadius=Math.max(
+      .55,
+      Math.min(2.4,
+        w.cat==='blaster' ? 1.35 :
+        w.cat==='slosher' ? 1.45 :
+        w.cat==='charger' ? 1.05 : 1.0
+      )
+    );
+    const paintY=Number(player.serverPos?.y)||0;
+    markServerPaint(
+      room,origin.x,origin.z,paintRadius,player.team,paintY,
+      Number(paintEnd.x),Number(paintEnd.z)
+    );
+  }catch(_){}
+
   if(w.cat==='blaster'){
     const end=trajectory.straightEnd;
     const center=nearest
