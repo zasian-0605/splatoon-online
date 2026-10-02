@@ -1171,6 +1171,75 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(e.buttons===0)releaseHeavy(true);
   },true);
 
+  /* V118 FINAL INPUT REPAIR
+     One authoritative keyboard path for the three action keys.
+     Shift = hold squid, Q = bomb, R = special.
+     Q/R first leave squid, then call the current public action function.
+  */
+  if(!window.__V118_INPUT_REPAIR){
+    window.__V118_INPUT_REPAIR=true;
+    const battleNow=()=>typeof currentPhase!=='undefined'&&(currentPhase===1.5||currentPhase===2);
+    const currentPlayer=()=>window.playerFighter||null;
+    const forceHumanForAction=(f,reason)=>{
+      if(!f?.isPlayer)return;
+      if(f.squid_mode){
+        try{window.__V66_BREAK_SQUID_FOR_ACTION?.(reason);}catch(_){}
+        f.squid_mode=false;
+        f._neutralSquid=false;
+        try{keys.shift=false;}catch(_){}
+        try{window.__V66_SET_SQUID_VISUAL?.(f,false);}catch(_){}
+        try{if(f.human)f.human.visible=true;if(f.squid)f.squid.visible=false;}catch(_){}
+      }
+    };
+    window.addEventListener('keydown',e=>{
+      if(!battleNow())return;
+      if(e.code==='ShiftLeft'||e.code==='ShiftRight'){
+        if(e.repeat)return;
+        e.preventDefault();e.stopImmediatePropagation();
+        try{beginSquidHoldV66(e);}catch(_){
+          try{keys.shift=true;}catch(_){}
+          try{window.playerFighter.squid_mode=true;}catch(_){}
+        }
+        return;
+      }
+      if(e.code==='KeyQ'){
+        e.preventDefault();e.stopImmediatePropagation();
+        const f=currentPlayer();
+        if(!f?.alive)return;
+        forceHumanForAction(f,'sub');
+        const d=aimDir(f);
+        try{
+          if(typeof window.tryThrowSub==='function')window.tryThrowSub(f,d,performance.now());
+          else if(typeof tryThrowSub==='function')tryThrowSub(f,d,performance.now());
+        }catch(err){try{console.warn('[V118 SUB]',err);}catch(_){}}
+        return;
+      }
+      if(e.code==='KeyR'){
+        e.preventDefault();e.stopImmediatePropagation();
+        const f=currentPlayer();
+        if(!f?.alive)return;
+        forceHumanForAction(f,'special');
+        try{
+          if(typeof window.fireSpecial==='function')window.fireSpecial(f);
+          else if(typeof fireSpecial==='function')fireSpecial(f);
+        }catch(err){try{console.warn('[V118 SPECIAL]',err);}catch(_){}}
+      }
+    },true);
+    window.addEventListener('keyup',e=>{
+      if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
+      if(!battleNow())return;
+      e.preventDefault();e.stopImmediatePropagation();
+      try{endSquidHoldV66(e);}catch(_){
+        try{keys.shift=false;}catch(_){}
+        try{if(window.playerFighter){window.playerFighter.squid_mode=false;window.__V66_SET_SQUID_VISUAL?.(window.playerFighter,false);}}catch(_){}
+      }
+    },true);
+    window.addEventListener('blur',()=>{
+      try{endSquidHoldV66();}catch(_){try{keys.shift=false;}catch(_){}}
+    },true);
+    window.__V118_INPUT_REPAIR_READY=true;
+  }
+
   /* Re-apply hold-to-squid after later special/movement wrappers run. */
   const movementBeforeSquidRepair=window.updatePlayerMovement;
   if(typeof movementBeforeSquidRepair==='function'){
