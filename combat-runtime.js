@@ -554,6 +554,18 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       b.age+=dt;
       const prev=b.mesh.position.clone();
 
+      /* Remote projectile watchdog: never allow a received shot to become a
+         stationary sphere because a legacy layer replaced/zeroed its velocity. */
+      if(b.__onlineRemote){
+        const rs=Math.max(8,num(b.__onlineRemoteSpeed,35));
+        if(!b.velocity||typeof b.velocity.lengthSq!=='function'||b.velocity.lengthSq()<.0001){
+          const rd=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1));
+          if(rd.lengthSq()<.0001)rd.set(0,0,1);
+          rd.normalize();
+          b.velocity=rd.multiplyScalar(rs);
+        }
+      }
+
       if(b.trajectory==='charger'){
         if(!b.chargerDrop){
           const hSpeed=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
@@ -909,7 +921,30 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   function spawnRemoteBullet(f,dir,opts={}){
     const fn=canonicalProjectileSpawner;
     if(typeof fn!=='function')throw new Error('canonical projectile spawner unavailable');
-    return fn(f,dir,opts);
+    const d=(dir?.clone?dir.clone():new THREE.Vector3(0,0,1));
+    if(d.lengthSq()<.0001)d.set(0,0,1);
+    d.normalize();
+    const b=fn(f,d,opts);
+    if(!b)return null;
+
+    /* Online shots must have an explicit, non-zero local flight state.
+       Do not depend on whichever legacy spawner happened to be active when
+       this message was received. */
+    const speed=Math.max(8,numV117(opts.speed,35));
+    b.__onlineRemote=true;
+    b.__onlineRemoteDir=d.clone();
+    b.__onlineRemoteSpeed=speed;
+    if(!b.velocity||typeof b.velocity.lengthSq!=='function'||b.velocity.lengthSq()<.0001){
+      b.velocity=d.clone().multiplyScalar(speed);
+    }else{
+      b.velocity.copy(d).multiplyScalar(speed);
+    }
+    b.age=0;
+    if(b.mesh){
+      b.lastPos=b.mesh.position.clone();
+      if(b.startPos)b.startPos=b.mesh.position.clone();
+    }
+    return b;
   }
 
   const aimDir=f=>{
