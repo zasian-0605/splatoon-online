@@ -439,7 +439,8 @@
   function fireCharger(f,dir,frac){
     if(!f?.alive||isSquid(f)||!battle()||f.weapon?.category!=='charger')return false;
     const w=f.weapon,q=Math.max(.05,Math.min(1,num(frac,0)));
-    const cost=num(w.inkCost,8)*(.75+.75*q);
+    /* V117: client and server use the same authoritative charge cost. */
+    const cost=num(w.inkCost,8)*(.55+.90*q);
     if(!consume(f,cost))return false;
     const d=aim(f,dir);
     if(w.kind==='stringer'){
