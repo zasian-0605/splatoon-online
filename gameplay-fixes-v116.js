@@ -246,11 +246,11 @@
 
       if(b.trajectory==='charger'){
         if(!b.chargerDrop){
+          const hSpeed=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
           const move=Math.min(
-            b.velocity.length()*dt,
+            hSpeed*dt,
             Math.max(0,b.maxRange-b.horizontalTravel)
           );
-          const hSpeed=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
           const t=move/hSpeed;
           b.mesh.position.x+=b.velocity.x*t;
           b.mesh.position.y+=b.velocity.y*t;
@@ -364,7 +364,7 @@
     const t=num(now,performance.now());
     if(t-num(f.lastShot,0)<num(w.rate,100))return false;
     const baseCost=Math.max(.1,num(w.inkCost,1));
-    if(!consume(f,baseCost*(num(f.gearProfile?.inkSaver,1)||1)))return false;
+    if(!consume(f,baseCost))return false;
     f.lastShot=t;
 
     const base=aim(f,dir);
