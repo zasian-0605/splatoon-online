@@ -3102,6 +3102,7 @@ function updateOngoingEffects(delta){
    ========================================================= */
 function setupControls(){
   window.addEventListener('keydown',(e)=>{
+    if(window.__V117_CANONICAL_RUNTIME && (e.code==='ShiftLeft'||e.code==='ShiftRight')) return;
     if(e.code==='KeyW') keys.w=true;
     if(e.code==='KeyA') keys.a=true;
     if(e.code==='KeyS') keys.s=true;
@@ -3110,6 +3111,7 @@ function setupControls(){
     if(e.code==='ShiftLeft'||e.code==='ShiftRight') keys.shift=true;
   });
   window.addEventListener('keyup',(e)=>{
+    if(window.__V117_CANONICAL_RUNTIME && (e.code==='ShiftLeft'||e.code==='ShiftRight')) return;
     if(e.code==='KeyW') keys.w=false;
     if(e.code==='KeyA') keys.a=false;
     if(e.code==='KeyS') keys.s=false;
@@ -3272,6 +3274,7 @@ function showToast(msg){
 }
 
 window.addEventListener('keydown',(e)=>{
+  if(window.__V117_CANONICAL_RUNTIME && (e.code==='KeyQ'||e.code==='KeyR')) return;
   if(e.code==='KeyE'){
     if(currentPhase===1.5){
       e.preventDefault();
@@ -5854,6 +5857,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   window.addEventListener('keydown',e=>{
+    if(window.__V117_CANONICAL_RUNTIME && (e.code==='ShiftLeft'||e.code==='ShiftRight')) return;
     if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
     if(currentPhase!==1.5&&currentPhase!==2)return;
     if(e.repeat)return;
@@ -5861,6 +5865,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   },true);
 
   window.addEventListener('keyup',e=>{
+    if(window.__V117_CANONICAL_RUNTIME && (e.code==='ShiftLeft'||e.code==='ShiftRight')) return;
     if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
     endSquidHoldV66(e);
   },true);
@@ -6849,6 +6854,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
     if(currentPhase!==1.5 && currentPhase!==2) return;
 
+    if(window.__V117_CANONICAL_RUNTIME && (e.code==='KeyQ'||e.code==='KeyR')) return;
     if(e.code==='KeyQ'){
       e.preventDefault(); e.stopImmediatePropagation();
       doPlayerSubThrow(); return;
