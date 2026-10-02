@@ -907,7 +907,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   const numV117=(v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
   const YV117=new THREE.Vector3(0,1,0);
   function spawnRemoteBullet(f,dir,opts={}){
-    const fn=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
+    const fn=canonicalProjectileSpawner;
     if(typeof fn!=='function')throw new Error('canonical projectile spawner unavailable');
     return fn(f,dir,opts);
   }
@@ -935,9 +935,17 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
   }
 
-  /* ---------- Canonical remote ranged-shot receiver ---------- */
+  /* ---------- Canonical remote ranged-shot receiver ----------
+     V117 hardening: never allow the remote-shot receiver to re-enter itself. */
   const legacyReceive=window.__receiveOnlineShotV60;
+  const canonicalProjectileSpawner=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
+  let receivingRemoteShot=false;
   function receiveRemoteShotCanonical(m){
+    if(receivingRemoteShot){
+      try{console.warn('[V117 remote shot] recursive receiver call blocked');}catch(_){}
+      return false;
+    }
+    receivingRemoteShot=true;
     try{
       const wid=Number(m?.weaponId)||0;
       const wp=weaponList[wid]||weaponList[0];
