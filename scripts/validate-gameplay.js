@@ -56,9 +56,9 @@ if (Object.keys(serverWeapons).map(Number).sort((a,b)=>a-b).join(',') !== '0,1,2
 if (serverCosts.length !== 3) throw new Error('Server weapon ink-cost table must contain exactly 3 entries');
 
 const expected = [
-  {id:0,name:'スプラシューター',category:'shooter',damage:32,rate:95,range:32,speed:34,inkCost:1.0,sub:'splatBomb',special:'ウルトラショット'},
-  {id:1,name:'バケットスロッシャー',category:'slosher',damage:68,rate:500,range:25,speed:19,explosionRadius:2.4,inkCost:4.8,sub:'fizzyBomb',special:'ナイスダマ'},
-  {id:2,name:'スプラマニューバー',category:'maneuver',damage:28,rate:55,range:30,speed:38,inkCost:.75,sub:'splatBomb',special:'カニタンク'}
+  {id:0,name:'スプラシューター',category:'shooter',damage:32,rate:95,range:30,speed:37,life:1.55,paintRadius:1.15,inkCost:.95,sub:'splatBomb',special:'ウルトラショット'},
+  {id:1,name:'バケットスロッシャー',category:'slosher',damage:70,rate:500,range:16,speed:17,life:1.35,paintRadius:1.75,explosionRadius:2.4,inkCost:4.4,sub:'fizzyBomb',special:'ナイスダマ'},
+  {id:2,name:'スプラマニューバー',category:'maneuver',damage:28,rate:55,range:30,speed:38,life:1.0,paintRadius:.72,inkCost:.75,sub:'splatBomb',special:'カニタンク'}
 ];
 
 for (const expectedWeapon of expected) {
@@ -81,6 +81,8 @@ for (const expectedWeapon of expected) {
   equal('server rate '+expectedWeapon.id, serverRule.rate, expectedWeapon.rate);
   equal('server range '+expectedWeapon.id, serverRule.range, expectedWeapon.range);
   equal('server speed '+expectedWeapon.id, serverRule.speed, expectedWeapon.speed);
+  if (expectedWeapon.life != null) equal('server life '+expectedWeapon.id, serverRule.life, expectedWeapon.life);
+  if (expectedWeapon.paintRadius != null) equal('server paint radius '+expectedWeapon.id, serverRule.paintRadius, expectedWeapon.paintRadius);
   if (expectedWeapon.explosionRadius != null) equal('server explosion '+expectedWeapon.id, serverRule.explosion, expectedWeapon.explosionRadius);
   equal('server ink cost '+expectedWeapon.id, serverCosts[expectedWeapon.id], expectedWeapon.inkCost);
   equal('server sub '+expectedWeapon.id, serverSubs[expectedWeapon.id], expectedWeapon.sub);
@@ -123,4 +125,21 @@ if (!/Math\.max\(0, Math\.min\(2, Math\.floor\(Number\(m\.weaponId\)\)\)\)/.test
   throw new Error('Server joinQueue weapon clamp is not 0..2');
 }
 
-console.log('Validated the current 3-weapon client/server contract, online weapon-ID bounds, sub/special mappings, and 50 outfit modifiers.');
+/* Online projectile contract: server broadcasts one authoritative projectile
+   spec and the remote client consumes it instead of rebuilding different
+   speed/range/gravity/paint values locally. */
+if (!/serverProjectileSpec\(SERVER_WEAPONS\[weaponId\],\{charge,mode\}\)/.test(server)) {
+  throw new Error('Server does not attach the authoritative projectile spec to shot packets');
+}
+if (!/m\.projectile&&typeof m\.projectile==='object'/.test(fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8'))) {
+  throw new Error('Remote client does not consume the authoritative projectile spec');
+}
+if (!/muzzleForward:0,exactDirection:true/.test(fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8'))) {
+  throw new Error('Remote client still offsets an already-positioned online muzzle');
+}
+const combat=fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8');
+if (!/__onlineRemote=true;/.test(combat) || !/b\.velocity\.copy\(d\)\.multiplyScalar\(speed\)/.test(combat)) {
+  throw new Error('Remote projectile velocity watchdog/initialization is missing');
+}
+
+console.log('Validated the current 3-weapon client/server contract, online projectile contract, weapon-ID bounds, sub/special mappings, and 50 outfit modifiers.');
