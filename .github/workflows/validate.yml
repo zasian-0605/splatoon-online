@@ -13,5 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --no-package-lock
       - run: node --check server.js
       - run: node scripts/validate-html-js.js
