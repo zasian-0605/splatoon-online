@@ -810,6 +810,20 @@
       .v107-online-route .v107-step strong{font-size:20px;}
     }
   `;
+
+  /* U: キーボードだけを表示。各キーから線を伸ばして役割を示す。 */
+  style.textContent += String.raw`
+    #v107-howto-card{width:min(980px,94vw);max-height:90vh;overflow:auto;padding:28px;background:rgba(0,0,0,.88);border:4px solid #fff;border-radius:18px;box-sizing:border-box;}
+    .v107-keyboard{display:flex;flex-direction:column;align-items:center;gap:26px;min-height:320px;justify-content:center;}
+    .v107-krow{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
+    .v107-kitem{position:relative;display:flex;flex-direction:column;align-items:center;min-width:78px;}
+    .v107-kitem i{width:2px;height:30px;background:#e3ff00;display:block;}
+    .v107-kitem small{min-height:22px;color:#fff;font:900 15px/1.2 Arial,Meiryo,sans-serif;white-space:nowrap;}
+    .v107-key{display:inline-flex;align-items:center;justify-content:center;min-width:58px;height:48px;padding:4px 10px;box-sizing:border-box;border:3px solid #fff;border-bottom-width:6px;border-radius:9px;background:#111;color:#fff;font:900 20px/1 Arial Black,Arial,Meiryo,sans-serif;}
+    .v107-key.wide{min-width:100px;}
+    .v107-key.space{min-width:180px;}
+    @media(max-width:700px){.v107-keyboard{gap:20px}.v107-krow{gap:7px}.v107-kitem{min-width:62px}.v107-kitem i{height:22px}.v107-key{min-width:48px;height:42px;font-size:17px}.v107-key.space{min-width:135px}.v107-kitem small{font-size:12px}}
+  `;
   document.head.appendChild(style);
 
   const button=document.createElement('button');
@@ -821,39 +835,26 @@
   const overlay=document.createElement('div');
   overlay.id='v107-howto-overlay';
   overlay.innerHTML=`
-    <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="操作説明">
-      <div id="v107-howto-title">🎮 操作説明</div>
-      <div id="v107-howto-subtitle">これだけ覚えればOK！　Uで開閉</div>
-
-      <div id="v107-howto-body">
-        <div class="v107-help-box">
-          <b>🎮 基本</b>
-          <div class="v107-help-row"><span class="v107-key">WASD</span><span>移動</span></div>
-          <div class="v107-help-row"><span class="v107-key wide">Space</span><span>ジャンプ</span></div>
-          <div class="v107-help-row"><span class="v107-mouse">マウス</span><span>視点</span></div>
-          <div class="v107-help-row"><span class="v107-mouse">左クリック</span><span>射撃</span></div>
+    <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="キーボード操作">
+      <div class="v107-keyboard">
+        <div class="v107-krow">
+          <div class="v107-kitem"><span class="v107-key">Q</span><i></i><small>サブ</small></div>
+          <div class="v107-kitem"><span class="v107-key">W</span><i></i><small>前進</small></div>
+          <div class="v107-kitem"><span class="v107-key">E</span><i></i><small>カスタマイズ</small></div>
+          <div class="v107-kitem"><span class="v107-key">R</span><i></i><small>スペシャル</small></div>
+          <div class="v107-kitem"><span class="v107-key">3</span><i></i><small>オンライン</small></div>
+          <div class="v107-kitem"><span class="v107-key">P</span><i></i><small>オンライン</small></div>
         </div>
-
-        <div class="v107-help-box">
-          <b>🦑 イカ</b>
-          <div class="v107-help-row"><span class="v107-key wide">Shift</span><span>押している間だけイカ</span></div>
+        <div class="v107-krow">
+          <div class="v107-kitem"><span class="v107-key">A</span><i></i><small>左</small></div>
+          <div class="v107-kitem"><span class="v107-key">S</span><i></i><small>後退</small></div>
+          <div class="v107-kitem"><span class="v107-key">D</span><i></i><small>右</small></div>
         </div>
-
-        <div class="v107-help-box">
-          <b>💣 アクション</b>
-          <div class="v107-help-row"><span class="v107-key">Q</span><span>サブ</span></div>
-          <div class="v107-help-row"><span class="v107-key">R</span><span>スペシャル</span></div>
-          <div class="v107-help-row"><span class="v107-key">E</span><span>カスタマイズ</span></div>
-          <div class="v107-help-row"><span class="v107-key">3 / P</span><span>オンライン</span></div>
-        </div>
-
-        <div class="v107-help-box full">
-          <b>⭐ 武器</b>
-          <div class="v107-note">スプラシューター / バケットスロッシャー / スプラマニューバー</div>
+        <div class="v107-krow">
+          <div class="v107-kitem"><span class="v107-key wide">Shift</span><i></i><small>イカ</small></div>
+          <div class="v107-kitem"><span class="v107-key space">Space</span><i></i><small>ジャンプ</small></div>
         </div>
       </div>
-
-      <button id="v107-howto-close" type="button">閉じる</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -876,7 +877,7 @@
   overlay.addEventListener('click',e=>{
     if(e.target===overlay)close();
   });
-  document.getElementById('v107-howto-close').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) close(); });
   window.addEventListener('keydown',e=>{
     if(e.code==='Escape'&&overlay.style.display==='flex')close();
   },true);
