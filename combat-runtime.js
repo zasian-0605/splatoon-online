@@ -1082,9 +1082,24 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
      Input -> charge state -> release -> fireCharger -> spawnUnified.
      No older charger handler is allowed to participate.
      ========================================================== */
+  function updateCanonicalChargerGauge(frac){
+    const g=document.getElementById('charge-gauge');
+    if(g){
+      g.style.display='block';
+      g.style.setProperty('--pct',String(Math.round(Math.max(0,Math.min(1,Number(frac)||0))*100)));
+    }
+    try{document.documentElement.classList.add('charger-charging');}catch(_){}
+  }
+  function hideCanonicalChargerGauge(){
+    const g=document.getElementById('charge-gauge');
+    if(g)g.style.display='none';
+    try{document.documentElement.classList.remove('charger-charging');}catch(_){}
+  }
+
   function startCanonicalCharger(pointerId,source='mouse'){
     const f=player();
     if(!f?.alive||!battle()||f.weapon?.category!=='charger')return false;
+    if(f.squid_mode)return false;
     if(chargerInput)return false;
 
     const start=performance.now();
@@ -1094,8 +1109,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     f.isCharging=true;               // visual/legacy compatibility only
     f.chargeStart=start;             // HUD compatibility only
     isShooting=false;
-    try{setChargerChargeVisual(true);}catch(_){}
-    try{gauge(0);}catch(_){}
+    updateCanonicalChargerGauge(0);
     return true;
   }
 
@@ -1117,8 +1131,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       f.isCharging=false;
       f.chargeStart=0;
     }
-    try{setChargerChargeVisual(false);}catch(_){}
-    try{hideGauge();}catch(_){}
+    hideCanonicalChargerGauge();
     if(!st||aborted||!f?.alive)return false;
 
     const elapsed=Math.max(0,performance.now()-st.start);
@@ -1223,6 +1236,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
     if(w.category==='charger'){
       if(chargerInput)return;
+      e.preventDefault();
+      try{e.target?.setPointerCapture?.(e.pointerId);}catch(_){}
       startCanonicalCharger(e.type==='pointerdown'?e.pointerId:'mouse',
         e.pointerType==='mouse'?'mouse':'desktop');
       return;
@@ -1243,8 +1258,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         f.spinnerChargeStart=heavy.start;
       }
       if(kind==='wiper')f._v60BladeChargeStart=heavy.start;
-      const gauge=document.getElementById('charge-gauge');
-      if(gauge)gauge.style.display='block';
+      updateCanonicalChargerGauge(0);
       return;
     }
 
@@ -1335,7 +1349,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       pitch=Math.max(-Math.PI/2.5,Math.min(Math.PI/3,pitch));
     }
     st.lastX=e.clientX;st.lastY=e.clientY;
-    gauge(chargerFrac(st));
+    updateCanonicalChargerGauge(chargerFrac(st));
   },true);
 
   /* Touchscreens may synthesize a mouse event after touchend. Keep that
@@ -1511,7 +1525,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
   window.__V116_UPDATE_BULLETS=updateUnifiedBullets;
   window.__V117_CANONICAL_RUNTIME={
-    build:'V120-CANONICAL-CHARGER-AND-POINTER-SHOT-2026-10-03',
+    build:'V121-CHARGER-GAUGE-AND-INPUT-REPAIR-2026-10-03',
     projectile:'V116',
     input:'single-desktop-action-path',
     remoteShots:'V117-canonical-ranged',
