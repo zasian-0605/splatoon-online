@@ -2,7 +2,7 @@
 (function(){
 'use strict';
 const s=document.createElement('style');
-s.textContent='
+s.textContent=`
 #next-prompt{display:none !important;}
 #dialogue-box{cursor:pointer !important;}
 #v113-radio-next{min-width:min(520px,88vw) !important;padding:20px 28px !important;font-size:clamp(24px,5vw,38px) !important;}
@@ -14,24 +14,24 @@ s.textContent='
 #v107-howto-subtitle{font-size:clamp(16px,2.8vw,21px) !important;color:#fff !important;}
 #v107-howto-body .v107-help-box.full{display:none !important;}
 @media(max-width:700px){#v114-practice-title{top:8px;border-width:3px;padding:8px 18px 10px;}}
-';
+`;
 document.head.appendChild(s);
 const title=document.createElement('div');
 title.id='v114-practice-title';
 title.textContent='🎯 試し撃ち場';
 document.body.appendChild(title);
 let shown=false,wasPractice=false;
-function p(){try{return Number(currentPhase)}catch(_){return -1}}
+function phase(){try{return Number(currentPhase)}catch(_){return -1}}
 function sync(){
- const phase=p(), practice=phase===1.5, playable=practice||phase===2;
+ const p=phase(),practice=p===1.5,playable=practice||p===2;
  title.style.display=practice?'block':'none';
  const next=document.getElementById('v113-radio-next');
  const help=document.getElementById('v113-radio-help');
  if(next)next.textContent='タップして次へ ▶';
  if(help)help.textContent='画面をタップして次へ';
- const t=document.getElementById('v107-howto-title');
+ const titleEl=document.getElementById('v107-howto-title');
  const sub=document.getElementById('v107-howto-subtitle');
- if(t)t.textContent='🎮 まずは これだけ！';
+ if(titleEl)titleEl.textContent='🎮 まずは これだけ！';
  if(sub)sub.textContent='この画面を見ながら操作してみよう。';
  document.querySelectorAll('#v107-howto-body .v107-help-box').forEach(b=>{
   const x=(b.textContent||'').replace(/\s+/g,' ');
@@ -41,7 +41,7 @@ function sync(){
   shown=true;
   setTimeout(()=>{try{window.__V108_OPEN_HOWTO?.()}catch(e){console.warn('[V114 auto help]',e)}},350);
  }
- if(!practice&&wasPractice&&phase!==2)shown=false;
+ if(!practice&&wasPractice&&p!==2)shown=false;
  wasPractice=practice;
 }
 setInterval(sync,180);
