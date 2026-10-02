@@ -240,27 +240,9 @@ function serverResolveHorizontalMove(oldPos,newPos){
   };
 }
 const SERVER_WEAPONS={
-  0:{cat:'shooter',damage:32,rate:95,range:30,speed:37},1:{cat:'shooter',damage:42,rate:180,range:31,speed:35},
-  2:{cat:'shooter',damage:24,rate:70,range:30,speed:38},3:{cat:'shooter',damage:35,rate:145,range:39,speed:42},
-  4:{cat:'shooter',damage:48,rate:245,range:38,speed:38},
-  5:{cat:'blaster',damage:76,rate:590,range:22,speed:20,explosion:2.55,splash:48},6:{cat:'blaster',damage:58,rate:180,range:24,speed:20,explosion:2.4,splash:55},
-  7:{cat:'blaster',damage:54,rate:430,range:32,speed:30,explosion:1.9,splash:28},8:{cat:'blaster',damage:82,rate:720,range:30,speed:22,explosion:2.8,splash:44},
-  9:{cat:'charger',tap:34,full:160,rate:900,range:62,speed:70},10:{cat:'charger',tap:30,full:180,rate:1250,range:72,speed:85},11:{cat:'charger',tap:32,full:92,rate:520,range:48,speed:60},
-  12:{cat:'roller',damage:78,flickDamage:120,flickRange:14,rate:380,range:3},13:{cat:'roller',damage:108,flickDamage:150,flickRange:16,rate:560,range:3.5},14:{cat:'roller',damage:42,rate:145,range:2},
-  15:{cat:'maneuver',damage:18,rate:55,range:21,speed:34},16:{cat:'maneuver',damage:19,rate:78,range:35,speed:37},17:{cat:'maneuver',damage:30,rate:145,range:31,speed:29},
-  18:{cat:'slosher',damage:70,rate:500,range:16,speed:17,explosion:2.4},19:{cat:'slosher',damage:50,rate:400,range:13,speed:19,explosion:1.9},
-  20:{cat:'slosher',damage:84,rate:720,range:22,speed:15,explosion:3.0},21:{cat:'slosher',damage:70,rate:640,range:28,speed:21,explosion:2.6},
-  22:{cat:'wiper',damage:80,full:120,rate:520,range:5},23:{cat:'wiper',damage:100,full:150,rate:720,range:6},
-  24:{cat:'shooter',damage:28,rate:70,range:32,speed:43},25:{cat:'shooter',damage:14,rate:42,range:28,speed:38},
-  26:{cat:'shooter',damage:29,rate:240,range:35,speed:41},27:{cat:'shooter',damage:41,rate:300,range:38,speed:43},
-  28:{cat:'blaster',damage:85,rate:600,range:23,speed:27,explosion:2.35,splash:50},29:{cat:'roller',damage:70,flickDamage:90,flickRange:14,rate:300,range:2.65},
-  30:{cat:'roller',damage:42,rate:120,range:2.35},31:{cat:'spinner',damage:29,rate:50,range:30,speed:46},
-  32:{cat:'spinner',damage:31,rate:62,range:38,speed:48},33:{cat:'spinner',damage:41,rate:70,range:45,speed:50},
-  34:{cat:'maneuver',damage:28,rate:55,range:30,speed:38},35:{cat:'brella',damage:34,rate:550,range:20,speed:32},36:{cat:'brella',damage:26,rate:330,range:18,speed:34},
-  37:{cat:'charger',kind:'stringer',tap:22,full:76,rate:900,range:48,speed:48},38:{cat:'charger',kind:'stringer',tap:18,full:52,rate:620,range:42,speed:52},
-  39:{cat:'charger',tap:30,full:105,rate:520,range:42,speed:66},40:{cat:'charger',tap:24,full:125,rate:1000,range:50,speed:70},
-  41:{cat:'roller',damage:38,rate:100,range:2.15},42:{cat:'roller',damage:70,rate:170,range:2.65},
-  43:{cat:'blaster',damage:92,rate:750,range:27,speed:22,explosion:2.7,splash:55},44:{cat:'slosher',damage:70,rate:540,range:25,speed:18,explosion:2.5}
+  0:{cat:'shooter',damage:32,rate:95,range:32,speed:34},
+  1:{cat:'slosher',damage:68,rate:500,range:25,speed:19,explosion:2.4},
+  2:{cat:'maneuver',damage:28,rate:55,range:30,speed:38}
 };
 const SERVER_SUBS={
   instant:{delay:0,radius:2.1,damage:60},timed:{delay:1100,radius:3.4,damage:180},stick:{delay:1500,radius:4.0,damage:180},
@@ -272,13 +254,9 @@ const SERVER_SUBS={
   squidBeacon:{delay:0,radius:1.4,damage:0},splashWall:{delay:0,radius:2.0,damage:30},sprinkler:{delay:0,radius:2.0,damage:20},sensor:{delay:0,radius:0,damage:0},turret:{delay:0,radius:2.5,damage:50}
 };
 const SERVER_SUB_BY_WEAPON={
-  0:'splatBomb',1:'splatBomb',2:'pointSensor',3:'angleShooter',4:'sprinkler',5:'burstBomb',6:'splatBomb',7:'pointSensor',8:'suctionBomb',
-  9:'splatBomb',10:'inkMine',11:'pointSensor',12:'splatBomb',13:'sprinkler',14:'splatBomb',15:'burstBomb',16:'splatBomb',
-  17:'suctionBomb',18:'splatBomb',19:'burstBomb',20:'sprinkler',21:'pointSensor',22:'burstBomb',23:'burstBomb',
-  24:'burstBomb',25:'sprinkler',26:'burstBomb',27:'pointSensor',28:'suctionBomb',29:'burstBomb',
-  30:'autobomb',31:'burstBomb',32:'sprinkler',33:'autobomb',34:'splatBomb',35:'splatBomb',
-  36:'pointSensor',37:'toxicMist',38:'pointSensor',39:'pointSensor',40:'fizzyBomb',
-  41:'burstBomb',42:'fizzyBomb',43:'suctionBomb',44:'fizzyBomb'
+  0:'splatBomb',
+  1:'fizzyBomb',
+  2:'splatBomb'
 };
 const SERVER_SPECIALS={
   'ドームシールド':[0,5.0],'グラップラー':[0,4.0],'ヴァキュームコア':[75,3.0],
@@ -293,33 +271,12 @@ const SERVER_SPECIALS={
   'デコイチラシ':[70,2.4],'スミナガシート':[20,3.5],'ウルトラチャクチ':[160,4.0],'ショクワンダー':[80,3.0]
 };
 const SERVER_WEAPON_INK_COST=[
-  .95,1.55,.70,1.45,1.85,3.20,2.70,2.80,3.00,9.00,12.00,6.00,4.50,7.00,1.60,
-  .68,.82,1.15,4.40,3.40,5.00,5.70,7.00,9.00,.90,.65,1.40,1.90,3.10,4.20,2.00,
-  1.30,1.50,1.90,.75,2.60,2.20,6.00,4.80,6.50,7.20,1.80,3.20,3.60,4.80
+  1.0,4.8,0.75
 ];
 const SERVER_SPECIAL_BY_WEAPON={
   0:'ウルトラショット',
-  1:'カニタンク',
-  2:'エナジースタンド',
-  3:'トリプルトルネード',
-  4:'ナイスダマ',
-  5:'ウルトラハンコ',
-  6:'デコイチラシ',
-  7:'メガホンレーザー5.1ch',
-  8:'テイオウイカ',
-  9:'キューインキ',
-  10:'ホップソナー',
-  11:'ジェットパック',
-  12:'グレートバリア',
-  13:'アメフラシ',
-  14:'ショクワンダー',
-  15:'サメライド',
-  16:'メガホンレーザー5.1ch',
-  17:'スミナガシート',
-  18:'マルチミサイル',
-  19:'デコイチラシ',
-  20:'ウルトラチャクチ',
-  21:'エナジースタンド'
+  1:'ナイスダマ',
+  2:'カニタンク'
 };
 function serverPointInStage(x,z){
   x=Number(x);z=Number(z);
@@ -917,7 +874,7 @@ function sanitizeConfig(cfg, fallbackWeapon=0) {
     hair: Number.isFinite(Number(c.hair)) ? Math.max(0, Math.min(3, Math.floor(Number(c.hair)))) : 0,
     color: Number.isFinite(Number(c.color)) ? Math.max(0, Math.min(3, Math.floor(Number(c.color)))) : 0,
     outfit: Number.isFinite(Number(c.outfit)) ? Math.max(0, Math.min(49, Math.floor(Number(c.outfit)))) : 0,
-    weapon: Number.isFinite(Number(c.weapon)) ? Math.max(0, Math.min(200, Math.floor(Number(c.weapon)))) : fallbackWeapon,
+    weapon: Number.isFinite(Number(c.weapon)) ? Math.max(0, Math.min(2, Math.floor(Number(c.weapon)))) : Math.max(0, Math.min(2, Number(fallbackWeapon)||0)),
     gear: Number.isFinite(Number(c.gear)) ? Math.max(0, Math.min(3, Math.floor(Number(c.gear)))) : 0,
     device: c.device === 'mobile' ? 'mobile' : 'pc',
     inkColorHex: Number.isFinite(Number(c.inkColorHex)) ? Math.max(0, Math.min(0xffffff, Math.floor(Number(c.inkColorHex)))) : null
@@ -1292,7 +1249,7 @@ wss.on('connection', ws => {
       }
       if (m.config && typeof m.config === 'object') player.config = sanitizeConfig(m.config, player.weaponId);
       applyCanonicalPlayerColor(player);
-      if (Number.isFinite(Number(m.weaponId))) player.weaponId = Math.max(0, Math.min(200, Math.floor(Number(m.weaponId))));
+      if (Number.isFinite(Number(m.weaponId))) player.weaponId = Math.max(0, Math.min(2, Math.floor(Number(m.weaponId))));
       player.config.weapon = player.weaponId;
       // Online battles can also use Render without a WEB ID.
       // Registered users keep their account/rating; guests keep one stable
@@ -1311,7 +1268,7 @@ wss.on('connection', ws => {
         return;
       }
       player.ready = !!m.ready;
-      player.weaponId = Number.isFinite(m.weaponId) ? Math.max(0, Math.min(200, Math.floor(Number(m.weaponId)))) : player.weaponId;
+      player.weaponId = Number.isFinite(m.weaponId) ? Math.max(0, Math.min(2, Math.floor(Number(m.weaponId)))) : player.weaponId;
       if(m.config && typeof m.config === 'object') player.config=sanitizeConfig(m.config,player.weaponId);
       applyCanonicalPlayerColor(player);
       player.config.weapon=player.weaponId;
