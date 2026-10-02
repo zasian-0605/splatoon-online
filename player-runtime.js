@@ -732,6 +732,56 @@
       cursor:pointer;
       pointer-events:auto;
     }
+    /* Culture-festival quick scan: make the important instructions impossible to miss. */
+    .v107-culture-banner{
+      margin:0 0 14px;
+      padding:14px 16px;
+      border:4px solid #e3ff00;
+      border-radius:16px;
+      background:#ff0055;
+      color:#fff;
+      font:900 21px/1.35 Arial Black,Arial,Meiryo,sans-serif;
+      text-align:center;
+      text-shadow:3px 3px 0 #000;
+      box-shadow:0 6px 0 #000;
+    }
+    .v107-online-route{
+      border:4px solid #00d4ff;
+      background:rgba(0,212,255,.13);
+    }
+    .v107-online-route .v107-step{
+      margin:10px 0;
+      padding:11px 13px;
+      border-radius:12px;
+      background:rgba(0,0,0,.34);
+      font:900 19px/1.45 Arial,Meiryo,sans-serif;
+    }
+    .v107-online-route .v107-step strong{
+      color:#e3ff00;
+      font-size:23px;
+    }
+    .v107-online-warning{
+      margin-top:11px;
+      padding:11px 13px;
+      border-radius:12px;
+      background:rgba(255,0,85,.24);
+      border:2px solid rgba(255,255,255,.7);
+      font-weight:900;
+    }
+    #charge-gauge{
+      width:32px !important;
+      height:32px !important;
+      border:1px solid rgba(255,255,255,.34) !important;
+      background:conic-gradient(rgba(255,0,85,.45) calc(var(--pct,0)*1%), rgba(255,255,255,.08) 0) !important;
+      opacity:.58 !important;
+    }
+    #charge-gauge::after{
+      top:4px !important;
+      left:4px !important;
+      right:4px !important;
+      bottom:4px !important;
+      background:rgba(20,0,50,.12) !important;
+    }
     @media(max-width:700px){
       #v107-howto-button{
         top:10px;
@@ -747,6 +797,9 @@
       .v107-help-row{font-size:15px;}
       .v107-key{min-width:38px;min-height:34px;font-size:15px;}
       .v107-mouse{min-width:95px;min-height:34px;font-size:14px;}
+      .v107-culture-banner{font-size:18px;box-shadow:0 4px 0 #000;}
+      .v107-online-route .v107-step{font-size:17px;}
+      .v107-online-route .v107-step strong{font-size:20px;}
     }
   `;
   document.head.appendChild(style);
@@ -754,15 +807,15 @@
   const button=document.createElement('button');
   button.id='v107-howto-button';
   button.type='button';
-  button.textContent='U / 遊び方';
+  button.textContent='U / 操作説明';
   document.body.appendChild(button);
 
   const overlay=document.createElement('div');
   overlay.id='v107-howto-overlay';
   overlay.innerHTML=`
     <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="遊び方・キー操作">
-      <div id="v107-howto-title">📖 遊び方・キー操作</div>
-      <div id="v107-howto-subtitle">U / 遊び方 でいつでも開けます。操作を忘れたときに見てください。</div>
+      <div id="v107-howto-title">🔥 操作説明・これだけ覚えて！</div>
+      <div id="v107-howto-subtitle">文化祭で初めて遊ぶ人向け。まずこのページの「黄色い文字」だけ見ればOK！ Uで開閉できます。</div>
 
       <div id="v107-howto-body">
         <div class="v107-help-box">
@@ -909,6 +962,47 @@
             <span>/ 遊び方（もう一度Uで閉じる）</span>
           </div>
           <div class="v107-note">画面の「U / 遊び方」が押せないときも、Uキーで開けます。ESCでも閉じられます。</div>
+        </div>
+
+        <div class="v107-culture-banner">
+          🎪 文化祭で初めて遊ぶ人へ！
+          <br>
+          <span style="font-size:26px;color:#e3ff00;">【まず これだけ】WASD＝移動 / マウス＝見る / 左クリック＝撃つ / Shift＝イカ / Q＝ボム / R＝スペシャル</span>
+          <br>
+          <span style="font-size:18px;">分からなくなったら <b>U</b> を押してください。</span>
+        </div>
+
+        <div class="v107-help-box full v107-online-route">
+          <b style="font-size:26px;">🌐 オンライン対戦へ行く手順</b>
+          <div class="v107-step">
+            <strong>① まず試し撃ち場へ！</strong><br>
+            ここでブキを試したり、操作を確認できます。
+          </div>
+          <div class="v107-step">
+            <strong>② キーボードの「3」を押す！</strong><br>
+            「オンラインルーム」が開いて、オンライン対戦の参加が始まります。<br>
+            <span style="color:#e3ff00;">「P」でもオンラインへ行けます。</span>
+          </div>
+          <div class="v107-step">
+            <strong>③ ログイン画面が出たら</strong><br>
+            アカウントを登録するか、すでに作ったアカウントでログインしてください。ログイン後、もう一度「3」または「P」でオンラインへ進めます。
+          </div>
+          <div class="v107-step">
+            <strong>④ 「オンラインルーム」で待つ！</strong><br>
+            人数表示が <b style="color:#e3ff00;">1 / 8 → 2 / 8 → … → 8 / 8</b> のように増えていきます。
+          </div>
+          <div class="v107-step">
+            <strong>⑤ 2〜7人のときは「準備OK」！</strong><br>
+            参加している人がみんな「準備OK」を押すと対戦開始。<br>
+            <span style="color:#e3ff00;">8人そろった場合は自動で対戦開始です。</span>
+          </div>
+          <div class="v107-step">
+            <strong>⑥ 対戦スタート！</strong><br>
+            味方と敵に分かれてバトルします。ゲーム中の基本操作は、このページの上に書いてある操作と同じです。
+          </div>
+          <div class="v107-online-warning">
+            ⚠️ 大事：オンラインはインターネット接続が必要です。オンラインルームを閉じたいときは「ルームから退出」を押してください。
+          </div>
         </div>
 
         <div class="v107-help-box full">
