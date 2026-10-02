@@ -398,15 +398,15 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const w=f.weapon;
     let kind=String(opts.kind||w.category||'shooter');
     const d=aim(f,dir);
-    /* Launch every shot about 15 degrees above the horizontal aim direction. */
+    /* Keep projectiles only slightly above the horizontal: about 5 degrees. */
     const horizontal=Math.hypot(d.x,d.z);
+    const angle=5*Math.PI/180;
     if(horizontal>.0001){
-      const angle=15*Math.PI/180;
       d.x=d.x/horizontal*Math.cos(angle);
       d.z=d.z/horizontal*Math.cos(angle);
       d.y=Math.sin(angle);
     }else{
-      d.set(0,Math.sin(15*Math.PI/180),Math.cos(15*Math.PI/180));
+      d.set(0,Math.sin(angle),Math.cos(angle));
     }
     d.normalize();
     let speed=Math.max(8,num(opts.speed,w.speed||35));
@@ -442,7 +442,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
 
     const s=f.pos.clone();
-    s.y+=num(opts.yOffset,1.2);
+    /* Spawn from the upper weapon/muzzle area rather than from the feet/center. */
+    s.y+=num(opts.yOffset,1.45);
     s.addScaledVector(d,.55);
     const mat=new THREE.MeshBasicMaterial({color:Number(fourHex(f))});
     const mesh=new THREE.Mesh(
