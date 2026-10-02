@@ -724,10 +724,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(t<nextAt)return false;
     if(t-num(f.lastShot,0)<weaponRate)return false;
     const baseCost=Math.max(.1,num(w.inkCost,1));
-    if(!consume(f,baseCost))return false;
-    f.lastShot=t;
-    f.__canonicalNextShotAt=t+weaponRate;
-
     const base=aim(f,dir);
     let fired=0;
     const emit=(d,o)=>{if(spawnUnified(f,d,o))fired++;};
@@ -769,6 +765,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
     }
     if(fired>0){
+      if(!consume(f,baseCost))return false;
+      f.lastShot=t;
+      f.__canonicalNextShotAt=t+weaponRate;
       f.specialGauge=Math.min(100,num(f.specialGauge,0)+.7*fired*(f.gearProfile?.specialGain||1));
       try{sfx('shoot');}catch(_){}
       if(f.isPlayer&&onlineActive&&onlineStarted){
