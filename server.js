@@ -391,7 +391,20 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
       const hit=serverDistanceToSegment(
         p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z
       );
-      if(hit.distance<hitRadius){
+      /*
+       * V120: use a real player-sized hit volume instead of requiring the
+       * projectile center to pass through a thin 3D line. The client aim can
+       * differ slightly because the camera/launch pitch is applied locally.
+       * Keep wall ordering authoritative so this never turns into shooting
+       * through a wall.
+       */
+      const playerRadius=Math.max(1.55,Number(hitRadius)||1.55);
+      const playerHalfHeight=1.85;
+      const targetCenterY=Number(p.y)||0;
+      const verticalDistance=Math.abs((hit.y||0)-(targetCenterY+.9));
+      const bodyHit=hit.distance<playerRadius ||
+        (verticalDistance<=playerHalfHeight && hit.distance<=playerRadius+.55);
+      if(bodyHit){
         const order=orderBase+hit.t;
         if(order<bestTargetOrder)bestTarget={target,hit,order};
       }
@@ -676,7 +689,7 @@ function serverResolveShot(room,player,m){
   let mode='';
   if(w.cat==='roller'&&(rawMode==='roller-flick'||rawMode==='rollerFlick'||rawMode==='roller-roll'||rawMode==='brushFlick'))mode=rawMode==='rollerFlick'?'roller-flick':rawMode==='brushFlick'?'brush-flick':rawMode;
   else if(w.cat==='wiper'&&rawMode==='wiperSlash')mode='wiper';
-  const hitRadius=(mode==='roller-flick'||mode==='brush-flick'||mode==='brush')?2.35:(mode==='roller-roll'?1.65:(mode==='wiper'?1.8:1.20));
+  const hitRadius=(mode==='roller-flick'||mode==='brush-flick'||mode==='brush')?2.55:(mode==='roller-roll'?1.85:(mode==='wiper'?2.0:1.55));
   // Helper needs the firing team's identity so friendly players are never hit.
   w._attackerTeam=player.team;
   const trajectoryWeapon=mode==='roller-flick'
