@@ -113,6 +113,102 @@ const SERVER_Y_STEP=.5;
 const SERVER_STAGE_POLYGON=[[48,-30.4],[14,-72],[0.5,-38.4],[-3.5,-44.8],[-19,-20.8],[-20.5,-33.6],[-20.5,-17.6],[-14,-3.2],[-36.5,3.2],[-47.5,20.8],[-48,35.2],[-14,72],[-4,46.4],[4,48],[20.5,24],[20,8],[19,20.8],[13.5,9.6],[36,0],[48,-17.6]];
 const SERVER_PLAYABLE_HALF_X=52;
 const SERVER_PLAYABLE_HALF_Z=76;
+
+/* V116: compact server-side mirror of the important solid stage pieces.
+   The client uses the same AABB-style collision model. These blocks are used
+   only for projectile occlusion and movement sanity checks. */
+const SERVER_STAGE_BLOCKS=[];
+function addServerBlock(x,y,z,w,h,d,climbable=true){
+  SERVER_STAGE_BLOCKS.push({
+    minX:x-w/2,maxX:x+w/2,minY:y,maxY:y+h,
+    minZ:z-d/2,maxZ:z+d/2,climbable
+  });
+}
+addServerBlock(0,-0.04,0,104,.08,152,false);
+[
+ [-12,-37,12,7,.40,.85],[12,-37,12,7,.40,.85],[-12,37,12,7,.40,.85],[12,37,12,7,.40,.85],
+ [-40,-38,5,20,3],[-39,-9,5,15,3],[-40,22,5,18,3],
+ [40,-39,5,20,3],[40,-11,5,13,3],[39,17,5,17,3],
+ [-24,-50,20,4,2.8],[2,-50,16,4,2.8],[25,-43,13,4,2.8],
+ [-28,47,17,4,2.8],[-4,51,16,4,2.8],[22,46,18,4,2.8],
+ [-31,-33,12,3,2.2],[-34,-20,10,3,2.2],[-31,-7,12,3,2.2],
+ [-30,7,12,3,2.2],[-29,21,11,3,2.2],[-27,34,12,3,2.2],
+ [31,-35,11,3,2.2],[34,-22,9,3,2.2],[32,-9,11,3,2.2],
+ [31,5,10,3,2.2],[30,19,11,3,2.2],[27,33,13,3,2.2],
+ [-37,-31,3,13,3],[-37,-5,3,10,3],[-37,12,3,12,3],[-36,31,3,12,3],
+ [37,-32,3,15,3],[37,-6,3,12,3],[37,12,3,10,3],[36,30,3,12,3],
+ [0,0,30,26,2.5,2.2],[-19,-1,8,16,1,1.4],[19,1,8,16,1,1.4],
+ [-10,0,3,13,2],[10,0,3,13,2],[0,-9,11,3,1.8],[0,9,11,3,1.8],
+ [-23,-11,5,8,3],[-23,11,5,8,3],[23,-11,5,8,3],[23,11,5,8,3],
+ [-14,-20,10,3,2.1],[14,-20,10,3,2.1],[-14,20,10,3,2.1],[14,20,10,3,2.1],
+ [-18,30,18,12,2.2,2.6],[18,30,18,12,2.2,2.6],[0,44,14,9,4.5,3],
+ [-27,30,2,8,5.2],[27,30,2,8,5.2],[0,38,3,5,6.2],
+ [34,38,7,3,2.5],[29,42,5,3,2.5],
+ [-30,-25,2,2,3.8],[-15,-25,2,2,3.8],[15,-25,2,2,3.8],[30,-25,2,2,3.8],
+ [-30,25,2,2,3.8],[-15,25,2,2,3.8],[15,25,2,2,3.8],[30,25,2,2,3.8],
+ [0,14,9,1.2,3.2]
+].forEach(v=>addServerBlock(...v));
+
+function serverSegmentAabbHit(a,b,block){
+  const d={x:b.x-a.x,y:b.y-a.y,z:b.z-a.z};
+  let t0=0,t1=1;
+  for(const k of ['x','y','z']){
+    const min=block['min'+k.toUpperCase()],max=block['max'+k.toUpperCase()];
+    const av=a[k],dv=d[k];
+    if(Math.abs(dv)<1e-9){
+      if(av<min||av>max)return null;
+      continue;
+    }
+    let q0=(min-av)/dv,q1=(max-av)/dv;
+    if(q0>q1){const q=q0;q0=q1;q1=q;}
+    t0=Math.max(t0,q0);t1=Math.min(t1,q1);
+    if(t0>t1)return null;
+  }
+  return t0>=0&&t0<=1?t0:null;
+}
+function serverStageOcclusion(a,b){
+  let best=null,bestT=Infinity;
+  for(const block of SERVER_STAGE_BLOCKS){
+    const t=serverSegmentAabbHit(a,b,block);
+    if(t!==null&&t<bestT){
+      bestT=t;
+      best={block,t,point:{
+        x:a.x+(b.x-a.x)*t,
+        y:a.y+(b.y-a.y)*t,
+        z:a.z+(b.z-a.z)*t
+      }};
+    }
+  }
+  return best;
+}
+function serverPositionBlocked(x,y,z){
+  for(const block of SERVER_STAGE_BLOCKS){
+    if(x<block.minX-.35||x>block.maxX+.35||z<block.minZ-.35||z>block.maxZ+.35)continue;
+    /* Standing on the top face is valid; being inside the volume is not. */
+    if(y>=block.maxY-.28)continue;
+    if(y+0.85>block.minY && y-0.65<block.maxY)return true;
+  }
+  return false;
+}
+function serverResolveHorizontalMove(oldPos,newPos){
+  if(!oldPos)return newPos;
+  if(!serverPositionBlocked(newPos.x,newPos.y,newPos.z))return newPos;
+  let lo=0,hi=1;
+  for(let i=0;i<8;i++){
+    const t=(lo+hi)/2;
+    const p={
+      x:oldPos.x+(newPos.x-oldPos.x)*t,
+      y:newPos.y,
+      z:oldPos.z+(newPos.z-oldPos.z)*t
+    };
+    if(serverPositionBlocked(p.x,p.y,p.z))hi=t;else lo=t;
+  }
+  return {
+    x:oldPos.x+(newPos.x-oldPos.x)*lo,
+    y:newPos.y,
+    z:oldPos.z+(newPos.z-oldPos.z)*lo
+  };
+}
 const SERVER_WEAPONS={
   0:{cat:'shooter',damage:32,rate:95,range:30,speed:37},1:{cat:'shooter',damage:42,rate:180,range:31,speed:35},
   2:{cat:'shooter',damage:24,rate:70,range:30,speed:38},3:{cat:'shooter',damage:35,rate:145,range:39,speed:42},
@@ -145,6 +241,16 @@ const SERVER_SUBS={
   toxicMist:{delay:250,radius:3.2,damage:8},inkMine:{delay:300,radius:3.0,damage:100},pointSensor:{delay:0,radius:0,damage:0},
   splashWall:{delay:500,radius:2.8,damage:18},sprinkler:{delay:400,radius:2.0,damage:15},sensor:{delay:0,radius:0,damage:0},turret:{delay:0,radius:2.5,damage:50}
 };
+const SERVER_SUB_BY_WEAPON={
+  0:'timed',1:'stick',2:'instant',3:'timed',4:'homing',5:'bounce',6:'timed',7:'homing',8:'seek',
+  9:'timed',10:'seek',11:'instant',12:'slide',13:'timed',14:'bounce',15:'instant',16:'homing',
+  17:'timed',18:'stick',19:'slide',20:'seek',21:'homing',22:'instant',23:'stick',
+  24:'burstBomb',25:'sprinkler',26:'burstBomb',27:'pointSensor',28:'suctionBomb',29:'burstBomb',
+  30:'autobomb',31:'burstBomb',32:'sprinkler',33:'autobomb',34:'splatBomb',35:'splatBomb',
+  36:'pointSensor',37:'toxicMist',38:'pointSensor',39:'pointSensor',40:'fizzyBomb',
+  41:'burstBomb',42:'fizzyBomb',43:'suctionBomb',44:'fizzyBomb'
+};
+const SERVER_SPECIAL_BY_WEAPON_V116 = SERVER_SPECIAL_BY_WEAPON;
 const SERVER_SPECIALS={
   'ドームシールド':[0,5.0],'グラップラー':[0,4.0],'ヴァキュームコア':[75,3.0],
   'ブーストステーション':[0,5.0],'スカイパック':[80,3.0],'ジェットパック':[80,3.0],
@@ -249,13 +355,23 @@ function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   return {distance:Math.hypot(px-qx,py-qy,pz-qz),t,x:qx,y:qy,z:qz};
 }
 function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
-  const range=Math.max(1,Number(w.range)||35),candidates=[];
-  const addSegment=(a,b,order)=>{
+  const range=Math.max(1,Number(w.range)||35);
+  let bestTarget=null,bestTargetOrder=Infinity,bestWall=null,bestWallOrder=Infinity;
+
+  const considerSegment=(a,b,orderBase)=>{
     for(const target of room.players.values()){
       if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
       const p=target.serverPos||target.spawn;
       const hit=serverDistanceToSegment(p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z);
-      if(hit.distance<hitRadius)candidates.push({target,hit,order:order+hit.t});
+      if(hit.distance<hitRadius){
+        const order=orderBase+hit.t;
+        if(order<bestTargetOrder)bestTarget={target,hit,order};
+      }
+    }
+    const wall=serverStageOcclusion(a,b);
+    if(wall){
+      const order=orderBase+wall.t;
+      if(order<bestWallOrder)bestWall={wall,order};
     }
   };
 
@@ -265,9 +381,14 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
       y:origin.y+dir.y*range,
       z:origin.z+dir.z*range
     };
-    addSegment(origin,end,0);
-    candidates.sort((a,b)=>a.order-b.order);
-    return {hit:candidates[0]||null,straightEnd:end,dropEnd:end};
+    considerSegment(origin,end,0);
+    const targetWins=bestTarget&&bestTargetOrder<bestWallOrder;
+    return {
+      hit:targetWins?bestTarget:null,
+      wall:bestWall&&(!bestTarget||bestWallOrder<bestTargetOrder)?bestWall:null,
+      straightEnd:bestWall&&bestWallOrder<1?bestWall.wall.point:end,
+      dropEnd:end
+    };
   }
 
   const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
@@ -278,11 +399,7 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
   const pitch=basePitch+extraPitch;
   const yaw=Math.atan2(dir.x,dir.z);
   const cp=Math.cos(pitch),sp=Math.sin(pitch);
-  const fd={
-    x:Math.sin(yaw)*cp,
-    y:sp,
-    z:Math.cos(yaw)*cp
-  };
+  const fd={x:Math.sin(yaw)*cp,y:sp,z:Math.cos(yaw)*cp};
 
   const straightDist=Math.min(4.2,range*.24);
   const straight={
@@ -290,14 +407,15 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
     y:origin.y+fd.y*straightDist,
     z:origin.z+fd.z*straightDist
   };
-  addSegment(origin,straight,0);
+  considerSegment(origin,straight,0);
 
   const speed=Math.max(1,Number(w.speed)||35);
   const remain=Math.max(0,range-straightDist);
   const gravity=w.cat==='slosher'?10.5:5.5;
   const totalTime=remain/Math.max(1,speed*cp);
-  const steps=Math.max(16,Math.min(56,Math.ceil(totalTime*50)));
+  const steps=Math.max(16,Math.min(64,Math.ceil(totalTime*50)));
   let prev=straight;
+  let lastVisible=straight;
   for(let i=1;i<=steps;i++){
     const t=totalTime*i/steps;
     const cur={
@@ -305,14 +423,18 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
       y:straight.y+fd.y*speed*t-.5*gravity*t*t,
       z:straight.z+fd.z*speed*t
     };
-    addSegment(prev,cur,i/steps);
+    considerSegment(prev,cur,i/steps);
+    if(bestWallOrder<=i/steps)break;
+    lastVisible=cur;
     prev=cur;
   }
-  candidates.sort((a,b)=>a.order-b.order);
+
+  const targetWins=bestTarget&&bestTargetOrder<bestWallOrder;
   return {
-    hit:candidates[0]||null,
+    hit:targetWins?bestTarget:null,
+    wall:bestWall&&(!bestTarget||bestWallOrder<bestTargetOrder)?bestWall:null,
     straightEnd:straight,
-    dropEnd:prev
+    dropEnd:lastVisible
   };
 }
 function broadcastDamage(room,target,damage,attacker,reason,killed){
@@ -453,14 +575,18 @@ function serverResolveShot(room,player,m){
     const end=trajectory.straightEnd;
     const center=nearest
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
-      : {x:end.x,y:Math.max(0,end.y),z:end.z};
+      : trajectory.wall
+        ? {x:trajectory.wall.wall.point.x,y:trajectory.wall.wall.point.y,z:trajectory.wall.wall.point.z}
+        : {x:end.x,y:Math.max(0,end.y),z:end.z};
     serverApplyAoE(room,center,w.explosion||2.4,w.splash||w.damage||0,player.team,player,'blaster');
     return true;
   }
   if(w.cat==='slosher'){
     const center=nearest
       ? {x:nearest.hit.x,y:nearest.hit.y,z:nearest.hit.z}
-      : {x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
+      : trajectory.wall
+        ? {x:trajectory.wall.wall.point.x,y:trajectory.wall.wall.point.y,z:trajectory.wall.wall.point.z}
+        : {x:origin.x+dir.x*Math.min(range,16),y:origin.y+dir.y*Math.min(range,16),z:origin.z+dir.z*Math.min(range,16)};
     serverApplyAoE(room,center,w.explosion||2.4,w.damage||0,player.team,player,'slosher');
     return true;
   }
@@ -499,6 +625,8 @@ function serverResolveShot(room,player,m){
 function serverResolveSub(room,player,m){
   if(!room.started||!player.team||!player.serverAlive)return false;
   const def=SERVER_SUBS[String(m.subType||'')];if(!def)return false;
+  const expectedSub=SERVER_SUB_BY_WEAPON[Number(player.weaponId)];
+  if(expectedSub && String(m.subType)!==expectedSub)return false;
   const now=Date.now();if(now-(player.lastSubAt||0)<180)return false;
   const pos=Object.assign({},player.serverPos||player.spawn),vx=Number(m.vx)||0,vz=Number(m.vz)||0;
   const scale=Math.min(1.8,Math.max(.25,(def.delay||0)/1000)),center={x:pos.x+vx*scale,z:pos.z+vz*scale,y:pos.y||0};
@@ -1263,6 +1391,8 @@ wss.on('connection', ws => {
           }else{
             player.speedViolations=0;
           }        }
+        const resolved=serverResolveHorizontalMove(player.serverPos,{x,y,z});
+        x=resolved.x;z=resolved.z;
         player.serverPos={x,y,z}; player.lastStateAt=now;
       }
       const prevInkAt=player.serverInkLastAt||now;
