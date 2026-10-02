@@ -4099,7 +4099,11 @@ function animate3D(token){
   prevTime = time;
 
   if(playerFighter.alive){
-    window.updatePlayerMovement?.(delta);
+    try{
+      window.updatePlayerMovement?.(delta);
+    }catch(err){
+      try{console.warn('[PLAYER UPDATE]',String(err));}catch(_){}
+    }
   } else {
     const left=Math.max(0,Math.ceil((playerFighter.respawnAt-time)/1000));
     const overlayMsg=document.querySelector('#respawn-overlay .msg');
@@ -5050,6 +5054,22 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   window.__clearStageInkForOnlineMatch=clearStageInkForOnlineMatch;
 
+  /* Online matches begin on friendly spawn ink so squid form and ink recharge
+     are immediately usable after the dry-state reset. The spawn pad is local
+     presentation only; authoritative turf is seeded by server.js too. */
+  function seedOnlineSpawnInk(f){
+    if(!f?.onlineSpawn)return;
+    const col=getFighterInkHex(f);
+    const sx=Number(f.onlineSpawn.x)||0, sz=Number(f.onlineSpawn.z)||0;
+    const points=[
+      [0,0],[3.2,0],[-3.2,0],[0,3.2],[0,-3.2],
+      [3.2,3.2],[-3.2,3.2],[3.2,-3.2],[-3.2,-3.2]
+    ];
+    for(const [ox,oz] of points){
+      try{ paintGround(sx+ox,sz+oz,2.7,col,{noNetwork:true,team:f.team}); }catch(_){}
+    }
+  }
+
 function startOnlineBattle(m){
     clearStageInkForOnlineMatch();
     hideOnlinePanel(); clearRemoteFighters();
@@ -5059,7 +5079,8 @@ function startOnlineBattle(m){
     me.weapon=weaponList[playerConfig.weapon]||weaponList[0];
     me.onlineSpawn=Object.assign({},m.spawn||(m.team==='A'?spawnPointA:spawnPointB));
     rebuildFighterModel(me,me.cfg);
-    me.root.position.copy(me.onlineSpawn);me.pos=me.root.position;me.hp=me.maxHp;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
+    me.root.position.copy(me.onlineSpawn);me.pos=me.root.position;me.hp=me.maxHp;me.ink=100;me.inkRegenBlockedUntil=0;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
+    seedOnlineSpawnInk(me);
     // チームカラーは固定（塗り判定用）。自分の見た目・弾の色はplayerConfig.colorを使う。
     teamAHex=0xe3ff00; teamBHex=0xff2255;
     battleTimer=180; playerFighter.specialGauge=0; window.__battleDeadline=Date.now()+181000; battleActive=true; currentPhase=2;
@@ -14124,6 +14145,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 <script src="/online-runtime.js?v=20261003-input-fix"></script>
 <script src="/world-runtime.js?v=20261003-input-fix"></script>
 <script src="/player-runtime.js?v=20261003-festival-fix2"></script>
-<script src="/combat-runtime.js?v=20261003-online-projectile-fix10"></script>
+<script src="/combat-runtime.js?v=20261003-online-projectile-fix11"></script>
 </body>
 </html>
