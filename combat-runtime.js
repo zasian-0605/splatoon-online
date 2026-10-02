@@ -328,21 +328,57 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     return null;
   }
 
-  function paintPathSample(b,p){
-    if(!b?.sourceFighter||b.team==null||!p)return;
-    const ground=support(p.x,p.z,Math.max(p.y,1));
-    const gap=p.y-ground;
-    if(gap<-.08||gap>2.0)return;
+  function baseFloorYAt(x,z){
+    let floorY=null;
+    for(const block of collidableBlocks||[]){
+      if(x<block.minX||x>block.maxX||z<block.minZ||z>block.maxZ)continue;
+      /* The shared STAGE_SOLID floor is the low solid surface underneath raised blocks. */
+      const h=num(block.maxY,0)-num(block.minY,0);
+      if(h<=.28 && num(block.maxY,0)<=.30){
+        const y=num(block.maxY,0);
+        if(floorY===null||y>floorY)floorY=y;
+      }
+    }
+    return floorY;
+  }
+
+  function paintBaseFloorBelow(b,p,rr){
+    const floorY=baseFloorYAt(p.x,p.z);
+    if(floorY===null)return;
+    const upper= support(p.x,p.z,Math.max(p.y,50));
+    if(upper-floorY<.35)return;
     try{
-      const rr=Math.max(.42,Math.min(2.2,num(b.paintRadius,.8)*.55));
-      paintGround(p.x,p.z,rr,b.colorHex,{
-        surfaceY:ground,
-        yHint:p.y,
+      paintGround(p.x,p.z,Math.min(1.55,rr*.9),b.colorHex,{
+        surfaceY:floorY,
+        yHint:floorY+.03,
         team:b.team,
         sourceFighter:b.sourceFighter,
         noNetwork:true
       });
     }catch(_){}
+  }
+
+  function paintPathSample(b,p){
+    if(!b?.sourceFighter||b.team==null||!p)return;
+    const ground=support(p.x,p.z,50);
+    const gap=p.y-ground;
+    const rr=Math.max(.42,Math.min(2.2,num(b.paintRadius,.8)*.55));
+
+    /* Paint the surface the projectile is actually passing near. */
+    if(gap>=-.08&&gap<=2.0){
+      try{
+        paintGround(p.x,p.z,rr,b.colorHex,{
+          surfaceY:ground,
+          yHint:p.y,
+          team:b.team,
+          sourceFighter:b.sourceFighter,
+          noNetwork:true
+        });
+      }catch(_){}
+    }
+
+    /* When firing from/on a raised obstacle, also project ink onto the floor below. */
+    paintBaseFloorBelow(b,p,rr);
   }
 
   function paintTravel(b,a,p){
@@ -369,6 +405,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         if(typeof paintWallSurface==='function'){
           paintWallSurface(wall.block,wall.point,b.colorHex,b.team,Math.min(1.55,num(b.paintRadius,1)));
         }
+      }catch(_){}
+      /* A shot from a raised obstacle also leaves ink on the floor directly below the hit. */
+      try{
+        paintBaseFloorBelow(b,wall.point,Math.max(.42,Math.min(2.2,num(b.paintRadius,1)*.55)));
       }catch(_){}
       if(b.explosive){
         try{explodeAt(wall.point.clone(),num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
