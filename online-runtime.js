@@ -204,8 +204,23 @@
      * corrected; ordinary self-state packets must never fight local movement.
      */
     if(id===String(state.playerId||'')){
-      if(!m.corrected)return;
       const me=getPlayer();
+      /*
+       * V121: server HP is authoritative. Self-state packets are sent back by
+       * the server every ~50ms, so the local player must accept their hp/alive
+       * fields too. Previously this branch returned early for ordinary
+       * (uncorrected) state packets, leaving the HUD dependent only on a
+       * separate damage packet.
+       */
+      if(me){
+        if(Number.isFinite(Number(m.hp))){
+          me.hp=Math.max(0,Math.min(me.maxHp||100,Number(m.hp)));
+          me.__onlineAuthoritativeHp=me.hp;
+        }
+        if(typeof m.alive==='boolean')me.alive=m.alive;
+        if(me.root)me.root.visible=me.alive!==false;
+      }
+      if(!m.corrected)return;
       const x=Number(m.x),y=Number(m.y),z=Number(m.z);
       if(me?.pos&&[x,y,z].every(Number.isFinite)){
         me.pos.set(x,y,z);
@@ -233,7 +248,17 @@
   function applyDamage(m){
     if(state.phase!=='in_match')return;
     const target=findFighter(m.targetId);if(!target)return;
-    if(Number.isFinite(Number(m.hp)))target.hp=Math.max(0,Math.min(target.maxHp||100,Number(m.hp)));
+
+    /*
+     * V121: the server's hp in a damage packet is authoritative. Apply it to
+     * both local and remote fighters immediately, then let subsequent server
+     * state packets keep it synchronized.
+     */
+    const hp=Number(m.hp);
+    if(Number.isFinite(hp)){
+      target.hp=Math.max(0,Math.min(target.maxHp||100,hp));
+      if(target.isPlayer)target.__onlineAuthoritativeHp=target.hp;
+    }
     if(m.reason==='enemy-ink'){try{window.forceHuman?.(target);}catch(_){}}
     if(m.killed||target.hp<=0){
       try{if(typeof killFighter==='function')killFighter(target);}catch(_){target.hp=0;target.alive=false;}
