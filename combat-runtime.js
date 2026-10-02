@@ -488,7 +488,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       gravity=num(opts.gravity,5.2);
     }
 
-    const s=f.pos.clone();
+    const s=opts.origin?.clone ? opts.origin.clone() : f.pos.clone();
     /* Spawn from the upper weapon/muzzle area rather than from the feet/center. */
     s.y+=num(opts.yOffset,1.45);
     s.addScaledVector(d,.55);
@@ -905,7 +905,11 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   const player=()=>{try{if(typeof playerFighter!=='undefined'&&playerFighter)return playerFighter;}catch(_){}return window.playerFighter||null;};
   const numV117=(v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
   const YV117=new THREE.Vector3(0,1,0);
-  const spawnRemoteBullet=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
+  function spawnRemoteBullet(f,dir,opts={}){
+    const fn=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
+    if(typeof fn!=='function')throw new Error('canonical projectile spawner unavailable');
+    return fn(f,dir,opts);
+  }
 
   const aimDir=f=>{
     const d=new THREE.Vector3();
@@ -952,6 +956,12 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       );
       if(d.lengthSq()<.0001)return;
       d.normalize();
+      const shotOrigin=new THREE.Vector3(
+        Number.isFinite(Number(m.x))?Number(m.x):rf.pos.x,
+        Number.isFinite(Number(m.y))?Number(m.y):rf.pos.y,
+        Number.isFinite(Number(m.z))?Number(m.z):rf.pos.z
+      );
+      const spawnAtShot=(dir,opts={})=>spawnAtShot(dir,Object.assign({origin:shotOrigin},opts));
       const mode=String(m.mode||'');
       const charge=Math.max(0,Math.min(1,Number.isFinite(Number(m.charge))?Number(m.charge):1));
 
@@ -969,7 +979,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
           const arrows=Math.max(3,Math.min(5,Math.floor(Number(wp.arrows)||3)));
           for(let i=0;i<arrows;i++){
             const dd=d.clone().applyAxisAngle(YV117,(i-(arrows-1)/2)*(.07+(1-charge)*.05));
-            spawnRemoteBullet(rf,dd,{
+            spawnAtShot(dd,{
               kind:'charger',
               speed:numV117(wp.speedShot,50)*(.75+.25*charge),
               damage:numV117(wp.tapDamage,20)+(numV117(wp.fullDamage,80)-numV117(wp.tapDamage,20))*charge,
@@ -978,7 +988,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
             });
           }
         }else{
-          spawnRemoteBullet(rf,d,{
+          spawnAtShot(d,{
             kind:'charger',speed:numV117(wp.speedShot,85),
             gravity:18,radius:.12,
             damage:numV117(wp.tapDamage,30)+(numV117(wp.fullDamage,120)-numV117(wp.tapDamage,30))*charge,
@@ -989,7 +999,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
 
       if(wp.category==='blaster'){
-        spawnRemoteBullet(rf,d,{
+        spawnAtShot(d,{
           kind:'blaster',speed:numV117(wp.speed,24),damage:numV117(wp.damage,70),
           gravity:0,radius:.22,paintRadius:numV117(wp.paintRadius,1.35),life:2,
           maxRange:numV117(wp.range,23),explosive:true,
@@ -1005,7 +1015,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
           const dd=count>1
             ? d.clone().applyAxisAngle(YV117,(i-(count-1)/2)*.12)
             : d.clone();
-          spawnRemoteBullet(rf,dd,{
+          spawnAtShot(dd,{
             kind:'slosher',speed:numV117(wp.speed,18),damage:numV117(wp.damage,60),
             gravity:10.5,radius:.28,paintRadius:numV117(wp.paintRadius,1.4),
             life:numV117(wp.life,1.35),maxRange:numV117(wp.range,18)
@@ -1017,7 +1027,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       if(wp.category==='maneuver'){
         for(const side of [-1,1]){
           const dd=d.clone().applyAxisAngle(YV117,side*numV117(wp.spread,.05));
-          spawnRemoteBullet(rf,dd,{
+          spawnAtShot(dd,{
             kind:'dualies',speed:numV117(wp.speed,35),damage:numV117(wp.damage,20),
             gravity:4.8,radius:.14,paintRadius:numV117(wp.paintRadius,.8),
             life:numV117(wp.life,1.25),maxRange:numV117(wp.range,30)
@@ -1030,7 +1040,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         const pellets=Math.max(3,Math.min(8,Math.floor(numV117(wp.pellets,5))));
         for(let i=0;i<pellets;i++){
           const dd=d.clone().applyAxisAngle(YV117,(i-(pellets-1)/2)*numV117(wp.spread,.055));
-          spawnRemoteBullet(rf,dd,{
+          spawnAtShot(dd,{
             kind:'brella',speed:numV117(wp.speed,30),damage:numV117(wp.damage,18),
             gravity:4.8,radius:.13,paintRadius:numV117(wp.paintRadius,.75),
             life:numV117(wp.life,1.2),maxRange:numV117(wp.range,20)
@@ -1040,7 +1050,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
 
       if(wp.category==='spinner'){
-        spawnRemoteBullet(rf,d,{
+        spawnAtShot(d,{
           kind:'splatling',speed:numV117(wp.speed,43),damage:numV117(wp.damage,29),
           gravity:5.2,radius:.13,paintRadius:numV117(wp.paintRadius,.6),
           life:numV117(wp.life,1.35),maxRange:numV117(wp.range,30)
@@ -1049,7 +1059,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
 
       /* Ordinary shooter. */
-      spawnRemoteBullet(rf,d,{
+      spawnAtShot(d,{
         kind:'shooter',speed:numV117(wp.speed,35),damage:numV117(wp.damage,30),
         gravity:5.2,radius:.14,paintRadius:numV117(wp.paintRadius,.9),
         life:numV117(wp.life,1.55),maxRange:numV117(wp.range,30)
