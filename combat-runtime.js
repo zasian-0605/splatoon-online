@@ -884,6 +884,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   // The last updateBullets in the file is now this unified updater.
   window.updateBullets=updateUnifiedBullets;
   try{updateBullets=updateUnifiedBullets;}catch(_){}
+  /* V122: keep an immutable public reference so the game loop cannot be
+     redirected to an older/legacy updater by later compatibility code. */
+  window.__canonicalProjectileUpdater=updateUnifiedBullets;
 
   // Heavy release in V112 is redirected to these canonical globals.
   window.__V116_HEAVY_RELEASE=(f,kind,q,dir)=>{
