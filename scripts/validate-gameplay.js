@@ -137,6 +137,18 @@ if (!/m\.projectile&&typeof m\.projectile==='object'/.test(fs.readFileSync(path.
 if (!/muzzleForward:0,exactDirection:true/.test(fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8'))) {
   throw new Error('Remote client still offsets an already-positioned online muzzle');
 }
+if (!/const remoteProjectiles=window\.__V117_REMOTE_PROJECTILES/.test(fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8'))) {
+  throw new Error('Remote projectile dedicated list is missing');
+}
+if (!/b\.__onlineRemoteOwner='V118'/.test(fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8'))) {
+  throw new Error('Remote projectile is not handed to the V118 isolated runtime');
+}
+if (!/function clearStageInkForOnlineMatch/.test(html) || !/clearStageInkForOnlineMatch\(\);/.test(html)) {
+  throw new Error('Online battle does not clear stage ink before starting');
+}
+if (/seedServerSpawnInk\(room\);/.test(server)) {
+  throw new Error('Server still seeds old spawn ink into a fresh online room');
+}
 const combat=fs.readFileSync(path.join(root,'combat-runtime.js'),'utf8');
 if (!/__onlineRemote=true;/.test(combat) || !/b\.velocity\.copy\(d\)\.multiplyScalar\(speed\)/.test(combat)) {
   throw new Error('Remote projectile velocity watchdog/initialization is missing');
