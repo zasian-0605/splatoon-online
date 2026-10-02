@@ -1302,7 +1302,7 @@ wss.on('connection', ws => {
         type: 'shot',
         id: player.id,
         team: player.team,
-        x: player.serverPos?.x ?? nums[0], y: player.serverPos?.y ?? nums[1], z: player.serverPos?.z ?? nums[2],
+        x: player.serverPos?.x ?? nums[0], y: (player.serverPos?.y ?? (nums[1]-1.2)) + 1.2, z: player.serverPos?.z ?? nums[2],
         dx: nums[3] / dirLen, dy: nums[4] / dirLen, dz: nums[5] / dirLen,
         weaponId, charge, mode
       }, player.id);
