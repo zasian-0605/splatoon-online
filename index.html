@@ -3396,7 +3396,7 @@ function startRangePhase(){
   document.getElementById('range-hint').innerHTML =
     '試し撃ち場：自由に移動＆射撃できます<br>[E] カスタマイズに戻る　[O] CPU対戦(4vs4)　[3] オンライン';
   document.getElementById('instructions').innerHTML =
-    '【PC】WASD:移動 / マウス:視点＆撃つ(右クリックでサブ) / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>チャージャーは左クリック長押しでチャージ、離すと発射<br>【スマホ】左半分スワイプ:移動 / 右半分スワイプ:視点＆タップで撃つ';
+    '【PC】WASD:移動 / マウス:視点＆撃つ(右クリックでサブ) / Shift:潜伏 / Space:ジャンプ / Q:サブ / R:スペシャル<br>【スマホ】左半分スワイプ:移動 / 右半分スワイプ:視点＆タップで撃つ';
 
   if(!playerFighter){
     playerFighter = createFighter({id:'player', isPlayer:true, team:'A', x:spawnPointA.x, z:spawnPointA.z-4, cfg: Object.assign({}, playerConfig)});
@@ -7569,7 +7569,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   const V60_BUILD='V60-WEAPON-GAMEPLAY-2026-09-27';
 
   /* ---------- Realistic loadout expansion ---------- */
-  /* The playable roster is locked at exactly five weapons. No legacy weapon expansion is loaded. */
+  /* The playable roster is locked at exactly three weapons. No legacy weapon expansion is loaded. */
   const addedWeapons=[];
 
   categoryLabel.spinner='スピナー';
