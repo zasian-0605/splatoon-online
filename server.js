@@ -657,9 +657,12 @@ function serverResolveShot(room,player,m){
     };
     const def=defs[wid]||{min:1,max:32};
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
-    const requested=Math.floor(Number(m.burstShots)||Math.round(def.max*frac));
-    const count=Math.max(def.min,Math.min(def.max,Math.max(1,requested)));
-    if(nearest)serverApplyDamage(room,nearest.target,(w.damage||0)*count,player,'spinner-burst');
+    const requested=Math.floor(Number(m.burstShots)||1);
+    /* V116 sends splatling shots one projectile at a time. A full burst is
+       represented by repeated authoritative shot messages, so one accepted
+       message must never silently become the old minimum-six-shot burst. */
+    const count=Math.max(1,Math.min(def.max,requested));
+    if(nearest)serverApplyDamage(room,nearest.target,(w.damage||0)*count,player,'spinner-shot');
     return true;
   }
   if(w.cat==='wiper'){
