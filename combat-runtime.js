@@ -895,6 +895,156 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     release:releaseCanonicalCharger,
     cancel:()=>releaseCanonicalCharger(true)
   };
+
+  /* ==========================================================
+     V117 ONLINE-FLIGHT SAFETY NET
+     Claude's older V82 runtime kept a separate per-frame remote-projectile
+     updater. The canonical V116 runtime is preferable, but online projectiles
+     must never become stationary just because an older layer swallowed/replaced
+     the updater. We therefore run the canonical updater first, then advance
+     only remote bullets that demonstrably did not move during that call.
+     This is a fallback, not a second normal projectile path.
+     ========================================================== */
+  function fallbackMoveRemoteBullet(b,dt){
+    if(!b?.mesh||!b.__onlineRemote||!b.__v116Unified)return false;
+    const d=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1)).normalize();
+    const speed=Math.max(8,numV117(b.__onlineRemoteSpeed,35));
+    if(!b.velocity||typeof b.velocity.lengthSq!=='function')b.velocity=d.clone().multiplyScalar(speed);
+    const v=b.velocity;
+    const prev=b.mesh.position.clone();
+
+    try{
+      if(b.trajectory==='charger'){
+        if(!b.chargerDrop){
+          const h=Math.max(.001,Math.hypot(v.x,v.z));
+          const move=Math.min(h*dt,Math.max(0,b.maxRange-b.horizontalTravel));
+          const t=move/h;
+          b.mesh.position.x+=v.x*t;b.mesh.position.y+=v.y*t;b.mesh.position.z+=v.z*t;
+          b.horizontalTravel+=move;b.travelled+=move;
+          if(b.horizontalTravel>=b.maxRange-.0001){
+            b.chargerDrop=true;v.x=0;v.z=0;v.y=0;
+          }
+        }else{
+          v.y-=b.gravity*dt;b.mesh.position.y+=v.y*dt;
+          b.travelled+=Math.abs(v.y)*dt;
+        }
+      }else if(b.trajectory==='arc'){
+        if(!b.__arcStarted){
+          v.y=numV117(b.verticalSpeed,v.y||7.5);b.__arcStarted=true;
+        }
+        v.y-=numV117(b.gravity,10.5)*dt;
+        b.mesh.position.addScaledVector(v,dt);
+        b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
+        b.travelled+=b.mesh.position.distanceTo(prev);
+      }else{
+        if(b.trajectory==='delayed'&&b.horizontalTravel<b.straightDistance){
+          const h=Math.max(.001,Math.hypot(v.x,v.z));
+          const move=Math.min(h*dt,Math.max(0,b.straightDistance-b.horizontalTravel));
+          const t=move/h;
+          b.mesh.position.addScaledVector(v,t);
+          b.horizontalTravel+=move;b.travelled+=move;
+        }else{
+          if(b.trajectory==='delayed'){
+            v.y-=numV117(b.gravity,5.2)*dt;
+            const drag=Math.max(.86,1-.035*dt);
+            v.x*=drag;v.z*=drag;
+          }
+          b.mesh.position.addScaledVector(v,dt);
+          b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
+          b.travelled+=b.mesh.position.distanceTo(prev);
+        }
+      }
+
+      const wh=wallHit(prev,b.mesh.position);
+      if(wh){
+        impact(b,wh.point.clone(),wh);
+        return true;
+      }
+
+      const seg=b.mesh.position.clone().sub(prev),den=Math.max(.0001,seg.lengthSq());
+      let hit=null,hitPoint=null,bestT=Infinity;
+      for(const f of fighters||[]){
+        if(!f?.alive||f.team===b.team||String(f.id)===String(b.fromId))continue;
+        const target=f.pos.clone();target.y+=.9;
+        const t=Math.max(0,Math.min(1,target.clone().sub(prev).dot(seg)/den));
+        const q=prev.clone().addScaledVector(seg,t);
+        if(q.distanceTo(target)<=b.radius+.55&&t<bestT){bestT=t;hit=f;hitPoint=q;}
+      }
+      if(hit){
+        if(b.explosive){
+          try{explodeAt(hitPoint.clone(),numV117(b.explosionRadius,0),numV117(b.splashDamage,0),b.team,{
+            paintRadius:numV117(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter,skipParticles:b.kind==='blaster'
+          });}catch(_){}
+          try{applyDamage(hit,Math.max(0,b.damage-b.splashDamage),b.sourceFighter);}catch(_){}
+        }else{
+          try{applyDamage(hit,b.damage,b.sourceFighter);}catch(_){}
+        }
+        removeBullet(b,bullets.indexOf(b));
+        return true;
+      }
+
+      try{paintTravel(b,prev,b.mesh.position);}catch(_){}
+
+      if(b.horizontalTravel>=b.maxRange&&!b.rangeDropped){
+        b.rangeDropped=true;
+        if(b.trajectory==='charger'){
+          b.chargerDrop=true;v.x=0;v.z=0;v.y=0;
+        }else if(b.trajectory==='blaster'){
+          impact(b,b.mesh.position.clone(),null);
+          return true;
+        }else{
+          v.x*=3/50;v.z*=3/50;
+          b.life=Math.max(b.life,b.age+.38);
+        }
+      }
+
+      const ground=support(b.mesh.position.x,b.mesh.position.z,Math.max(b.mesh.position.y,1));
+      if(b.mesh.position.y<=ground+.02&&v.y<=0){
+        impact(b,b.mesh.position.clone(),null);
+        return true;
+      }
+      if(b.age>b.life){
+        impact(b,b.mesh.position.clone(),null);
+        return true;
+      }
+      return true;
+    }catch(_){
+      /* Even if a collision/paint helper is unavailable, the visual projectile
+         still advances; never leave it frozen. */
+      b.mesh.position.addScaledVector(v,dt);
+      return true;
+    }
+  }
+
+  const canonicalUpdateBullets=window.updateBullets;
+  function updateBulletsWithRemoteFallback(delta){
+    const dt=Math.max(.001,Math.min(.06,Number(delta)||.016));
+    const before=new Map();
+    try{
+      for(const b of bullets||[]){
+        if(b?.__onlineRemote&&b.mesh)before.set(b,b.mesh.position.clone());
+      }
+    }catch(_){}
+
+    try{canonicalUpdateBullets?.(delta);}catch(err){
+      try{console.warn('[V117 projectile updater]',err);}catch(_){}
+    }
+
+    for(const [b,p0] of before){
+      if(!b?.mesh||!b.__onlineRemote||!Array.isArray(bullets)||!bullets.includes(b))continue;
+      const moved=b.mesh.position.distanceTo(p0);
+      if(moved<.001){
+        fallbackMoveRemoteBullet(b,dt);
+      }
+    }
+  }
+
+  window.updateBullets=updateBulletsWithRemoteFallback;
+  try{updateBullets=updateBulletsWithRemoteFallback;}catch(_){}
+
+  window.__V116_BUILD=BUILD;
+  console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
+})();
   window.__V116_BUILD=BUILD;
   console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
 })();
