@@ -435,7 +435,47 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
     };
   }
 
-  const straightDist=Math.min(7.5,range*.28);
+  const speed=Math.max(1,Number(w.speed)||35);
+  const gravity=Number(w.gravity)||(
+    w.cat==='slosher' ? 10.5 :
+    ((w.cat==='brella'||w.cat==='maneuver'||w.cat==='dualies') ? 4.8 : 5.2)
+  );
+
+  /* Slosher is a real arc from the muzzle: no initial straight phase. */
+  if(w.cat==='slosher'){
+    const launchY=Number(w.verticalSpeed)||7.5;
+    const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
+    const totalTime=range/Math.max(1,speed*horizontal);
+    const steps=Math.max(16,Math.min(80,Math.ceil(totalTime*60)));
+    let prev=origin;
+    let lastVisible=origin;
+    for(let j=1;j<=steps;j++){
+      const t=totalTime*j/steps;
+      const cur={
+        x:origin.x+dir.x*speed*t,
+        y:origin.y+launchY*t-.5*gravity*t*t,
+        z:origin.z+dir.z*speed*t
+      };
+      considerSegment(prev,cur,j/steps);
+      if(bestWallOrder<=j/steps)break;
+      lastVisible=cur;
+      prev=cur;
+    }
+    const targetWins=bestTarget&&bestTargetOrder<bestWallOrder;
+    return {
+      hit:targetWins?bestTarget:null,
+      wall:bestWall&&(!bestTarget||bestWallOrder<bestTargetOrder)?bestWall:null,
+      straightEnd:origin,
+      dropEnd:lastVisible
+    };
+  }
+
+  const straightDist=Math.min(
+    Number.isFinite(Number(w.straightDistance))
+      ? Math.max(0,Number(w.straightDistance))
+      : Math.min(7.5,range*.28),
+    range
+  );
   const straight={
     x:origin.x+dir.x*straightDist,
     y:origin.y+dir.y*straightDist,
@@ -443,13 +483,8 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
   };
   considerSegment(origin,straight,0);
 
-  const speed=Math.max(1,Number(w.speed)||35);
   const remain=Math.max(0,range-straightDist);
-  const gravity=Number(w.gravity)|| (w.cat==='slosher' ? 10.5
-    : ((w.cat==='brella'||w.cat==='maneuver'||w.cat==='dualies') ? 4.8 : 5.2));
-  const launchY=w.cat==='slosher'
-    ? 7.5 + Number(w.arc||0)*4
-    : dir.y*speed;
+  const launchY=dir.y*speed;
   const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
   const totalTime=remain/Math.max(1,speed*horizontal);
   const steps=Math.max(16,Math.min(64,Math.ceil(totalTime*50)));
