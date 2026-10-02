@@ -853,7 +853,7 @@
           <div class="v107-kitem"><span class="v107-key">E</span><i></i><small>カスタマイズ</small></div>
           <div class="v107-kitem"><span class="v107-key">R</span><i></i><small>スペシャル</small></div>
           <div class="v107-kitem"><span class="v107-key">3</span><i></i><small>オンライン</small></div>
-          <div class="v107-kitem"><span class="v107-key">O</span><i></i><small>Oでオフライン</small></div>
+          <div class="v107-kitem"><span class="v107-key">O</span><i></i><small>CP戦</small></div>
           <div class="v107-kitem"><span class="v107-key">P</span><i></i><small>オンライン</small></div>
         </div>
         <div class="v107-krow">
