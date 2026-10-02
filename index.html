@@ -4166,16 +4166,7 @@ function animate3D(token){
 
   updateMarketStageGimmicks(time,delta);
 
-  /* V122: always drive the canonical projectile updater first.
-     The legacy global remains only as a compatibility fallback. One bad
-     projectile frame must never stop the rest of the game loop. */
-  try{
-    const projectileUpdater=window.__canonicalProjectileUpdater;
-    if(typeof projectileUpdater==='function') projectileUpdater(delta);
-    else window.updateBullets?.(delta);
-  }catch(err){
-    try{console.warn('[PROJECTILE UPDATE]',String(err));}catch(_){ }
-  }
+  window.updateBullets?.(delta);
   updateSubs(delta);
   updateOngoingEffects(delta);
   updateChargeOrbSystems(delta);
@@ -14126,6 +14117,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 <script src="/online-runtime.js?v=20261003-input-fix"></script>
 <script src="/world-runtime.js?v=20261003-input-fix"></script>
 <script src="/player-runtime.js?v=20261003-festival-fix2"></script>
-<script src="/combat-runtime.js?v=20261003-online-projectile-fix9"></script>
+<script src="/combat-runtime.js?v=20261003-online-projectile-fix8"></script>
 </body>
 </html>
