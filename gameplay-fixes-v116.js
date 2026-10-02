@@ -469,14 +469,15 @@
         spawnUnified(f,d,{kind:'splatling',speed:num(w.speed,43),damage:num(w.damage,29),
           gravity:5.2,drag:.035,radius:.13,paintRadius:num(w.paintRadius,.6),
           life:1.35,maxRange:num(w.range,30)});
+        if(f.isPlayer&&onlineActive&&onlineStarted){
+          try{window.__v93SendShot?.({
+            x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+            dx:d.x,dy:d.y,dz:d.z,weaponId:f.weapon.id,
+            mode:'splatling',charge:q,burstShots:1
+          });}catch(_){}
+        }
       },delay);
       fired++;
-    }
-    if(f.isPlayer&&onlineActive&&onlineStarted){
-      try{window.__v93SendShot?.({
-        x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:0,dz:base.z,
-        weaponId:f.weapon.id,mode:'splatling',charge:q,burstShots:desired
-      });}catch(_){}
     }
     return fired>0;
   }
