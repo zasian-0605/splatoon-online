@@ -1147,6 +1147,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       const kind=w.category;
       heavy={kind,start:performance.now(),time:Number(w.chargeTime)||800};
       f.isCharging=true;
+      f.chargeStart=heavy.start;
       if(kind==='spinner'){
         f.spinnerCharging=true;
         f._v60ChargeStart=heavy.start;
