@@ -1085,14 +1085,35 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   function updateCanonicalChargerGauge(frac){
     const g=document.getElementById('charge-gauge');
     if(g){
+      const pct=Math.round(Math.max(0,Math.min(1,Number(frac)||0))*100);
+      /* Do not depend on player-runtime.css: the canonical charger owns
+         the charge ring completely so it cannot become a 22px/faint dot. */
       g.style.display='block';
-      g.style.setProperty('--pct',String(Math.round(Math.max(0,Math.min(1,Number(frac)||0))*100)));
+      g.style.visibility='visible';
+      g.style.opacity='1';
+      g.style.width='74px';
+      g.style.height='74px';
+      g.style.border='3px solid rgba(255,255,255,.9)';
+      g.style.zIndex='1000';
+      g.style.setProperty('--pct',String(pct));
     }
+    const bu=document.getElementById('battle-ui');
+    if(bu)bu.style.display='block';
+    const ret=document.getElementById('reticle');
+    if(ret)ret.style.display='block';
     try{document.documentElement.classList.add('charger-charging');}catch(_){}
   }
   function hideCanonicalChargerGauge(){
     const g=document.getElementById('charge-gauge');
-    if(g)g.style.display='none';
+    if(g){
+      g.style.display='none';
+      g.style.visibility='';
+      g.style.opacity='';
+      g.style.width='';
+      g.style.height='';
+      g.style.border='';
+      g.style.zIndex='';
+    }
     try{document.documentElement.classList.remove('charger-charging');}catch(_){}
   }
 
@@ -1311,9 +1332,14 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     isShooting=false;
   },true);
 
-  /* Some browsers release pointer capture without delivering pointerup. */
+  /* Losing capture is not itself a failed shot. The canonical release
+     path still waits for pointerup/mouseup, so moving the mouse away from
+     an obstacle/UI cannot silently cancel a charger charge. */
   window.addEventListener('lostpointercapture',e=>{
-    if(chargerInput){releaseCanonicalCharger(true);isShooting=false;return;}
+    if(chargerInput){
+      try{console.debug('[V121 charger] lost pointer capture',e.pointerId);}catch(_){}
+      return;
+    }
     if(!heavy)return;
     releaseHeavy(true);
     isShooting=false;
@@ -1525,7 +1551,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
   window.__V116_UPDATE_BULLETS=updateUnifiedBullets;
   window.__V117_CANONICAL_RUNTIME={
-    build:'V121-CHARGER-GAUGE-AND-INPUT-REPAIR-2026-10-03',
+    build:'V122-CHARGER-FULL-INPUT-AND-VISIBLE-CHARGE-2026-10-03',
     projectile:'V116',
     input:'single-desktop-action-path',
     remoteShots:'V117-canonical-ranged',
