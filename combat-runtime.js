@@ -1018,96 +1018,69 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         return legacyReceive?.(m);
       }
 
-      if(wp.category==='charger'){
-        if(wp.kind==='stringer'||mode==='stringer'){
-          const arrows=Math.max(3,Math.min(5,Math.floor(Number(wp.arrows)||3)));
-          for(let i=0;i<arrows;i++){
-            const dd=d.clone().applyAxisAngle(YV117,(i-(arrows-1)/2)*(.07+(1-charge)*.05));
-            spawnAtShot(dd,{
-              kind:'charger',
-              speed:numV117(wp.speedShot,50)*(.75+.25*charge),
-              damage:numV117(wp.tapDamage,20)+(numV117(wp.fullDamage,80)-numV117(wp.tapDamage,20))*charge,
-              gravity:14,radius:.13,paintRadius:numV117(wp.paintRadius,.8),
-              life:2,maxRange:numV117(wp.range,45)
-            });
-          }
-        }else{
-          spawnAtShot(d,{
-            kind:'charger',speed:numV117(wp.speedShot,85),
-            gravity:18,radius:.12,
-            damage:numV117(wp.tapDamage,30)+(numV117(wp.fullDamage,120)-numV117(wp.tapDamage,30))*charge,
-            paintRadius:numV117(wp.paintRadius,1),life:2,maxRange:numV117(wp.range,55)
-          });
-        }
-        return true;
-      }
+      /* Server-authoritative projectile parameters. Older servers without
+         this object still get the same canonical fallback values. */
+      const ps=Object.assign({
+        kind:wp.category==='maneuver'?'dualies':wp.category,
+        trajectory:wp.category==='slosher'?'arc':'delayed',
+        speed:numV117(wp.speed,35),
+        maxRange:numV117(wp.range,30),
+        straightDistance:wp.category==='slosher'?0:Math.min(7.5,numV117(wp.range,30)*.28),
+        gravity:wp.category==='slosher'?10.5:(wp.category==='maneuver'?4.8:5.2),
+        verticalSpeed:wp.category==='slosher'?7.5:0,
+        radius:wp.category==='slosher'?.28:.14,
+        paintRadius:numV117(wp.paintRadius,.9),
+        life:numV117(wp.life,1.5),
+        damage:numV117(wp.damage,30),
+        count:wp.category==='maneuver'?2:1,
+        spread:wp.category==='maneuver'?numV117(wp.spread,.055):0,
+        explosive:wp.category==='slosher',
+        explosionRadius:wp.category==='slosher'?numV117(wp.explosionRadius,2.4):0,
+        splashDamage:wp.category==='slosher'?numV117(wp.damage,70):0
+      },m.projectile&&typeof m.projectile==='object'?m.projectile:{});
 
-      if(wp.category==='blaster'){
-        spawnAtShot(d,{
-          kind:'blaster',speed:numV117(wp.speed,24),damage:numV117(wp.damage,70),
-          gravity:0,radius:.22,paintRadius:numV117(wp.paintRadius,1.35),life:2,
-          maxRange:numV117(wp.range,23),explosive:true,
-          explosionRadius:numV117(wp.explosionRadius,2.5),
-          splashDamage:numV117(wp.splashDamage,35)
-        });
-        return true;
-      }
+      const makeOpts=extra=>Object.assign({
+        kind:ps.kind,
+        speed:numV117(ps.speed,35),
+        gravity:numV117(ps.gravity,5.2),
+        radius:numV117(ps.radius,.14),
+        paintRadius:numV117(ps.paintRadius,.9),
+        life:numV117(ps.life,1.5),
+        maxRange:numV117(ps.maxRange,30),
+        straightDistance:numV117(ps.straightDistance,0),
+        verticalSpeed:numV117(ps.verticalSpeed,0),
+        exactDirection:true,
+        explosive:!!ps.explosive,
+        explosionRadius:numV117(ps.explosionRadius,0),
+        splashDamage:numV117(ps.splashDamage,0)
+      },extra||{});
 
       if(wp.category==='slosher'){
-        const count=wp.name==='ヒッセン'?3:wp.name==='オーバーフロッシャー'?4:1;
+        const count=Math.max(1,Math.min(4,Math.floor(numV117(ps.count,1))));
         for(let i=0;i<count;i++){
           const dd=count>1
-            ? d.clone().applyAxisAngle(YV117,(i-(count-1)/2)*.12)
+            ? d.clone().applyAxisAngle(YV117,(i-(count-1)/2)*numV117(ps.spread,.055))
             : d.clone();
-          spawnAtShot(dd,{
-            kind:'slosher',speed:numV117(wp.speed,18),damage:numV117(wp.damage,60),
-            gravity:10.5,radius:.28,paintRadius:numV117(wp.paintRadius,1.4),
-            life:numV117(wp.life,1.35),maxRange:numV117(wp.range,18)
-          });
+          spawnAtShot(dd,makeOpts({kind:'slosher'}));
         }
         return true;
       }
 
       if(wp.category==='maneuver'){
-        for(const side of [-1,1]){
-          const dd=d.clone().applyAxisAngle(YV117,side*numV117(wp.spread,.05));
-          spawnAtShot(dd,{
-            kind:'dualies',speed:numV117(wp.speed,35),damage:numV117(wp.damage,20),
-            gravity:4.8,radius:.14,paintRadius:numV117(wp.paintRadius,.8),
-            life:numV117(wp.life,1.25),maxRange:numV117(wp.range,30)
-          });
+        const count=Math.max(1,Math.min(2,Math.floor(numV117(ps.count,2))));
+        for(let i=0;i<count;i++){
+          const dd=count>1
+            ? d.clone().applyAxisAngle(YV117,(i-(count-1)/2)*numV117(ps.spread,.055))
+            : d.clone();
+          spawnAtShot(dd,makeOpts({kind:'dualies'}));
         }
         return true;
       }
 
-      if(wp.category==='brella'){
-        const pellets=Math.max(3,Math.min(8,Math.floor(numV117(wp.pellets,5))));
-        for(let i=0;i<pellets;i++){
-          const dd=d.clone().applyAxisAngle(YV117,(i-(pellets-1)/2)*numV117(wp.spread,.055));
-          spawnAtShot(dd,{
-            kind:'brella',speed:numV117(wp.speed,30),damage:numV117(wp.damage,18),
-            gravity:4.8,radius:.13,paintRadius:numV117(wp.paintRadius,.75),
-            life:numV117(wp.life,1.2),maxRange:numV117(wp.range,20)
-          });
-        }
-        return true;
-      }
-
-      if(wp.category==='spinner'){
-        spawnAtShot(d,{
-          kind:'splatling',speed:numV117(wp.speed,43),damage:numV117(wp.damage,29),
-          gravity:5.2,radius:.13,paintRadius:numV117(wp.paintRadius,.6),
-          life:numV117(wp.life,1.35),maxRange:numV117(wp.range,30)
-        });
-        return true;
-      }
-
-      /* Ordinary shooter. */
-      spawnAtShot(d,{
-        kind:'shooter',speed:numV117(wp.speed,35),damage:numV117(wp.damage,30),
-        gravity:5.2,radius:.14,paintRadius:numV117(wp.paintRadius,.9),
-        life:numV117(wp.life,1.55),maxRange:numV117(wp.range,30)
-      });
+      /* Ordinary shooter. The three currently playable online weapons use
+         this canonical branch; unsupported legacy modes are handled above. */
+      spawnAtShot(d,makeOpts({kind:'shooter'}));
+      return true;
       return true;
     }catch(err){
       try{console.warn('[V117 remote shot]',err);}catch(_){}
