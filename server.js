@@ -596,6 +596,10 @@ function serverApplyAoE(room,center,radius,damage,team,attacker,reason){
     }
   }
 }
+function serverRejectShot(player,reason){
+  try{if(player)player.__shotRejectReason=String(reason||'rejected').slice(0,80);}catch(_){}
+  return false;
+}
 function serverShotInkCost(w,m){
   const wid=Number(m?.weaponId);
   if(Number.isInteger(wid)&&SERVER_WEAPON_INK_COST[wid]!=null){
@@ -690,17 +694,17 @@ function serverAcceptPaintTrace(player,x,z,x2,z2){
   return now>=(player.paintTraceUntil||0)?false:true;
 }
 function serverResolveShot(room,player,m){
-  if(!room.started||!player.team||!player.serverAlive)return false;
+  if(!room.started||!player.team||!player.serverAlive)return serverRejectShot(player,'room-not-started-or-dead');
   const wid=player.weaponId;
-  const w=SERVER_WEAPONS[wid];if(!w)return false;
+  const w=SERVER_WEAPONS[wid];if(!w)return serverRejectShot(player,'weapon-not-allowed');
   const now=Date.now();
-  if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return false;
+  if(now-(player.lastShotAt||0)<Math.max(35,w.rate*.72))return serverRejectShot(player,'cooldown');
   const dx=Number(m.dx),dy=Number(m.dy),dz=Number(m.dz),len=Math.hypot(dx,dy,dz);
-  if(!Number.isFinite(len)||len<.001||len>2)return false;
+  if(!Number.isFinite(len)||len<.001||len>2)return serverRejectShot(player,'bad-direction');
   const shotCost=serverShotInkCost(w,m);
   if(!serverTrySpendInk(player,shotCost)){
     send(player.ws,{type:'serverInk',ink:Math.max(0,player.serverInk??0)});
-    return false;
+    return serverRejectShot(player,'ink');
   }
   player.lastShotAt=now;
   serverBeginPaintTrace(player);
@@ -1437,11 +1441,17 @@ wss.on('connection', ws => {
       const weaponId = player.weaponId;
       const charge = Number.isFinite(Number(m.charge)) ? Math.max(0, Math.min(1, Number(m.charge))) : null;
       const mode = typeof m.mode === 'string' ? String(m.mode).slice(0, 32) : null;
+      player.__shotRejectReason='';
       const accepted=serverResolveShot(room,player,Object.assign({},m,{weaponId,dx:nums[3],dy:nums[4],dz:nums[5],charge}));
-      if(!accepted)return;
+      if(!accepted){
+        console.warn('[ONLINE SHOT REJECT]',player.id,'reason=',player.__shotRejectReason||'unknown','ink=',Number(player.serverInk??0).toFixed(1),'alive=',!!player.serverAlive);
+        send(player.ws,{type:'shotResult',accepted:false,reason:player.__shotRejectReason||'unknown',ink:Math.max(0,player.serverInk??0)});
+        return;
+      }
       const projectile=serverProjectileSpec(SERVER_WEAPONS[weaponId],{charge,mode});
       const bDir={x:nums[3]/dirLen,y:nums[4]/dirLen,z:nums[5]/dirLen};
       const bOrigin=player.serverPos||{x:nums[0],y:Number(nums[1])-1.2,z:nums[2]};
+      send(player.ws,{type:'shotResult',accepted:true,ink:Math.max(0,player.serverInk??0)});
       broadcast(room, {
         type: 'shot',
         protocol: 'v117-projectile-1',
