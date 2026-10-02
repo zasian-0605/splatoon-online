@@ -1212,7 +1212,10 @@
     }
     const fn=howto();
     if(typeof fn!=='function') return false;
-    try{ document.exitPointerLock?.(); }catch(_){}
+    // Uの操作説明を開く瞬間は中央のポインターロック管理にも解除を通知する。
+    try{ window.__V10?.releaseLock?.(); }catch(_){
+      try{ document.exitPointerLock?.(); }catch(__){}
+    }
     try{ fn(); }catch(_){ return false; }
     return true;
   }
