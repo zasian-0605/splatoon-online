@@ -4,47 +4,16 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+const online = fs.readFileSync(path.join(root, 'online-runtime.js'), 'utf8');
 
 function capture(source, pattern, label) {
   const match = source.match(pattern);
   if (!match) throw new Error('Could not read ' + label);
   return match[1];
 }
-
 function literal(source, pattern, label) {
   return Function('return ' + capture(source, pattern, label))();
 }
-
-const weapons = Function('return [' + capture(html, /const weaponList = \[([\s\S]*?)\n\];/, 'base client weapons') + ']')();
-weapons.push(...Function('return [' + capture(html, /weaponList\.push\(([\s\S]*?)\n  \);/, 'client wipers') + ']')());
-
-const balance = literal(html, /const balance = (\{[\s\S]*?\n  \});/, 'client balance rules');
-for (const weapon of weapons) Object.assign(weapon, balance[weapon.name] || {});
-
-const categoryCosts = { shooter: .95, blaster: 2.6, charger: 9, roller: 4.5, maneuver: .75, slosher: 5, wiper: 7 };
-for (const weapon of weapons) {
-  if (weapon.inkCost == null) weapon.inkCost = categoryCosts[weapon.category] || 1.2;
-}
-
-weapons.push(...Function('return [' + capture(html, /const addedWeapons=\[([\s\S]*?)\n  \];/, 'expanded client weapons') + ']')());
-const tune = literal(html, /const tune=(\{[\s\S]*?\n  \});/, 'final client weapon tuning');
-for (const weapon of weapons) Object.assign(weapon, tune[weapon.name] || {});
-
-const loadouts = literal(html, /const loadoutMap=(\{[\s\S]*?\n  \});/, 'client sub loadouts');
-const canonicalSub = value => ({ trap: 'inkMine', tactic: 'pointSensor', robotBomb: 'autobomb' })[value] || value;
-for (const weapon of weapons) {
-  const loadout = loadouts[weapon.name];
-  if (loadout) weapon.sub = canonicalSub(loadout[0]);
-  else weapon.sub = canonicalSub(weapon.sub);
-}
-
-const serverWeapons = literal(server, /const SERVER_WEAPONS=(\{[\s\S]*?\n\});/, 'server weapons');
-const serverCosts = Function('return [' + capture(server, /const SERVER_WEAPON_INK_COST=\[([\s\S]*?)\n\];/, 'server ink costs') + ']')();
-const serverSubsByWeapon = literal(server, /const SERVER_SUB_BY_WEAPON=(\{[\s\S]*?\n\});/, 'server sub loadouts');
-const serverSubs = literal(server, /const SERVER_SUBS=(\{[\s\S]*?\n\});/, 'server sub rules');
-const serverSubCosts = literal(server, /const SERVER_SUB_INK_COST=(\{[\s\S]*?\n\});/, 'server sub ink costs');
-const clientSubDefs = literal(html, /Object\.assign\(subDefs,(\{[\s\S]*?\n  \})\);/, 'client sub rules');
-
 function equal(label, actual, expected) {
   if (actual === undefined || expected === undefined || actual === null || expected === null) {
     if (actual !== expected) throw new Error(label + ': client=' + actual + ', server=' + expected);
@@ -59,40 +28,84 @@ function equal(label, actual, expected) {
   }
 }
 
-if (weapons.length !== 45 || Object.keys(serverWeapons).length !== 45 || serverCosts.length !== 45) {
-  throw new Error('Expected 45 client and server weapons with 45 ink costs');
+const weapons = literal(html, /const weaponList = (\[[\s\S]*?\n\]);/, 'current client weapon list');
+if (weapons.length !== 3) throw new Error('Expected exactly 3 playable client weapons');
+const ids = weapons.map(w => w.id).sort((a,b) => a-b);
+if (ids.join(',') !== '0,1,2') throw new Error('Client weapon IDs must be exactly 0,1,2');
+
+const balance = literal(html, /const balance = (\{[\s\S]*?\n  \});/, 'client balance rules');
+for (const weapon of weapons) Object.assign(weapon, balance[weapon.name] || {});
+
+const loadoutMap = literal(html, /const loadoutMap=(\{[\s\S]*?\n  \});/, 'client loadout map');
+for (const weapon of weapons) {
+  const loadout = loadoutMap[weapon.name];
+  if (loadout) {
+    weapon.sub = loadout[0] === 'trap' ? 'inkMine' : loadout[0];
+    weapon.special = loadout[1];
+  }
 }
 
-for (let id = 0; id < weapons.length; id++) {
-  const client = weapons.find(weapon => weapon.id === id);
-  const serverRule = serverWeapons[id];
-  if (!client || !serverRule) throw new Error('Missing weapon id ' + id);
-  for (const [clientKey, serverKey] of [
-    ['category', 'cat'], ['damage', 'damage'], ['rate', 'rate'], ['range', 'range'], ['speed', 'speed'],
-    ['explosionRadius', 'explosion'], ['splashDamage', 'splash'], ['tapDamage', 'tap'], ['fullDamage', 'full'],
-    ['flickDamage', 'flickDamage'], ['flickRange', 'flickRange']
-  ]) {
-    if ((clientKey === 'rate' && client.rate === undefined) || (clientKey === 'speed' && ['roller', 'wiper'].includes(client.category)) || (clientKey === 'explosionRadius' && client.explosionRadius === undefined) || (clientKey === 'splashDamage' && client.splashDamage === undefined) || (clientKey === 'tapDamage' && client.tapDamage === undefined) || (clientKey === 'fullDamage' && client.fullDamage === undefined && client.category !== 'wiper')) continue;
-    const value = clientKey === 'damage' ? (client.category === 'wiper' ? client.slashDamage : (client.damage ?? client.swingDamage ?? client.slashDamage))
-      : clientKey === 'fullDamage' && client.category === 'wiper' ? client.chargedDamage
-      : clientKey === 'rate' ? client.rate
-      : clientKey === 'range' ? (client.category === 'roller' ? (client.swingRange ?? serverRule.range) : client.category === 'wiper' ? (client.slashRange ?? serverRule.range) : (client.range ?? 30))
-      : clientKey === 'speed' ? (client.speed ?? client.speedShot ?? (client.category === 'roller' ? undefined : 35))
-      : client[clientKey];
-    equal('weapon ' + id + ' ' + clientKey, value, serverRule[serverKey]);
-  }
-  equal('weapon ' + id + ' ink cost', client.inkCost, serverCosts[id]);
-  equal('weapon ' + id + ' sub', client.sub, serverSubsByWeapon[id]);
-  if (!serverSubs[serverSubsByWeapon[id]]) throw new Error('Missing server sub behavior for weapon ' + id);
-  const clientSub = clientSubDefs[client.sub];
-  if (!clientSub) throw new Error('Missing client sub behavior for weapon ' + id + ': ' + client.sub);
-  equal('weapon ' + id + ' sub ink cost', clientSub.inkCost, serverSubCosts[client.sub]);
+const serverWeapons = literal(server, /const SERVER_WEAPONS=(\{[\s\S]*?\n\});/, 'server weapons');
+const serverCosts = literal(server, /const SERVER_WEAPON_INK_COST=(\[[\s\S]*?\n\]);/, 'server weapon ink costs');
+const serverSubs = literal(server, /const SERVER_SUB_BY_WEAPON=(\{[\s\S]*?\n\});/, 'server sub loadouts');
+const serverSpecials = literal(server, /const SERVER_SPECIAL_BY_WEAPON=(\{[\s\S]*?\n\});/, 'server special loadouts');
+
+if (Object.keys(serverWeapons).map(Number).sort((a,b)=>a-b).join(',') !== '0,1,2') {
+  throw new Error('Server weapon IDs must be exactly 0,1,2');
+}
+if (serverCosts.length !== 3) throw new Error('Server weapon ink-cost table must contain exactly 3 entries');
+
+const expected = [
+  {id:0,name:'スプラシューター',category:'shooter',damage:32,rate:95,range:32,speed:34,inkCost:1.0,sub:'splatBomb',special:'ウルトラショット'},
+  {id:1,name:'バケットスロッシャー',category:'slosher',damage:68,rate:500,range:25,speed:19,explosionRadius:2.4,inkCost:4.8,sub:'fizzyBomb',special:'ナイスダマ'},
+  {id:2,name:'スプラマニューバー',category:'maneuver',damage:28,rate:55,range:30,speed:38,inkCost:.75,sub:'splatBomb',special:'カニタンク'}
+];
+
+for (const expectedWeapon of expected) {
+  const client = weapons.find(w => w.id === expectedWeapon.id);
+  const serverRule = serverWeapons[expectedWeapon.id];
+  if (!client || !serverRule) throw new Error('Missing weapon ' + expectedWeapon.id);
+  equal('weapon '+expectedWeapon.id+' name', client.name, expectedWeapon.name);
+  equal('weapon '+expectedWeapon.id+' category', client.category, expectedWeapon.category);
+  equal('weapon '+expectedWeapon.id+' damage', client.damage, expectedWeapon.damage);
+  equal('weapon '+expectedWeapon.id+' rate', client.rate, expectedWeapon.rate);
+  equal('weapon '+expectedWeapon.id+' range', client.range, expectedWeapon.range);
+  equal('weapon '+expectedWeapon.id+' speed', client.speed, expectedWeapon.speed);
+  equal('weapon '+expectedWeapon.id+' ink cost', client.inkCost, expectedWeapon.inkCost);
+  equal('weapon '+expectedWeapon.id+' sub', client.sub, expectedWeapon.sub);
+  equal('weapon '+expectedWeapon.id+' special', client.special, expectedWeapon.special);
+
+  if (client.name === 'バケットスロッシャー') equal('bucket explosion', client.explosionRadius, expectedWeapon.explosionRadius);
+  equal('server weapon category '+expectedWeapon.id, serverRule.cat, expectedWeapon.category);
+  equal('server damage '+expectedWeapon.id, serverRule.damage, expectedWeapon.damage);
+  equal('server rate '+expectedWeapon.id, serverRule.rate, expectedWeapon.rate);
+  equal('server range '+expectedWeapon.id, serverRule.range, expectedWeapon.range);
+  equal('server speed '+expectedWeapon.id, serverRule.speed, expectedWeapon.speed);
+  if (expectedWeapon.explosionRadius != null) equal('server explosion '+expectedWeapon.id, serverRule.explosion, expectedWeapon.explosionRadius);
+  equal('server ink cost '+expectedWeapon.id, serverCosts[expectedWeapon.id], expectedWeapon.inkCost);
+  equal('server sub '+expectedWeapon.id, serverSubs[expectedWeapon.id], expectedWeapon.sub);
+  equal('server special '+expectedWeapon.id, serverSpecials[expectedWeapon.id], expectedWeapon.special);
+}
+
+if (/name:"スプラローラー"/.test(capture(html, /const weaponList = (\[[\s\S]*?\n\]);/, 'current client weapon list')) ||
+    /name:"スプラチャージャー"/.test(capture(html, /const weaponList = (\[[\s\S]*?\n\]);/, 'current client weapon list'))) {
+  throw new Error('Removed roller/charger are still in the playable roster');
+}
+
+const aiBlock = capture(html, /const choices=\[([\s\S]*?)\n    \];/, 'AI weapon choices');
+const aiChoices = [...aiBlock.matchAll(/'([^']+)'/g)].map(m => m[1]);
+if (aiChoices.join('|') !== 'スプラシューター|バケットスロッシャー|スプラマニューバー') {
+  throw new Error('AI weapon pool does not match the 3 playable weapons');
+}
+
+if (!/Math\.max\(0,Math\.min\(2,Math\.floor\(weapon\)\)\):0/.test(online)) {
+  throw new Error('Online client weapon ID clamp is not 0..2');
 }
 
 const outfitBlock = capture(html, /const outfitList = \[([\s\S]*?)\n\];/, 'client outfit list');
-const patterns = [...outfitBlock.matchAll(/pattern:"([^"]+)"/g)].map(match => match[1]);
-const outfitSaver = Function('return [' + capture(server, /const SERVER_OUTFIT_INK_SAVER=\[([\s\S]*?)\n\];/, 'server outfit ink saver') + ']')();
-const outfitRegen = Function('return [' + capture(server, /const SERVER_OUTFIT_INK_REGEN=\[([\s\S]*?)\n\];/, 'server outfit ink regen') + ']')();
+const patterns = [...outfitBlock.matchAll(/pattern:"([^"]+)"/g)].map(m => m[1]);
+const outfitSaver = literal(server, /const SERVER_OUTFIT_INK_SAVER=(\[[\s\S]*?\n\]);/, 'server outfit ink saver');
+const outfitRegen = literal(server, /const SERVER_OUTFIT_INK_REGEN=(\[[\s\S]*?\n\]);/, 'server outfit ink regen');
 if (patterns.length !== 50 || outfitSaver.length !== 50 || outfitRegen.length !== 50) {
   throw new Error('Expected 50 outfit ink modifiers');
 }
@@ -103,4 +116,11 @@ patterns.forEach((pattern, id) => {
   equal('outfit ' + id + ' ink regen', outfitRegen[id], regen);
 });
 
-console.log('Validated 45 client/server weapon stats, sub loadouts and ink costs, plus 50 outfit ink modifiers.');
+if (!/Math\.max\(0, Math\.min\(2, Math\.floor\(Number\(c\.weapon\)\)\)\)/.test(server)) {
+  throw new Error('Server config weapon clamp is not 0..2');
+}
+if (!/Math\.max\(0, Math\.min\(2, Math\.floor\(Number\(m\.weaponId\)\)\)\)/.test(server)) {
+  throw new Error('Server joinQueue weapon clamp is not 0..2');
+}
+
+console.log('Validated the current 3-weapon client/server contract, online weapon-ID bounds, sub/special mappings, and 50 outfit modifiers.');
