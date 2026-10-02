@@ -901,6 +901,35 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     cancel:()=>releaseCanonicalCharger(true)
   };
 
+  /* Restored V117 canonical remote-shot bridge.  The previous cleanup accidentally
+     removed these declarations while deleting the obsolete per-frame fallback. */
+  const YV117=new THREE.Vector3(0,1,0);
+  function spawnRemoteBullet(f,dir,opts={}){
+    const fn=canonicalProjectileSpawner;
+    if(typeof fn!=='function')throw new Error('canonical projectile spawner unavailable');
+    const d=(dir?.clone?dir.clone():new THREE.Vector3(0,0,1));
+    if(d.lengthSq()<.0001)d.set(0,0,1);
+    d.normalize();
+    const b=fn(f,d,opts);
+    if(!b)return null;
+    const speed=Math.max(8,numV117(opts.speed,35));
+    b.__onlineRemote=true;
+    b.__onlineRemoteDir=d.clone();
+    b.__onlineRemoteSpeed=speed;
+    b.__onlineRemoteOwner='V118';
+    if(!b.velocity||typeof b.velocity.lengthSq!=='function'||b.velocity.lengthSq()<.0001){
+      b.velocity=d.clone().multiplyScalar(speed);
+    }else{
+      b.velocity.copy(d).multiplyScalar(speed);
+    }
+    b.age=0;
+    if(b.mesh){
+      b.lastPos=b.mesh.position.clone();
+      if(b.startPos)b.startPos=b.mesh.position.clone();
+    }
+    return b;
+  }
+
   const aimDir=f=>{
     const d=new THREE.Vector3();
     try{camera?.getWorldDirection(d);}catch(_){}
