@@ -426,7 +426,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }catch(_){}
       if(b.explosive){
         try{explodeAt(wall.point.clone(),num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
-          paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter
+          paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter,
+          skipParticles:b.kind==='blaster'
         });}catch(_){}
       }
       return;
@@ -437,7 +438,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     try{
       if(b.explosive){
         explodeAt(q,num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
-          paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter
+          paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter,
+          skipParticles:b.kind==='blaster'
         });
       }else{
         paintGround(q.x,q.z,num(b.paintRadius,.8),b.colorHex,{
@@ -638,7 +640,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         paintTravel(b,prev,hitPoint);
         if(b.explosive){
           try{explodeAt(hitPoint.clone(),num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
-            paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter
+            paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter,
+            skipParticles:b.kind==='blaster'
           });}catch(_){}
           try{applyDamage(hit,Math.max(0,b.damage-b.splashDamage),b.sourceFighter);}catch(_){}
         }else{
