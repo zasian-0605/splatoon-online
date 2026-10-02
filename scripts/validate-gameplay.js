@@ -28,7 +28,7 @@ function equal(label, actual, expected) {
   }
 }
 
-const weapons = literal(html, /const weaponList = (\[[\s\S]*?\n\]);/, 'current client weapon list');
+const weapons = literal(html, /const weaponList = (\[[\s\S]*?\])\s*\n\s*const categoryLabel/, 'current client weapon list');
 if (weapons.length !== 3) throw new Error('Expected exactly 3 playable client weapons');
 const ids = weapons.map(w => w.id).sort((a,b) => a-b);
 if (ids.join(',') !== '0,1,2') throw new Error('Client weapon IDs must be exactly 0,1,2');
