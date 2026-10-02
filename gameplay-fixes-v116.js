@@ -156,6 +156,7 @@
     let trajectory='delayed';
     let gravity=num(opts.gravity,5.2);
     let straight=Math.min(7.5,range*.28);
+    let launchY=num(opts.verticalSpeed,0);
 
     if(kind==='blaster'||w.category==='blaster'){
       kind='blaster';
@@ -173,6 +174,7 @@
       trajectory='arc';
       gravity=num(opts.gravity,10.5);
       straight=0;
+      launchY=num(opts.verticalSpeed,7.5+num(w.arc,0)*4);
     }else if(kind==='brella'||kind==='dualies'){
       trajectory='delayed';
       gravity=num(opts.gravity,4.8);
@@ -196,6 +198,7 @@
       __v116Unified:true,
       mesh,
       velocity:d.clone().multiplyScalar(speed),
+      verticalSpeed:launchY,
       startPos:s.clone(),
       lastPos:s.clone(),
       travelled:0,
@@ -289,6 +292,15 @@
         const dx=b.mesh.position.x-b.startPos.x,dz=b.mesh.position.z-b.startPos.z;
         b.horizontalTravel=Math.hypot(dx,dz);
         b.travelled+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
+      }else if(b.trajectory==='arc'){
+        if(!b.__arcStarted){
+          b.velocity.y=num(b.verticalSpeed,b.velocity.y);
+          b.__arcStarted=true;
+        }
+        b.velocity.y-=b.gravity*dt;
+        b.mesh.position.addScaledVector(b.velocity,dt);
+        b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
+        b.travelled+=b.mesh.position.distanceTo(prev);
       }else{
         b.velocity.y-=b.gravity*dt;
         b.mesh.position.addScaledVector(b.velocity,dt);
