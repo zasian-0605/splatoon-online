@@ -821,265 +821,35 @@
   const overlay=document.createElement('div');
   overlay.id='v107-howto-overlay';
   overlay.innerHTML=`
-    <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="遊び方・キー操作">
-      <div id="v107-howto-title">🔥 操作説明・これだけ覚えて！</div>
-      <div id="v107-howto-subtitle">文化祭で初めて遊ぶ人向け。まずこのページの「黄色い文字」だけ見ればOK！ Uで開閉できます。</div>
+    <div id="v107-howto-card" role="dialog" aria-modal="true" aria-label="操作説明">
+      <div id="v107-howto-title">🎮 操作説明</div>
+      <div id="v107-howto-subtitle">これだけ覚えればOK！　Uで開閉</div>
 
       <div id="v107-howto-body">
         <div class="v107-help-box">
-          <b>🎮 移動</b>
-          <div class="v107-help-row">
-            <span class="v107-key">W</span>
-            <span class="v107-key">A</span>
-            <span class="v107-key">S</span>
-            <span class="v107-key">D</span>
-            <span>移動</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-key wide">Space</span>
-            <span>ジャンプ</span>
-          </div>
+          <b>🎮 基本</b>
+          <div class="v107-help-row"><span class="v107-key">WASD</span><span>移動</span></div>
+          <div class="v107-help-row"><span class="v107-key wide">Space</span><span>ジャンプ</span></div>
+          <div class="v107-help-row"><span class="v107-mouse">マウス</span><span>視点</span></div>
+          <div class="v107-help-row"><span class="v107-mouse">左クリック</span><span>射撃</span></div>
         </div>
 
         <div class="v107-help-box">
-          <b>🖱️ 視点・射撃</b>
-          <div class="v107-help-row">
-            <span class="v107-mouse">マウス</span>
-            <span>視点操作</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-mouse">左クリック</span>
-            <span>射撃</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-mouse">右クリック</span>
-            <span>サブウェポン</span>
-          </div>
-          <div class="v107-note">※ イカ状態では射撃・サブは使いません。Shiftを離してヒトに戻ってから使います。</div>
+          <b>🦑 イカ</b>
+          <div class="v107-help-row"><span class="v107-key wide">Shift</span><span>押している間だけイカ</span></div>
         </div>
 
         <div class="v107-help-box">
-          <b>🦑 イカ状態</b>
-          <div class="v107-help-row">
-            <span class="v107-key wide">Shift</span>
-            <span>押している間だけイカ</span>
-          </div>
-          <div class="v107-note">Shiftを離すとヒトに戻ります。敵インクの上ではイカになれません。</div>
-        </div>
-
-        <div class="v107-help-box">
-          <b>💣 サブウェポン</b>
-          <div class="v107-help-row">
-            <span class="v107-key">Q</span>
-            <span>サブを使う</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-mouse">右クリック</span>
-            <span>サブを使う</span>
-          </div>
-        </div>
-
-        <div class="v107-help-box">
-          <b>⭐ スペシャル</b>
-          <div class="v107-help-row">
-            <span class="v107-key">R</span>
-            <span>スペシャルを発動</span>
-          </div>
-          <div class="v107-note">スペシャルゲージがたまっているときに使えます。</div>
-        </div>
-
-        <div class="v107-help-box">
-          <b>🗺️ マップ・スーパージャンプ</b>
-          <div class="v107-help-row">
-            <span class="v107-key">M</span>
-            <span>マップを開く</span>
-          </div>
-          <div class="v107-note">マップで味方を選ぶとスーパージャンプ。M または ESC でマップを閉じます。</div>
+          <b>💣 アクション</b>
+          <div class="v107-help-row"><span class="v107-key">Q</span><span>サブ</span></div>
+          <div class="v107-help-row"><span class="v107-key">R</span><span>スペシャル</span></div>
+          <div class="v107-help-row"><span class="v107-key">E</span><span>カスタマイズ</span></div>
+          <div class="v107-help-row"><span class="v107-key">3 / P</span><span>オンライン</span></div>
         </div>
 
         <div class="v107-help-box full">
-          <b>🎯 試し撃ち場で使うキー</b>
-          <div class="v107-help-row">
-            <span class="v107-key">E</span>
-            <span>カスタマイズに戻る</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-key">O</span>
-            <span>CPU対戦（4 VS 4）へ</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-key">3</span>
-            <span>オンラインへ</span>
-          </div>
-          <div class="v107-note">試し撃ち場では自由に移動・射撃できます。</div>
-        </div>
-
-        <div class="v107-help-box full">
-          <b>🏹 チャージャー</b>
-          <div class="v107-help-row">
-            <span class="v107-mouse">左クリック長押し</span>
-            <span>チャージ</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-mouse">離す</span>
-            <span>発射</span>
-          </div>
-          <div class="v107-note">チャージ中は照準・チャージゲージを確認できます。</div>
-        </div>
-
-        <div class="v107-help-box full">
-          <b>⚔️ 4 VS 4 Xマッチ風CPU戦</b>
-          <div class="v107-help-row">
-            <span class="v107-key wide">4 VS 4</span>
-            <span>味方4人 vs 敵4人</span>
-          </div>
-          <div class="v107-note">前衛・中衛・後衛が連携して戦います。Shift：押している間だけイカ / Q：サブ / R：スペシャル。</div>
-        </div>
-
-        <div class="v107-help-box">
-          <b>🏆 腕前・レート</b>
-          <div class="v107-help-row">
-            <span>試合結果で</span>
-            <span class="v107-highlight">レート</span>
-            <span>が更新されます。</span>
-          </div>
-          <div class="v107-note">ゲーム中にも現在の腕前・レート・勝敗・試合数を確認できます。</div>
-        </div>
-
-        <div class="v107-help-box">
-          <b>📱 スマホ操作</b>
-          <div class="v107-help-row">
-            <span class="v107-mouse">左半分スワイプ</span>
-            <span>移動</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-mouse">右半分スワイプ</span>
-            <span>視点</span>
-          </div>
-          <div class="v107-help-row">
-            <span class="v107-mouse">右半分タップ</span>
-            <span>射撃</span>
-          </div>
-          <div class="v107-note">画面上の 🦑 / UP / ボム / SP / MAP / ナイス / カモン ボタンも使えます。</div>
-        </div>
-
-        <div class="v107-help-box full">
-          <b>📖 遊び方</b>
-          <div class="v107-help-row">
-            <span class="v107-key">U</span>
-            <span>/ 遊び方（もう一度Uで閉じる）</span>
-          </div>
-          <div class="v107-note">画面の「U / 遊び方」が押せないときも、Uキーで開けます。ESCでも閉じられます。</div>
-        </div>
-
-        <div class="v107-culture-banner">
-          🎪 文化祭で初めて遊ぶ人へ！
-          <br>
-          <span style="font-size:26px;color:#e3ff00;">【まず これだけ】WASD＝移動 / マウス＝見る / 左クリック＝撃つ / Shift＝イカ / Q＝ボム / R＝スペシャル</span>
-          <br>
-          <span style="font-size:18px;">分からなくなったら <b>U</b> を押してください。</span>
-        </div>
-
-        <div class="v107-help-box full v107-online-route">
-          <b style="font-size:26px;">🌐 オンライン対戦へ行く手順</b>
-          <div class="v107-step">
-            <strong>① まず試し撃ち場へ！</strong><br>
-            ここでブキを試したり、操作を確認できます。
-          </div>
-          <div class="v107-step">
-            <strong>② キーボードの「3」を押す！</strong><br>
-            「オンラインルーム」が開いて、オンライン対戦の参加が始まります。<br>
-            <span style="color:#e3ff00;">「P」でもオンラインへ行けます。</span>
-          </div>
-          <div class="v107-step">
-            <strong>③ ログイン画面が出たら</strong><br>
-            アカウントを登録するか、すでに作ったアカウントでログインしてください。ログイン後、もう一度「3」または「P」でオンラインへ進めます。
-          </div>
-          <div class="v107-step">
-            <strong>④ 「オンラインルーム」で待つ！</strong><br>
-            人数表示が <b style="color:#e3ff00;">1 / 8 → 2 / 8 → … → 8 / 8</b> のように増えていきます。
-          </div>
-          <div class="v107-step">
-            <strong>⑤ 2〜7人のときは「準備OK」！</strong><br>
-            参加している人がみんな「準備OK」を押すと対戦開始。<br>
-            <span style="color:#e3ff00;">8人そろった場合は自動で対戦開始です。</span>
-          </div>
-          <div class="v107-step">
-            <strong>⑥ 対戦スタート！</strong><br>
-            味方と敵に分かれてバトルします。ゲーム中の基本操作は、このページの上に書いてある操作と同じです。
-          </div>
-          <div class="v107-online-warning">
-            ⚠️ 大事：オンラインはインターネット接続が必要です。オンラインルームを閉じたいときは「ルームから退出」を押してください。
-          </div>
-        </div>
-
-        <div class="v107-help-box full">
-          <b style="font-size:28px;">🎪 文化祭・超重要！最初にここだけ見て！</b>
-          <div class="v107-culture-banner">
-            <div>🟨 <b>WASD</b> ＝ うごく</div>
-            <div>🖱️ <b>マウス</b> ＝ みる　　<b>左クリック</b> ＝ うつ</div>
-            <div>🦑 <b>Shift</b> ＝ おしている間だけイカ</div>
-            <div>💣 <b>Q</b> ＝ ボム　　 ⭐ <b>R</b> ＝ スペシャル</div>
-            <div>🦘 <b>Space</b> ＝ ジャンプ</div>
-            <div style="margin-top:8px;font-size:18px;">「なにを押すんだっけ？」となったら、<b style="color:#e3ff00;font-size:25px;">U</b> を押す！</div>
-          </div>
-        </div>
-
-        <div class="v107-help-box full v107-online-route">
-          <b style="font-size:30px;">🌐 オンライン対戦の行き方【ここ大事！】</b>
-
-          <div class="v107-step">
-            <strong>① 試し撃ち場に入る</strong><br>
-            最初はここで自由に動いたり、ブキを試したりできます。まず操作に慣れよう！
-          </div>
-
-          <div class="v107-step">
-            <strong>② 「3」キーを押す！</strong><br>
-            キーボードの上のほうにある <span class="v107-key">3</span> を押すと、<b>オンラインルーム</b>へ進みます。<br>
-            <span style="color:#e3ff00;">「P」キーでもオンラインへ行けます。</span>
-          </div>
-
-          <div class="v107-step">
-            <strong>③ ログイン画面が出たらログイン！</strong><br>
-            初めてならアカウントを登録。すでにアカウントがあるならログイン。<br>
-            <b>ログインできたら「3」または「P」をもう一度押してオンラインへ！</b>
-          </div>
-
-          <div class="v107-step">
-            <strong>④ 「オンラインルーム」で人数が増えるのを待つ</strong><br>
-            <span style="color:#e3ff00;font-size:23px;">1 / 8 → 2 / 8 → 3 / 8 → … → 8 / 8</span><br>
-            これは「今、同じオンラインルームに何人いるか」です。
-          </div>
-
-          <div class="v107-step">
-            <strong>⑤ 2〜7人なら「準備OK」を押す</strong><br>
-            参加している人がそろって<b>準備OK</b>にすると対戦開始。<br>
-            <span style="color:#e3ff00;">8人になった場合は自動で対戦開始します。</span>
-          </div>
-
-          <div class="v107-step">
-            <strong>⑥ 対戦スタート！</strong><br>
-            味方と敵に分かれてバトル開始！<br>
-            <b>WASD・マウス・左クリック・Shift・Q・R・Space</b>は基本的に同じ操作です。
-          </div>
-
-          <div class="v107-online-warning">
-            🚨 <b>オンラインで遊ぶ前に覚えておくこと</b><br>
-            ・インターネットにつながっている必要があります。<br>
-            ・オンライン画面の「準備OK」を押し忘れない！<br>
-            ・ルームから出るときは「ルームから退出」を押します。<br>
-            ・分からなくなったら <b style="color:#e3ff00;">U</b> を押して、この説明を開き直せます。
-          </div>
-        </div>
-
-        <div class="v107-help-box full">
-          <b>📝 いま画面に出ている操作説明を全部まとめると</b>
-          <div class="v107-note" style="font-size:15px;color:#fff;">
-            【PC】WASD：移動 / マウス：視点＆射撃 / 左クリック：射撃 / 右クリック：サブ / Shift：潜伏（イカ） / Space：ジャンプ / Q：サブ / R：スペシャル<br>
-            チャージャー：左クリック長押しでチャージ、離すと発射<br>
-            試し撃ち場：E＝カスタマイズ、O＝CPU対戦（4vs4）、3＝オンライン<br>
-            【スマホ】左半分スワイプ＝移動 / 右半分スワイプ＝視点 / 右半分タップ＝射撃
-          </div>
+          <b>⭐ 武器</b>
+          <div class="v107-note">スプラシューター / バケットスロッシャー / スプラマニューバー</div>
         </div>
       </div>
 
