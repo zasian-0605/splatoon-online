@@ -746,7 +746,7 @@
       box-shadow:0 6px 0 #000;
     }
     .v107-online-route{
-      border:4px solid #00d4ff;
+      border:5px solid #00d4ff;
       background:rgba(0,212,255,.13);
     }
     .v107-online-route .v107-step{
@@ -1002,6 +1002,65 @@
           </div>
           <div class="v107-online-warning">
             ⚠️ 大事：オンラインはインターネット接続が必要です。オンラインルームを閉じたいときは「ルームから退出」を押してください。
+          </div>
+        </div>
+
+        <div class="v107-help-box full">
+          <b style="font-size:28px;">🎪 文化祭・超重要！最初にここだけ見て！</b>
+          <div class="v107-culture-banner">
+            <div>🟨 <b>WASD</b> ＝ うごく</div>
+            <div>🖱️ <b>マウス</b> ＝ みる　　<b>左クリック</b> ＝ うつ</div>
+            <div>🦑 <b>Shift</b> ＝ おしている間だけイカ</div>
+            <div>💣 <b>Q</b> ＝ ボム　　 ⭐ <b>R</b> ＝ スペシャル</div>
+            <div>🦘 <b>Space</b> ＝ ジャンプ</div>
+            <div style="margin-top:8px;font-size:18px;">「なにを押すんだっけ？」となったら、<b style="color:#e3ff00;font-size:25px;">U</b> を押す！</div>
+          </div>
+        </div>
+
+        <div class="v107-help-box full v107-online-route">
+          <b style="font-size:30px;">🌐 オンライン対戦の行き方【ここ大事！】</b>
+
+          <div class="v107-step">
+            <strong>① 試し撃ち場に入る</strong><br>
+            最初はここで自由に動いたり、ブキを試したりできます。まず操作に慣れよう！
+          </div>
+
+          <div class="v107-step">
+            <strong>② 「3」キーを押す！</strong><br>
+            キーボードの上のほうにある <span class="v107-key">3</span> を押すと、<b>オンラインルーム</b>へ進みます。<br>
+            <span style="color:#e3ff00;">「P」キーでもオンラインへ行けます。</span>
+          </div>
+
+          <div class="v107-step">
+            <strong>③ ログイン画面が出たらログイン！</strong><br>
+            初めてならアカウントを登録。すでにアカウントがあるならログイン。<br>
+            <b>ログインできたら「3」または「P」をもう一度押してオンラインへ！</b>
+          </div>
+
+          <div class="v107-step">
+            <strong>④ 「オンラインルーム」で人数が増えるのを待つ</strong><br>
+            <span style="color:#e3ff00;font-size:23px;">1 / 8 → 2 / 8 → 3 / 8 → … → 8 / 8</span><br>
+            これは「今、同じオンラインルームに何人いるか」です。
+          </div>
+
+          <div class="v107-step">
+            <strong>⑤ 2〜7人なら「準備OK」を押す</strong><br>
+            参加している人がそろって<b>準備OK</b>にすると対戦開始。<br>
+            <span style="color:#e3ff00;">8人になった場合は自動で対戦開始します。</span>
+          </div>
+
+          <div class="v107-step">
+            <strong>⑥ 対戦スタート！</strong><br>
+            味方と敵に分かれてバトル開始！<br>
+            <b>WASD・マウス・左クリック・Shift・Q・R・Space</b>は基本的に同じ操作です。
+          </div>
+
+          <div class="v107-online-warning">
+            🚨 <b>オンラインで遊ぶ前に覚えておくこと</b><br>
+            ・インターネットにつながっている必要があります。<br>
+            ・オンライン画面の「準備OK」を押し忘れない！<br>
+            ・ルームから出るときは「ルームから退出」を押します。<br>
+            ・分からなくなったら <b style="color:#e3ff00;">U</b> を押して、この説明を開き直せます。
           </div>
         </div>
 
