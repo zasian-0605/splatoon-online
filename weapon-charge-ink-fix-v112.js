@@ -163,13 +163,14 @@
     const wanted=Math.max(1,Math.round(num(w.maxShots,12)*q));
     const minimum=Math.max(1,Math.floor(num(w.minShots,6)));
     const desired=Math.max(minimum,wanted);
+    const rawPer=Math.max(.1,num(w?.inkCost,1.3));
     const per=finalInkCost(f,w,1.3);
     if(per<=0)return false;
 
     /* Reserve only the shots we can actually pay for. */
     const affordable=Math.min(desired,Math.floor((num(f.ink,0)+1e-6)/per));
     if(affordable<1)return false;
-    if(!consumeAmount(f,per*affordable))return false;
+    if(!consumeAmount(f,rawPer*affordable))return false;
 
     const base=(aimOverride?.clone?aimOverride.clone():aimDir());
     base.y=0;
@@ -497,7 +498,7 @@
         (num(f.lastShot,0)!==beforeLast) &&
         result;
       if(didShot && num(f.ink,0)>=beforeInk-0.000001){
-        consumeAmount(f,finalInkCost(f,w,1));
+        consumeAmount(f,Math.max(.1,num(w?.inkCost,1)));
       }
       return result;
     };
