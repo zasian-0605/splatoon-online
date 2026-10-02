@@ -1834,7 +1834,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(!battleNow()||typeof currentPhase==='undefined'||currentPhase!==1.5)return;
     try{
       if(!paintCtx||!paintCanvas)return;
-      const f=player();
+      const f=(()=>{try{return playerFighter||null;}catch(_){return null;}})();
       const col=f?.team==='B'?teamBHex:teamAHex;
       paintCtx.fillStyle=hexToCss(col);
       paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
@@ -1851,6 +1851,43 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       return out;
     };
   }
+
+  /*
+   * Mobile roller input uses the same short-press / hold state.
+   * The look pad itself keeps receiving camera movement; this listener only
+   * records the roller action and resolves the short click at pointerup.
+   */
+  let mobileRollerPointer=null;
+  window.addEventListener('pointerdown',e=>{
+    if(e.pointerType!=='touch'||!battleNow())return;
+    const f=(()=>{try{return playerFighter||null;}catch(_){return null;}})();
+    if(!f?.alive||f.squid_mode||f.weapon?.category!=='roller')return;
+    if(!e.target?.closest?.('#v109-look-pad'))return;
+    mobileRollerPointer={id:e.pointerId,start:performance.now()};
+    isShooting=true;
+  },true);
+
+  window.addEventListener('pointerup',e=>{
+    if(e.pointerType!=='touch'||!mobileRollerPointer||mobileRollerPointer.id!==e.pointerId)return;
+    const st=mobileRollerPointer;
+    mobileRollerPointer=null;
+    const f=(()=>{try{return playerFighter||null;}catch(_){return null;}})();
+    if(f?.alive&&f.weapon?.category==='roller'){
+      const elapsed=performance.now()-st.start;
+      if(elapsed<rollerHoldMs){
+        try{window.__ROLLER_CANONICAL_FLICK?.(f);}catch(err){
+          try{console.warn('[canonical mobile roller flick]',err);}catch(_){}
+        }
+      }
+    }
+    isShooting=false;
+  },true);
+
+  window.addEventListener('pointercancel',e=>{
+    if(e.pointerType!=='touch'||!mobileRollerPointer||mobileRollerPointer.id!==e.pointerId)return;
+    mobileRollerPointer=null;
+    isShooting=false;
+  },true);
 
   window.__WEAPON_BEHAVIOR_REPAIR_READY=true;
   console.log('[SPLATOON ONLINE][weapon behavior repair] charger/roller canonical paths active');
