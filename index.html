@@ -8371,7 +8371,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         s.velocity.y-=22*delta;
         s.mesh.position.addScaledVector(s.velocity,delta);
         const wall=getBlockingWall(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
-        const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+        const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
         if(s.subType==='burstBomb' && (wall||s.mesh.position.y<=gh+.08)){explodeSub(s);continue;}
         if(wall && s.subType==='suctionBomb'){
           s.stuck=true;s.velocity.set(0,0,0);s.age=Math.min(s.age,s.def.fuse-.001);
@@ -8383,7 +8383,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='curlingBomb'){
         if(!s.stuck){
           s.velocity.y-=24*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.10;s.stuck=true;s.velocity.set(0,0,0);s.age=0;}
         }else{
           s.mesh.position.addScaledVector(s.direction,22*delta);
@@ -8394,7 +8394,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         if(!s.stuck){
           s.velocity.y-=20*delta;
           s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){
             s.mesh.position.y=gh+.12;
             s.bounceCount=(s.bounceCount||0)+1;
@@ -8433,7 +8433,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='inkMine'){
         if(!s.stuck){
           s.velocity.y-=24*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.1;s.stuck=true;s.velocity.set(0,0,0);}
         }else{
           const enemy=fighters.find(o=>o.alive&&o.team!==s.team&&o.pos.distanceTo(s.mesh.position)<s.def.radius);
@@ -8443,7 +8443,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='squidBeacon'){
         if(!s.stuck){
           s.velocity.y-=22*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.2;s.stuck=true;s.velocity.set(0,0,0);}
         }else{
           s.mesh.position.y=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50)+.22;
@@ -8452,7 +8452,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='pointSensor'){
         if(!s.stuck){
           s.velocity.y-=22*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.15;s.stuck=true;s.velocity.set(0,0,0);}
         }else{
           fighters.forEach(o=>{if(o.alive&&o.team!==s.team&&o.pos.distanceTo(s.mesh.position)<s.def.radius)o.revealedUntil=now+250;});
@@ -8461,7 +8461,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='splashWall'){
         if(!s.stuck){
           s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+1.2){
             s.mesh.position.y=gh+1.2;s.stuck=true;s.velocity.set(0,0,0);
             s.mesh.rotation.y=Math.atan2(s.direction.x,s.direction.z);
@@ -8484,7 +8484,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='sprinkler'){
         if(!s.stuck){
           s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.22;s.stuck=true;s.velocity.set(0,0,0);}
         }else{
           s.next-=delta;
@@ -8501,7 +8501,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       }else if(s.subType==='toxicMist'){
         if(!s.stuck){
           s.velocity.y-=20*delta;s.mesh.position.addScaledVector(s.velocity,delta);
-          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,s.mesh.position.y);
+          const gh=getSupportHeight(s.mesh.position.x,s.mesh.position.z,50);
           if(s.mesh.position.y<=gh+.08){s.mesh.position.y=gh+.1;s.stuck=true;s.velocity.set(0,0,0);}
         }else{
           fighters.forEach(o=>{
@@ -12994,7 +12994,14 @@ function updateGuideBombs(dt){
       let tar=null,bd=Infinity;
       for(const f of fighters||[])if(f.alive&&f.team!==s.team){const q=f.pos.distanceTo(s.mesh.position);if(q<bd){bd=q;tar=f;}}
       if(tar&&bd<30){const q=tar.pos.clone().sub(s.mesh.position);q.y=0;if(q.lengthSq()>.01){q.normalize();s.velocity.x+=q.x*18*dt;s.velocity.z+=q.z*18*dt;}}
-      s.velocity.y-=14*dt;s.mesh.position.addScaledVector(s.velocity,dt);
+      s.velocity.y-=14*dt;
+      const prevY=s.mesh.position.y;
+      s.mesh.position.addScaledVector(s.velocity,dt);
+      const gy=support(s.mesh.position.x,s.mesh.position.z,50);
+      if((prevY>=gy&&s.mesh.position.y<=gy)||s.mesh.position.y<=gy+.08){
+        s.mesh.position.y=gy+.16;
+        s.velocity.y=0;
+      }
       if(enemyNear(s,1.0)||s.age>=d.fuse)explodeBomb(s);
       continue;
     }
