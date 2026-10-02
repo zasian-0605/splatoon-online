@@ -586,13 +586,17 @@ html.cursor-force-visible canvas{
     e.stopImmediatePropagation();
     window.__onlineLog?.('P/3 KEY', {code:e.code, accountReady:window.__accountReady===true});
 
+    // Pを押した瞬間に必ずポインターロックを解除。ログイン画面でも確実にマウスを使えるようにする。
+    try{ window.__V10?.releaseLock?.(); }catch(_){
+      try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(__){}
+    }
+
     // 未ログインならログイン画面、それ以外はオンライン画面を即表示。
     if(window.__accountReady!==true){
       if(window.showAccountScreen) window.showAccountScreen();
       return;
     }
 
-    try{ window.__V10?.releaseLock?.(); }catch(_){}
     const panel=document.getElementById('online-panel');
     const count=document.getElementById('online-count');
     const status=document.getElementById('online-status');
