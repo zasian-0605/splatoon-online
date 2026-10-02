@@ -5194,7 +5194,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   function overlayForcesMouse(){
     const visible=(id,display)=>{
       const el=document.getElementById(id);
-      return !!el && (!display || el.style.display===display || getComputedStyle(el).display===display);
+      if(!el) return false;
+      const actual=getComputedStyle(el).display;
+      return display ? actual===display : actual!=='none';
     };
     return visible('v107-howto-overlay','flex') ||
            visible('online-panel','flex') ||
