@@ -12,7 +12,6 @@ s.textContent=`
 #v107-howto-card{width:min(900px,94vw) !important;max-height:88vh !important;padding:22px !important;}
 #v107-howto-title{font-size:clamp(30px,5vw,44px) !important;}
 #v107-howto-subtitle{font-size:clamp(16px,2.8vw,21px) !important;color:#fff !important;}
-#v107-howto-body .v107-help-box.full{display:none !important;}
 @media(max-width:700px){#v114-practice-title{top:8px;border-width:3px;padding:8px 18px 10px;}}
 `;
 document.head.appendChild(s);
