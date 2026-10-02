@@ -271,6 +271,13 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     return d.normalize();
   }
 
+  function compensateProjectileDrop(dir,gravity=5.2,speed=35){
+    const d=dir.clone();
+    /* Counter the short-range ballistic drop while preserving camera pitch. */
+    d.y+=Math.max(0,Math.min(.10,Number(gravity)||0)/Math.max(12,Number(speed)||35)*.42);
+    return d.normalize();
+  }
+
   function consume(f,cost){
     const c=Math.max(0,num(cost,0));
     if(c<=0)return true;
@@ -623,7 +630,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(!consume(f,baseCost))return false;
     f.lastShot=t;
 
-    const base=aim(f,dir);
+    const base=compensateProjectileDrop(aim(f,dir),5.2,num(w.speed,35));
     let fired=0;
     const emit=(d,o)=>{if(spawnUnified(f,d,o))fired++;};
 
@@ -810,6 +817,19 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
     return d.normalize();
   };
+
+  function exitSquidForAction(f,reason){
+    if(!f?.isPlayer||!f.squid_mode)return;
+    try{window.__V66_BREAK_SQUID_FOR_ACTION?.(reason);}catch(_){}
+    /* Keep input responsive if an older form handler failed to update visuals. */
+    if(f.squid_mode){
+      f.squid_mode=false;
+      f._neutralSquid=false;
+      try{keys.shift=false;}catch(_){}
+      try{window.__V66_SET_SQUID_VISUAL?.(f,false);}catch(_){}
+      try{f.human.visible=true;if(f.squid)f.squid.visible=false;}catch(_){}
+    }
+  }
 
   /* ---------- Canonical remote ranged-shot receiver ---------- */
   const legacyReceive=window.__receiveOnlineShotV60;
@@ -1000,20 +1020,23 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const f=player();
     if(!f?.alive)return;
 
-    if(e.type==='pointerdown'&&e.button!==0)return;
-    if(e.type==='mousedown'&&e.button!==0)return;
+    if(e.type==='mousedown'&&e.button!==0&&e.button!==2)return;
+    if(e.type==='pointerdown'&&e.button!==0){
+      if(e.button===2){e.preventDefault();e.stopImmediatePropagation();}
+      return;
+    }
 
     e.stopImmediatePropagation();
 
     if(e.button===2){
       e.preventDefault();
-      if(!f.squid_mode)try{doPlayerSubThrow();}catch(_){}
+      exitSquidForAction(f,'sub');
+      try{doPlayerSubThrow();}catch(_){}
       return;
     }
 
     if(f.squid_mode){
-      isShooting=false;
-      return;
+      exitSquidForAction(f,'shoot');
     }
 
     const w=f.weapon||{};
@@ -1121,13 +1144,13 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(e.code==='KeyQ'){
       e.preventDefault();e.stopImmediatePropagation();
       const f=player();
-      if(f?.alive&&!f.squid_mode)try{doPlayerSubThrow();}catch(_){}
+      if(f?.alive){exitSquidForAction(f,'sub');try{doPlayerSubThrow();}catch(_){}}
       return;
     }
     if(e.code==='KeyR'){
       e.preventDefault();e.stopImmediatePropagation();
       const f=player();
-      if(f?.alive&&!f.squid_mode)try{fireSpecial(f);}catch(_){}
+      if(f?.alive){exitSquidForAction(f,'special');try{fireSpecial(f);}catch(_){}}
     }
   },true);
 
@@ -1147,6 +1170,28 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(document.pointerLockElement===renderer?.domElement)return;
     if(e.buttons===0)releaseHeavy(true);
   },true);
+
+  /* Re-apply hold-to-squid after later special/movement wrappers run. */
+  const movementBeforeSquidRepair=window.updatePlayerMovement;
+  if(typeof movementBeforeSquidRepair==='function'){
+    window.updatePlayerMovement=function(delta){
+      const result=movementBeforeSquidRepair(delta);
+      const f=player();
+      if(!f?.alive||!battle())return result;
+      let held=!!keys.shift;
+      try{held=held||!!window.__V66_SQUID_PHYSICAL_HOLD?.();}catch(_){}
+      let enemyInk=false;
+      try{enemyInk=!!window.__V66_IS_ENEMY_INK?.(f);}catch(_){}
+      const squid=held&&!enemyInk;
+      f.squid_mode=squid;
+      f._neutralSquid=squid&&!f.isSwimmingOnInk;
+      try{window.__V66_SET_SQUID_VISUAL?.(f,squid);}catch(_){}
+      try{if(f.human)f.human.visible=!squid;if(f.squid)f.squid.visible=squid;}catch(_){}
+      try{window.updateFighterAnimation?.(f,!!f._moving,squid);}catch(_){}
+      return result;
+    };
+    try{updatePlayerMovement=window.updatePlayerMovement;}catch(_){}
+  }
 
   window.__V117_CANONICAL_RUNTIME={
     build:'V117-CANONICAL-RUNTIME-2026-10-02',

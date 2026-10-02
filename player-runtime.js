@@ -402,7 +402,6 @@
     const oldSub=window.doPlayerSubThrow;
     if(typeof oldSub==='function'&&!oldSub.__v106){
       const fn=function(){
-        if(isSquidPlayer())return false;
         return oldSub.apply(this,arguments);
       };
       fn.__v106=true;window.doPlayerSubThrow=fn;

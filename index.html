@@ -3257,7 +3257,6 @@ function doPlayerSubThrow(){
   if(!playerFighter || !playerFighter.alive) return;
   const aimDir = new THREE.Vector3();
   camera.getWorldDirection(aimDir);
-  if(playerFighter.weapon?.sub==='fizzyBomb') return;
   try{
     if(typeof window.tryThrowSub==='function') window.tryThrowSub(playerFighter, aimDir, performance.now());
     else tryThrowSub(playerFighter, aimDir, performance.now());
@@ -5761,6 +5760,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     cachedEnemyInk=((rr-enemyColor.r)**2+(gg-enemyColor.g)**2+(bb-enemyColor.b)**2)<0.10;
     return cachedEnemyInk;
   }
+  window.__V66_IS_ENEMY_INK=sampleEnemyInkCached;
 
   function repairSquidMaterials(f){
     if(!f||!f.squid)return;
@@ -5791,6 +5791,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       f.squid.scale.set(1,1,1);
     }
   }
+  window.__V66_SET_SQUID_VISUAL=setSquidVisual;
 
   /* V66: Hold-to-squid control.
      Shift = squid only while physically held.
@@ -5855,6 +5856,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
     return true;
   }
+  window.__V66_BREAK_SQUID_FOR_ACTION=breakSquidForAttackV66;
 
   window.addEventListener('keydown',e=>{
     if(window.__V117_CANONICAL_RUNTIME && (e.code==='ShiftLeft'||e.code==='ShiftRight')) return;
@@ -12909,10 +12911,11 @@ const guideSubs=[];
 function bombCost(f,type){
   const d=BD[type],t=now(),cd=type==='burstBomb'?520:900;
   if(!d||t-n(f.__v91BombAt)<cd)return false;
+  const inkCost=Number(subDefs?.[type]?.inkCost??d.ink);
   if(typeof window.__V67_V60_CONSUME==='function'){
-    if(!window.__V67_V60_CONSUME(f,window.__V67_V60_INKCOST(f,d.ink)))return false;
+    if(!window.__V67_V60_CONSUME(f,window.__V67_V60_INKCOST(f,inkCost)))return false;
   }else{
-    if(n(f.ink)<d.ink)return false;f.ink-=d.ink;
+    if(n(f.ink)<inkCost)return false;f.ink-=inkCost;
   }
   f.__v91BombAt=t;return true;
 }
@@ -12924,6 +12927,9 @@ function spawnBomb(f,type,d,charge=0,remote=false){
   v.y+=type==='curlingBomb'?2.5:7.2;
   guideSubs.push({mesh,team:f.team,color:col(f),from:f,type,def,velocity:v,dir:planar(d),age:0,
     charge:n(charge),stuck:false,bounces:0,dead:false,next:0,remote});
+  if(!remote&&f.isPlayer&&onlineActive&&onlineStarted&&onlineSocket?.readyState===1){
+    try{onlineSocket.send(JSON.stringify({type:'sub',x:p.x,y:p.y,z:p.z,vx:v.x,vy:v.y,vz:v.z,subType:type,weaponId:f.weapon?.id,charge:n(charge)}));}catch(_){}
+  }
   return true;
 }
 function explodeBomb(s){
