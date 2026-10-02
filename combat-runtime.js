@@ -364,12 +364,14 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const gap=p.y-ground;
     const rr=Math.max(.42,Math.min(2.2,num(b.paintRadius,.8)*.55));
 
-    /* Paint the surface the projectile is actually passing near. */
-    if(gap>=-.08&&gap<=2.0){
+    /* A projectile above a floor/obstacle paints the surface directly below it.
+       This is deliberately not limited to a tiny vertical gap: downward shots
+       must leave a continuous ink path instead of a few isolated dots. */
+    if(Number.isFinite(ground) && p.y>=ground-.12){
       try{
         paintGround(p.x,p.z,rr,b.colorHex,{
           surfaceY:ground,
-          yHint:p.y,
+          yHint:ground+.03,
           team:b.team,
           sourceFighter:b.sourceFighter,
           noNetwork:true
@@ -377,7 +379,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }catch(_){}
     }
 
-    /* When firing from/on a raised obstacle, also project ink onto the floor below. */
+    /* Keep the shared base-floor projection for raised platforms as well. */
     paintBaseFloorBelow(b,p,rr);
   }
 
@@ -438,16 +440,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const w=f.weapon;
     let kind=String(opts.kind||w.category||'shooter');
     const d=aim(f,dir);
-    /* Keep projectiles only slightly above the horizontal: about 5 degrees. */
-    const horizontal=Math.hypot(d.x,d.z);
-    const angle=5*Math.PI/180;
-    if(horizontal>.0001){
-      d.x=d.x/horizontal*Math.cos(angle);
-      d.z=d.z/horizontal*Math.cos(angle);
-      d.y=Math.sin(angle);
-    }else{
-      d.set(0,Math.sin(angle),Math.cos(angle));
-    }
+    /* Preserve the actual aim direction, including downward shots.
+       Older code forced every projectile to +5 degrees, which made shots aimed
+       at the floor/raised platforms miss the surface below. */
     d.normalize();
     let speed=Math.max(8,num(opts.speed,w.speed||35));
     let range=Math.max(5,num(opts.maxRange,w.range||30));
@@ -648,8 +643,16 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       if(b.horizontalTravel>=b.maxRange&&!b.rangeDropped){
         b.rangeDropped=true;
         if(b.trajectory==='charger'){
+          /* Charger: straight flight ends exactly at max range, then vertical drop. */
           b.chargerDrop=true;
-          b.velocity.x=0;b.velocity.z=0;b.velocity.y=0;
+          b.velocity.x=0;
+          b.velocity.z=0;
+          b.velocity.y=0;
+        }else if(b.trajectory==='blaster'){
+          /* Blaster: max range is the explosion point, never a silent shrink/despawn. */
+          impact(b,b.mesh.position.clone(),null);
+          removeBullet(b,i);
+          continue;
         }else{
           b.velocity.x*=3/50;
           b.velocity.z*=3/50;
@@ -666,7 +669,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
       if(b.age>b.life){
         const p=b.mesh.position.clone();
-        if(stagePointIn(p.x,p.z))impact(b,p,null);
+        /* Never silently delete a projectile: blasters in particular must
+           resolve their explosion even if the endpoint is just outside the
+           stage polygon. */
+        impact(b,p,null);
         removeBullet(b,i);
       }
     }
@@ -677,12 +683,20 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const w=f.weapon;if(!w)return false;
     if(['charger','roller','spinner','wiper'].includes(w.category)||w.brush)return false;
     const t=num(now,performance.now());
-    if(t-num(f.lastShot,0)<num(w.rate,100))return false;
+    const weaponRate=Math.max(
+      1,
+      num(w.rate,100)
+    );
+    /* Separate canonical cooldown from legacy lastShot writes. */
+    const nextAt=num(f.__canonicalNextShotAt,0);
+    if(t<nextAt)return false;
+    if(t-num(f.lastShot,0)<weaponRate)return false;
     const baseCost=Math.max(.1,num(w.inkCost,1));
     if(!consume(f,baseCost))return false;
     f.lastShot=t;
+    f.__canonicalNextShotAt=t+weaponRate;
 
-    const base=compensateProjectileDrop(aim(f,dir),5.2,num(w.speed,35));
+    const base=aim(f,dir);
     let fired=0;
     const emit=(d,o)=>{if(spawnUnified(f,d,o))fired++;};
 
@@ -738,6 +752,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   function fireCharger(f,dir,frac){
     if(!f?.alive||isSquid(f)||!battle()||f.weapon?.category!=='charger')return false;
     const w=f.weapon,q=Math.max(.05,Math.min(1,num(frac,0)));
+    /* Canonical charger release: one shot per release, with a small post-shot
+       lock so legacy input loops cannot create an infinite stream. */
+    const nowShot=performance.now();
+    if(nowShot<num(f.__canonicalHeavyNextAt,0))return false;
     /* V117: client and server use the same authoritative charge cost. */
     const cost=num(w.inkCost,8)*(.55+.90*q);
     if(!consume(f,cost))return false;
@@ -756,6 +774,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         paintRadius:num(w.paintRadius,1.0),life:2.0,maxRange:num(w.range,55)});
     }
     f.specialGauge=Math.min(100,num(f.specialGauge,0)+7+7*q);
+    f.__canonicalHeavyNextAt=nowShot+180;
     try{sfx('shoot');}catch(_){}
     if(f.isPlayer&&onlineActive&&onlineStarted){
       try{window.__v93SendShot?.({
@@ -1048,12 +1067,19 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     clearLegacyHeavyFlags(f);
 
     if(!f?.alive||abort)return;
-    const frac=Math.max(0,Math.min(1,(performance.now()-st.start)/(st.time||800)));
-    if(frac<.04)return;
+    const elapsed=Math.max(0,performance.now()-st.start);
+    const chargeTime=Math.max(120,Number(st.time)||800);
+    /* A heavy weapon must have a real charge period; accidental micro-clicks
+       no longer become full/rapid shots. */
+    if(elapsed<Math.min(180,chargeTime*.18))return;
+    const heavyCooldown=num(f?.__canonicalHeavyNextAt,0);
+    if(performance.now()<heavyCooldown)return;
+    const frac=Math.max(0,Math.min(1,elapsed/chargeTime));
     const d=aimDir(f);
     try{
       if(st.kind==='charger'){
         window.__V116_HEAVY_RELEASE?.(f,'charger',frac,d);
+        f.__canonicalHeavyNextAt=performance.now()+180;
       }else if(st.kind==='spinner'){
         window.__V116_HEAVY_RELEASE?.(f,'spinner',frac,d);
       }else if(st.kind==='wiper'&&typeof fireBladeSlashV60==='function'){
