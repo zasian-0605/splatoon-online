@@ -760,7 +760,7 @@ function configForJoin(){
   }catch(_){cfg=Object.assign({},window.playerConfig||{});}
   const f=getPlayer();
   const weapon=Number(f?.weapon?.id??cfg.weapon??0);
-  cfg.weapon=Number.isFinite(weapon)?Math.max(0,Math.min(200,Math.floor(weapon))):0;
+  cfg.weapon=Number.isFinite(weapon)?Math.max(0,Math.min(2,Math.floor(weapon))):0;
   return {cfg,weapon:cfg.weapon};
 }
 function setVars(){
