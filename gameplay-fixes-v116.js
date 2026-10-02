@@ -308,8 +308,9 @@
         b.travelled+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
       }
 
-      paintTravel(b,prev,b.mesh.position);
-
+      /* Collision must be resolved before path painting. Otherwise a fast
+         projectile can paint through a wall during the same frame in which
+         wallHit() discovers the collision. */
       const wh=wallHit(prev,b.mesh.position);
       if(wh){
         impact(b,wh.point.clone(),wh);
@@ -330,6 +331,7 @@
         }
       }
       if(hit){
+        paintTravel(b,prev,hitPoint);
         if(b.explosive){
           try{explodeAt(hitPoint.clone(),num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
             paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter
@@ -341,6 +343,8 @@
         removeBullet(b,i);
         continue;
       }
+
+      paintTravel(b,prev,b.mesh.position);
 
       if(b.horizontalTravel>=b.maxRange&&!b.rangeDropped){
         b.rangeDropped=true;
