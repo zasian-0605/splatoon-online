@@ -771,10 +771,18 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       f.specialGauge=Math.min(100,num(f.specialGauge,0)+.7*fired*(f.gearProfile?.specialGain||1));
       try{sfx('shoot');}catch(_){}
       if(f.isPlayer&&onlineActive&&onlineStarted){
-        try{window.__v93SendShot?.({
-          x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,
-          weaponId:f.weapon.id,mode:w.category
-        });}catch(_){}
+        try{
+          const sent=window.__v93SendShot?.({
+            x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,
+            weaponId:f.weapon.id,mode:w.category
+          });
+          if(sent===false)console.warn('[ONLINE SHOT TX FAILED]',{
+            readyState:window.onlineSocket?.readyState,
+            room:window.onlineRoomId
+          });
+        }catch(err){
+          try{console.warn('[ONLINE SHOT TX ERROR]',String(err));}catch(_){}
+        }
       }
     }
     return fired>0;
@@ -999,8 +1007,16 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
           config:{weapon:wp?.id}
         });
       }
-      if(!rf||!wp)return false;
+      if(!rf||!wp){
+        try{console.warn('[ONLINE SHOT RX REJECT] missing fighter/weapon',String(m?.id||''),Number(m?.weaponId));}catch(_){}
+        return false;
+      }
 
+      /* A shot packet is authoritative evidence that the server accepted an
+         alive player's shot. State packets can arrive slightly later, so do
+         not silently discard the projectile just because alive has not synced. */
+      rf.alive=true;
+      if(!(Number(rf.hp)>0))rf.hp=rf.maxHp||100;
       rf.weapon=wp;
       const d=new THREE.Vector3(
         Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||0
@@ -1088,7 +1104,15 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
       /* Ordinary shooter. The three currently playable online weapons use
          this canonical branch; unsupported legacy modes are handled above. */
-      spawnAtShot(d,makeOpts({kind:'shooter'}));
+      const spawned=spawnAtShot(d,makeOpts({kind:'shooter'}));
+      if(!spawned){
+        try{console.warn('[ONLINE SHOT RX SPAWN FAILED]',{
+          id:m?.id,weaponId:m?.weaponId,alive:rf?.alive,team:rf?.team,
+          origin:[shotOrigin.x,shotOrigin.y,shotOrigin.z],
+          dir:[d.x,d.y,d.z]
+        });}catch(_){}
+        return false;
+      }
       return true;
     }catch(err){
       try{console.warn('[V117 remote shot]',err);}catch(_){}
