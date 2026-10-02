@@ -769,11 +769,24 @@
       font-weight:900;
     }
     #charge-gauge{
-      width:32px !important;
-      height:32px !important;
-      border:1px solid rgba(255,255,255,.34) !important;
-      background:conic-gradient(rgba(255,0,85,.45) calc(var(--pct,0)*1%), rgba(255,255,255,.08) 0) !important;
-      opacity:.58 !important;
+      width:28px !important;
+      height:28px !important;
+      border:1px solid rgba(255,255,255,.28) !important;
+      background:conic-gradient(rgba(255,0,85,.34) calc(var(--pct,0)*1%), rgba(255,255,255,.055) 0) !important;
+      opacity:.48 !important;
+    }
+    html.charger-charging #charge-gauge{
+      width:22px !important;
+      height:22px !important;
+      border:1px solid rgba(255,255,255,.22) !important;
+      opacity:.35 !important;
+    }
+    html.charger-charging #charge-gauge::after{
+      top:3px !important;
+      left:3px !important;
+      right:3px !important;
+      bottom:3px !important;
+      background:rgba(20,0,50,.06) !important;
     }
     #charge-gauge::after{
       top:4px !important;
@@ -1845,9 +1858,14 @@
     g.style.display='block';
     g.style.setProperty('--pct',String(Math.round(Math.max(0,Math.min(1,frac))*100)));
   }
+  function setChargerChargeVisual(on){
+    try{document.documentElement.classList.toggle('charger-charging',!!on);}catch(_){}
+  }
+
   function hideGauge(){
     const g=document.getElementById('charge-gauge');
     if(g)g.style.display='none';
+    setChargerChargeVisual(false);
   }
 
   function aimDir(){
@@ -2094,6 +2112,7 @@
     if(kind==='charger'){
       f.isCharging=true;
       f.chargeStart=start;
+      setChargerChargeVisual(true);
       isShooting=false;
     }else{
       f._v60ChargeStart=start;
