@@ -3126,6 +3126,7 @@ function setupControls(){
 
   let isDragging=false;
   document.addEventListener('mousedown',(e)=>{
+    if(window.__V119_CHARGER_UNIFIED&&playerFighter?.weapon?.category==='charger')return;
     if((currentPhase===1.5||currentPhase===2) && e.button===0){
       isDragging = true;
       if(playerFighter && playerFighter.weapon.category==='charger'){
@@ -3140,6 +3141,11 @@ function setupControls(){
   });
   document.addEventListener('contextmenu',(e)=>{ if(currentPhase===1.5||currentPhase===2) e.preventDefault(); });
   document.addEventListener('mouseup',(e)=>{
+    if(window.__V119_CHARGER_UNIFIED&&playerFighter?.weapon?.category==='charger'){
+      isDragging=false;
+      isShooting=false;
+      return;
+    }
     if((currentPhase===1.5||currentPhase===2) && e.button===0){
       isDragging=false;
       if(playerFighter && playerFighter.weapon.category==='charger' && playerFighter.isCharging){
