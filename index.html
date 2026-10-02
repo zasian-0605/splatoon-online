@@ -4957,7 +4957,56 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     }
     onlineSocket=null;onlineActive=false;onlineStarted=false;
   }
-  function startOnlineBattle(m){
+  function clearStageInkForOnlineMatch(){
+    /* Online matches always begin from a dry client-side turf state.
+       Clear both the flat canvas and raised/platform ink accumulated during
+       practice or a previous match. */
+    try{
+      if(paintCtx&&paintCanvas){
+        paintCtx.save();
+        paintCtx.globalCompositeOperation='source-over';
+        paintCtx.fillStyle='#555566';
+        paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
+        paintCtx.restore();
+      }
+      if(typeof paintTexture!=='undefined'&&paintTexture)paintTexture.needsUpdate=true;
+    }catch(_){}
+
+    try{
+      if(typeof raisedInkGroup!=='undefined'&&raisedInkGroup){
+        for(const p of raisedInkPatches||[]){
+          try{
+            if(p?.mesh){
+              raisedInkGroup.remove(p.mesh);
+              p.mesh.geometry?.dispose?.();
+              p.mesh.material?.dispose?.();
+            }
+          }catch(_){}
+        }
+      }
+      if(typeof raisedInkPatches!=='undefined')raisedInkPatches.length=0;
+    }catch(_){}
+
+    /* Remove any stale local paint-trail state so the first online shot is
+       painted from a clean state. */
+    try{
+      for(const b of bullets||[]){
+        if(b?.__v116Unified||b?.__onlineRemote)continue;
+      }
+      const rp=window.__V117_REMOTE_PROJECTILES;
+      if(Array.isArray(rp))for(const b of rp){
+        try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
+      }
+      if(Array.isArray(rp))rp.length=0;
+    }catch(_){}
+
+    try{window.dispatchEvent(new CustomEvent('splatoon-online-ink-cleared'));}catch(_){}
+  }
+
+  window.__clearStageInkForOnlineMatch=clearStageInkForOnlineMatch;
+
+function startOnlineBattle(m){
+    clearStageInkForOnlineMatch();
     hideOnlinePanel(); clearRemoteFighters();
     const me=playerFighter;
     me.team=m.team;me.id=onlinePlayerId;
