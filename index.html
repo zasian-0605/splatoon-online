@@ -10958,9 +10958,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 (function(){
   'use strict';
 
-  const UP45=Math.SQRT1_2;
+  const LAUNCH_ANGLE_DEG=5;
+  const LAUNCH_COS=Math.cos(LAUNCH_ANGLE_DEG*Math.PI/180);
+  const LAUNCH_SIN=Math.sin(LAUNCH_ANGLE_DEG*Math.PI/180);
 
-  function shot45(dir,f){
+  function shot5(dir,f){
     const d=dir&&dir.clone?dir.clone():new THREE.Vector3();
     d.y=0;
     if(d.lengthSq()<.0001){
@@ -10968,35 +10970,35 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       d.set(Math.sin(yawNow),0,Math.cos(yawNow));
     }
     d.normalize();
-    return new THREE.Vector3(d.x*UP45,UP45,d.z*UP45);
+    return new THREE.Vector3(d.x*LAUNCH_COS,LAUNCH_SIN,d.z*LAUNCH_COS);
   }
 
-  // Every V60 projectile gets the same reliable upward launch angle.
+  // Every V60 projectile gets the same slight upward launch angle.
   if(typeof window.__spawnBulletV60==='function'){
     const baseSpawnV69=window.__spawnBulletV60;
     window.__spawnBulletV60=function(f,dir,opts){
       const o=Object.assign({},opts||{});
-      const d=shot45(dir,f);
+      const d=shot5(dir,f);
       const speed=Number(o.speed)||30;
 
       // Calculate a useful gravity for the requested max range, so the arc
       // naturally comes back down instead of producing an artificial drop.
       const startY=(Number(o.yOffset)!==undefined?Number(o.yOffset):1.2);
       const range=Math.max(4,Number(o.maxRange)||Number(o.straightDistance)||24);
-      const horizontalSpeed=Math.max(.001,speed*UP45);
+      const horizontalSpeed=Math.max(.001,speed*LAUNCH_COS);
       const flightTime=range/horizontalSpeed;
       if(o.gravity===undefined || Number(o.gravity)===0){
-        o.gravity=Math.max(10,2*(startY+speed*UP45*flightTime)/(flightTime*flightTime));
+        o.gravity=Math.max(10,2*(startY+speed*LAUNCH_COS*flightTime)/(flightTime*flightTime));
       }
       return baseSpawnV69(f,d,o);
     };
   }
 
-  // The emergency/player click path also passes through the fixed 45° aim.
+  // The emergency/player click path also passes through the fixed slight upward aim.
   if(typeof window.__V67_SIMPLE_SAFE_SHOT==='function'){
     const baseSimpleV69=window.__V67_SIMPLE_SAFE_SHOT;
     window.__V67_SIMPLE_SAFE_SHOT=function(f,dir,now){
-      return baseSimpleV69(f,shot45(dir,f),now);
+      return baseSimpleV69(f,shot5(dir,f),now);
     };
   }
 
@@ -11004,7 +11006,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   if(typeof fireChargerShot==='function'){
     const baseChargerV69=fireChargerShot;
     fireChargerShot=function(f,dir,frac){
-      return baseChargerV69(f,shot45(dir,f),frac);
+      return baseChargerV69(f,shot5(dir,f),frac);
     };
     window.fireChargerShot=fireChargerShot;
   }
