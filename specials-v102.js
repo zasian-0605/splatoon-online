@@ -441,7 +441,6 @@ window.__receiveOriginalSpecial=function(f,name,p,extra){
       }catch(_){ }
       return;
     }
-    const e=extra&&typeof extra==='object'?extra:{};
     if(name==='ナイスダマ'&&e.phase==='charge'){
       const s=stateFor(f)||startSpecial(f,name,p,true,e)&&stateFor(f);
       if(s)s.charge=Math.max(s.charge,n(e.charge,s.charge));
