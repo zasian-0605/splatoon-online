@@ -113,7 +113,7 @@
     /* A few legacy charger paths report success without actually decrementing ink.
        Correct that only when the fire call really succeeded. */
     if(ok && num(f.ink,0)>=beforeInk-0.000001){
-      const expected=(num(w?.inkCost,7))*(0.75+0.75*q);
+      const expected=(num(w?.inkCost,7))*(0.55+0.90*q);
       consumeAmount(f,expected);
     }
 
