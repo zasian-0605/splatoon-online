@@ -2196,8 +2196,8 @@
     '#dialogue-box{cursor:pointer;}'+
     '#v113-radio-next{'+
       'position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);z-index:120;'+
-      'min-width:min(430px,82vw);padding:18px 28px;border:4px solid #fff;border-radius:18px;'+
-      'background:#e3ff00;color:#2f059c;font:900 clamp(20px,4vw,34px)/1.05 Arial,Meiryo,sans-serif;'+
+      'min-width:min(220px,42vw);padding:8px 14px;border:2px solid #fff;border-radius:10px;'+
+      'background:#e3ff00;color:#2f059c;font:900 clamp(13px,2vw,18px)/1.05 Arial,Meiryo,sans-serif;'+
       'text-align:center;box-shadow:8px 8px 0 #000,0 0 24px rgba(227,255,0,.45);'+
       'cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;}'+
     '#v113-radio-next:active{transform:translateX(-50%) translateY(5px) scale(.98);box-shadow:4px 4px 0 #000;}'+
@@ -2306,8 +2306,8 @@ const s=document.createElement('style');
 s.textContent=`
 #next-prompt{display:none !important;}
 #dialogue-box{cursor:pointer !important;}
-#v113-radio-next{min-width:min(520px,88vw) !important;padding:20px 28px !important;font-size:clamp(24px,5vw,38px) !important;}
-#v113-radio-help{font-size:clamp(14px,3vw,20px) !important;}
+#v113-radio-next{min-width:min(220px,42vw) !important;padding:8px 14px !important;font-size:clamp(13px,2vw,18px) !important;border-width:2px !important;border-radius:10px !important;box-shadow:4px 4px 0 #000 !important;}
+#v113-radio-help{font-size:12px !important;bottom:1vh !important;}
 #v114-practice-title{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:230;display:none;min-width:min(520px,86vw);box-sizing:border-box;padding:10px 30px 13px;border:5px solid #fff;border-radius:18px;background:#2f059c;color:#e3ff00;font:900 clamp(36px,6vw,64px)/1 Arial Black,Arial,Meiryo,sans-serif;text-align:center;text-shadow:4px 4px 0 #000;box-shadow:0 7px 0 rgba(0,0,0,.45),0 0 25px rgba(227,255,0,.35);pointer-events:none;}
 #range-hint{font-size:clamp(15px,2.5vw,22px) !important;line-height:1.35 !important;}
 #v107-howto-card{width:min(900px,94vw) !important;max-height:88vh !important;padding:22px !important;}
