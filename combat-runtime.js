@@ -1122,6 +1122,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
   }
   window.__receiveOnlineShotV60=receiveRemoteShotCanonical;
+  /* Immutable bridge: later legacy/V82 layers may replace the public hook,
+     but online ranged shots must always reach the canonical moving projectile. */
+  window.__receiveOnlineShotCanonicalV117=receiveRemoteShotCanonical;
 
   /* ---------- Single desktop input path ---------- */
   let heavy=null;
