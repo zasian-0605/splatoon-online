@@ -1015,8 +1015,9 @@ function assignTeamsAndStart(room) {
     p.spawn = p.team === 'A' ? { x, y: 0, z: -64 } : { x, y: 0, z: 64 };
   });
   room.resultReported=false;
+  /* Online battles always start dry. Practice/local match paint must never
+     leak into a new server-authoritative online room. */
   room.inkCells=new Map();
-  seedServerSpawnInk(room);
   for(const p of ps){
     p.serverHp=100;p.serverAlive=true;p.serverInk=100;p.serverSquid=false;p.serverInkLastAt=Date.now();p.serverInkUseAt=0;p.serverRespawnAt=0;p.serverPos=Object.assign({},p.spawn);
     p.lastStatePos=Object.assign({},p.spawn);p.lastStateAt=Date.now();p.lastShotAt=0;p.lastSubAt=0;p.lastHazardAt=0;
