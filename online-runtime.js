@@ -204,8 +204,14 @@
      * corrected; ordinary self-state packets must never fight local movement.
      */
     if(id===String(state.playerId||'')){
-      if(!m.corrected)return;
       const me=getPlayer();
+      /* The server is authoritative for online ink. Keep the local HUD/tank
+         synchronized without applying ordinary position packets back to the
+         local movement controller. */
+      if(me && Number.isFinite(Number(m.ink))){
+        me.ink=Math.max(0,Math.min(100,Number(m.ink)));
+      }
+      if(!m.corrected)return;
       const x=Number(m.x),y=Number(m.y),z=Number(m.z);
       if(me?.pos&&[x,y,z].every(Number.isFinite)){
         me.pos.set(x,y,z);
