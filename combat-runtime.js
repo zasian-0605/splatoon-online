@@ -807,7 +807,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const t=e?.target;
     return !!t?.closest?.('#minimap,#fullmap,#online-panel,#result-screen,#v65-gear-panel,#v113-radio-next,.mobile-btn,#gear-panel,#ranking-panel');
   };
-  const player=()=>window.playerFighter||null;
+  const player=()=>{try{if(typeof playerFighter!=='undefined'&&playerFighter)return playerFighter;}catch(_){}return window.playerFighter||null;};
   const aimDir=f=>{
     const d=new THREE.Vector3();
     try{camera?.getWorldDirection(d);}catch(_){}
@@ -1179,7 +1179,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   if(!window.__V118_INPUT_REPAIR){
     window.__V118_INPUT_REPAIR=true;
     const battleNow=()=>typeof currentPhase!=='undefined'&&(currentPhase===1.5||currentPhase===2);
-    const currentPlayer=()=>window.playerFighter||null;
+    const currentPlayer=()=>{try{if(typeof playerFighter!=='undefined'&&playerFighter)return playerFighter;}catch(_){}return window.playerFighter||null;};
     const forceHumanForAction=(f,reason)=>{
       if(!f?.isPlayer)return;
       if(f.squid_mode){
