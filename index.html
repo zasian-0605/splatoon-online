@@ -4972,6 +4972,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
       if(typeof paintTexture!=='undefined'&&paintTexture)paintTexture.needsUpdate=true;
     }catch(_){}
 
+    /* Clear every raised/wall ink layer used by V66/V80/V82/V89.
+       Online must start visually and logically dry, including ink stuck to
+       obstacle faces from practice or a previous match. */
     try{
       if(typeof raisedInkGroup!=='undefined'&&raisedInkGroup){
         for(const p of raisedInkPatches||[]){
@@ -4985,6 +4988,34 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
         }
       }
       if(typeof raisedInkPatches!=='undefined')raisedInkPatches.length=0;
+    }catch(_){}
+    try{
+      const disposeMesh=mesh=>{
+        try{
+          if(mesh?.parent)mesh.parent.remove(mesh);
+          mesh?.geometry?.dispose?.();
+          mesh?.material?.dispose?.();
+        }catch(_){}
+      };
+      for(const mesh of (window.__v80WallVisuals||[]))disposeMesh(mesh);
+      window.__v80WallVisuals=[];
+      for(const mesh of (typeof v82WallVisuals!=='undefined'?v82WallVisuals:[]))disposeMesh(mesh);
+      try{v82WallVisuals.length=0;}catch(_){}
+      const wallLayer=window.__v80WallInkLayer;
+      if(wallLayer){
+        for(const mesh of wallLayer.children.slice())disposeMesh(mesh);
+        try{stageGroup?.remove?.(wallLayer);}catch(_){}
+        window.__v80WallInkLayer=null;
+      }
+      for(const b of (typeof collidableBlocks!=='undefined'?collidableBlocks:[])){
+        if(!b)continue;
+        b.__v82WallMarks=[];
+        b.__v89WallMarks=[];
+        b.paintTeam=null;
+        b.paintLevel=0;
+        b.__paintMarks=[];
+      }
+      if(typeof v82WallVisuals!=='undefined')v82WallVisuals.length=0;
     }catch(_){}
 
     /* Remove any stale local paint-trail state so the first online shot is
