@@ -12210,6 +12210,13 @@ window.__V79_BUILD='FINAL-GAMEPLAY-PAINT-SYNC-45PCT';
         wp.category==='shooter'||wp.category==='blaster'||
         wp.category==='slosher'||wp.category==='maneuver'||
         wp.category==='brella'||wp.category==='spinner';
+      /* V121: the V82 receiver stored bullets in v82Bullets, while the
+         main game loop now updates the canonical projectile array.  That made
+         online enemy spheres spawn but never advance.  Ranged online shots
+         must therefore use the immutable canonical receiver. */
+      if(ranged && typeof window.__receiveOnlineShotCanonicalV117==='function'){
+        return window.__receiveOnlineShotCanonicalV117(m);
+      }
       if(!ranged)return baseReceiveShotV82(m);
 
       let rf=fighters.find(x=>x.id===m.id);
