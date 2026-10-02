@@ -17,3 +17,4 @@ jobs:
         run: npm install --no-audit --no-fund --no-package-lock
       - run: node --check server.js
       - run: node scripts/validate-html-js.js
+      - run: node scripts/validate-gameplay.js

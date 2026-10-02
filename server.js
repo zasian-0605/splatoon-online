@@ -246,14 +246,14 @@ const SERVER_WEAPONS={
   5:{cat:'blaster',damage:76,rate:590,range:22,speed:20,explosion:2.55,splash:48},6:{cat:'blaster',damage:58,rate:180,range:24,speed:20,explosion:2.4,splash:55},
   7:{cat:'blaster',damage:54,rate:430,range:32,speed:30,explosion:1.9,splash:28},8:{cat:'blaster',damage:82,rate:720,range:30,speed:22,explosion:2.8,splash:44},
   9:{cat:'charger',tap:34,full:160,rate:900,range:62,speed:70},10:{cat:'charger',tap:30,full:180,rate:1250,range:72,speed:85},11:{cat:'charger',tap:32,full:92,rate:520,range:48,speed:60},
-  12:{cat:'roller',damage:78,rate:380,range:3},13:{cat:'roller',damage:108,rate:560,range:3.5},14:{cat:'roller',damage:42,rate:145,range:2},
+  12:{cat:'roller',damage:78,flickDamage:120,flickRange:14,rate:380,range:3},13:{cat:'roller',damage:108,flickDamage:150,flickRange:16,rate:560,range:3.5},14:{cat:'roller',damage:42,rate:145,range:2},
   15:{cat:'maneuver',damage:18,rate:55,range:21,speed:34},16:{cat:'maneuver',damage:19,rate:78,range:35,speed:37},17:{cat:'maneuver',damage:30,rate:145,range:31,speed:29},
   18:{cat:'slosher',damage:70,rate:500,range:16,speed:17,explosion:2.4},19:{cat:'slosher',damage:50,rate:400,range:13,speed:19,explosion:1.9},
   20:{cat:'slosher',damage:84,rate:720,range:22,speed:15,explosion:3.0},21:{cat:'slosher',damage:70,rate:640,range:28,speed:21,explosion:2.6},
-  22:{cat:'wiper',damage:72,full:120,rate:520,range:5},23:{cat:'wiper',damage:100,full:150,rate:720,range:6},
+  22:{cat:'wiper',damage:80,full:120,rate:520,range:5},23:{cat:'wiper',damage:100,full:150,rate:720,range:6},
   24:{cat:'shooter',damage:28,rate:70,range:32,speed:43},25:{cat:'shooter',damage:14,rate:42,range:28,speed:38},
   26:{cat:'shooter',damage:29,rate:240,range:35,speed:41},27:{cat:'shooter',damage:41,rate:300,range:38,speed:43},
-  28:{cat:'blaster',damage:85,rate:600,range:23,speed:27,explosion:2.35,splash:50},29:{cat:'roller',damage:70,rate:300,range:2.65},
+  28:{cat:'blaster',damage:85,rate:600,range:23,speed:27,explosion:2.35,splash:50},29:{cat:'roller',damage:70,flickDamage:90,flickRange:14,rate:300,range:2.65},
   30:{cat:'roller',damage:42,rate:120,range:2.35},31:{cat:'spinner',damage:29,rate:50,range:30,speed:46},
   32:{cat:'spinner',damage:31,rate:62,range:38,speed:48},33:{cat:'spinner',damage:41,rate:70,range:45,speed:50},
   34:{cat:'maneuver',damage:28,rate:55,range:30,speed:38},35:{cat:'brella',damage:34,rate:550,range:20,speed:32},36:{cat:'brella',damage:26,rate:330,range:18,speed:34},
@@ -265,16 +265,16 @@ const SERVER_WEAPONS={
 const SERVER_SUBS={
   instant:{delay:0,radius:2.1,damage:60},timed:{delay:1100,radius:3.4,damage:180},stick:{delay:1500,radius:4.0,damage:180},
   bounce:{delay:1800,radius:1.8,damage:50},seek:{delay:1800,radius:3.6,damage:180},slide:{delay:1400,radius:2.8,damage:180},
-  homing:{delay:1800,radius:2.8,damage:60},splatBomb:{delay:1100,radius:3.4,damage:180},suctionBomb:{delay:1500,radius:4.0,damage:180},
-  burstBomb:{delay:400,radius:1.9,damage:120},curlingBomb:{delay:1200,radius:2.6,damage:120},fizzyBomb:{delay:1300,radius:2.7,damage:120},
-  autobomb:{delay:900,radius:2.8,damage:110},torpedo:{delay:700,radius:2.8,damage:120},angleShooter:{delay:150,radius:1.0,damage:40},
-  toxicMist:{delay:250,radius:3.2,damage:8},inkMine:{delay:300,radius:3.0,damage:100},pointSensor:{delay:0,radius:0,damage:0},
-  splashWall:{delay:500,radius:2.8,damage:18},sprinkler:{delay:400,radius:2.0,damage:15},sensor:{delay:0,radius:0,damage:0},turret:{delay:0,radius:2.5,damage:50}
+  homing:{delay:1800,radius:2.8,damage:60},splatBomb:{delay:1000,radius:3.2,damage:180},suctionBomb:{delay:2000,radius:4.0,damage:180},
+  burstBomb:{delay:0,radius:2.0,damage:60},curlingBomb:{delay:2700,radius:2.7,damage:180},fizzyBomb:{delay:1600,radius:2.8,damage:50},
+  autobomb:{delay:2500,radius:2.6,damage:150},torpedo:{delay:1800,radius:2.8,damage:120},angleShooter:{delay:0,radius:1.2,damage:40},
+  toxicMist:{delay:0,radius:3.2,damage:8},inkMine:{delay:0,radius:2.8,damage:45},pointSensor:{delay:0,radius:3.0,damage:0},
+  squidBeacon:{delay:0,radius:1.4,damage:0},splashWall:{delay:0,radius:2.0,damage:30},sprinkler:{delay:0,radius:2.0,damage:20},sensor:{delay:0,radius:0,damage:0},turret:{delay:0,radius:2.5,damage:50}
 };
 const SERVER_SUB_BY_WEAPON={
-  0:'timed',1:'stick',2:'instant',3:'timed',4:'homing',5:'bounce',6:'timed',7:'homing',8:'seek',
-  9:'timed',10:'seek',11:'instant',12:'slide',13:'timed',14:'bounce',15:'instant',16:'homing',
-  17:'timed',18:'stick',19:'slide',20:'seek',21:'homing',22:'instant',23:'stick',
+  0:'splatBomb',1:'splatBomb',2:'pointSensor',3:'angleShooter',4:'sprinkler',5:'burstBomb',6:'splatBomb',7:'pointSensor',8:'suctionBomb',
+  9:'splatBomb',10:'inkMine',11:'pointSensor',12:'splatBomb',13:'sprinkler',14:'splatBomb',15:'burstBomb',16:'splatBomb',
+  17:'suctionBomb',18:'splatBomb',19:'burstBomb',20:'sprinkler',21:'pointSensor',22:'burstBomb',23:'burstBomb',
   24:'burstBomb',25:'sprinkler',26:'burstBomb',27:'pointSensor',28:'suctionBomb',29:'burstBomb',
   30:'autobomb',31:'burstBomb',32:'sprinkler',33:'autobomb',34:'splatBomb',35:'splatBomb',
   36:'pointSensor',37:'toxicMist',38:'pointSensor',39:'pointSensor',40:'fizzyBomb',
@@ -454,8 +454,8 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
 
   const speed=Math.max(1,Number(w.speed)||35);
   const remain=Math.max(0,range-straightDist);
-  const gravity=w.cat==='slosher' ? 10.5
-    : ((w.cat==='brella'||w.cat==='maneuver'||w.cat==='dualies') ? 4.8 : 5.2);
+  const gravity=Number(w.gravity)|| (w.cat==='slosher' ? 10.5
+    : ((w.cat==='brella'||w.cat==='maneuver'||w.cat==='dualies') ? 4.8 : 5.2));
   const launchY=w.cat==='slosher'
     ? 7.5 + Number(w.arc||0)*4
     : dir.y*speed;
@@ -542,6 +542,12 @@ function serverShotInkCost(w,m){
       const burst=Math.max(1,Math.min(32,Math.floor(Number(m?.burstShots)||1)));
       return base*burst;
     }
+    if(w?.cat==='wiper'){
+      const frac=Math.max(0,Math.min(1,Number(m?.charge)||0));
+      return base*(.65+.55*frac);
+    }
+    if(w?.cat==='roller'&&String(m?.mode||'')==='rollerFlick')return 6;
+    if(w?.cat==='roller'&&String(m?.mode||'')==='brushFlick')return 2;
     return base;
   }
   const cat=w?.cat||'shooter';
@@ -558,17 +564,39 @@ function serverShotInkCost(w,m){
   if(cat==='wiper')return 2.0;
   return .9;
 }
+const SERVER_SUB_INK_COST={
+  instant:45,timed:70,stick:70,bounce:60,seek:55,slide:65,homing:65,
+  splatBomb:45,suctionBomb:50,burstBomb:35,curlingBomb:55,fizzyBomb:50,autobomb:45,
+  inkMine:40,pointSensor:40,squidBeacon:75,splashWall:60,sprinkler:60,torpedo:45,
+  angleShooter:40,toxicMist:45,sensor:45,turret:65
+};
+const SERVER_OUTFIT_INK_SAVER=[
+  1,1,.92,.84,1,1,1,1,1,.92,.92,.84,.84,1,1,1,.92,1,1,1,
+  .84,.84,1.08,1.08,1,1,1,1,1,1,1,.84,.84,1,1,.92,1,.92,1,1,
+  1,1,1,1,1,1.08,1,1.08,1,1.08
+];
+const SERVER_OUTFIT_INK_REGEN=[
+  1,1,1.04,1.12,1,1,1,1,1,1.04,1.04,1.12,1.12,1,1,1,1.04,1,1,1,
+  1.12,1.12,1,1,1,1,1,1,1,1,1,1.12,1.12,1,1,1.04,1,1.04,1,1,
+  1,1,1,1,1,1,1,1,1,1
+];
+function serverInkSaver(player){
+  const config=player?.config||{};
+  const outfit=Math.max(0,Math.min(49,Math.floor(Number(config.outfit)||0)));
+  const gear=Math.max(0,Math.min(3,Math.floor(Number(config.gear)||0)));
+  return (SERVER_OUTFIT_INK_SAVER[outfit]||1)*(gear===2?.88:1);
+}
+function serverInkRegenRate(player){
+  const config=player?.config||{};
+  const outfit=Math.max(0,Math.min(49,Math.floor(Number(config.outfit)||0)));
+  const gear=Math.max(0,Math.min(3,Math.floor(Number(config.gear)||0)));
+  return 29*(SERVER_OUTFIT_INK_REGEN[outfit]||1)*(gear===2?1.16:1);
+}
 function serverSubInkCost(type){
-  const costs={
-    instant:45,timed:70,stick:70,bounce:60,seek:55,slide:65,homing:65,
-    splatBomb:70,suctionBomb:70,burstBomb:55,curlingBomb:55,fizzyBomb:50,
-    autobomb:55,torpedo:55,angleShooter:30,toxicMist:50,inkMine:55,
-    pointSensor:45,splashWall:60,sprinkler:60,sensor:45,turret:65
-  };
-  return costs[String(type||'')]||55;
+  return SERVER_SUB_INK_COST[String(type||'')]??55;
 }
 function serverTrySpendInk(player,cost){
-  const c=Math.max(0,Number(cost)||0);
+  const c=Math.max(0,Number(cost)||0)*serverInkSaver(player);
   if(c<=0)return true;
   if((player.serverInk??100)<c)return false;
   player.serverInk=Math.max(0,player.serverInk-c);
@@ -613,12 +641,16 @@ function serverResolveShot(room,player,m){
   const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
   const rawMode=String(m.mode||'');
   let mode='';
-  if(w.cat==='roller'&&(rawMode==='roller-flick'||rawMode==='rollerFlick'||rawMode==='roller-roll'))mode=rawMode==='rollerFlick'?'roller-flick':rawMode;
+  if(w.cat==='roller'&&(rawMode==='roller-flick'||rawMode==='rollerFlick'||rawMode==='roller-roll'||rawMode==='brushFlick'))mode=rawMode==='rollerFlick'?'roller-flick':rawMode==='brushFlick'?'brush-flick':rawMode;
   else if(w.cat==='wiper'&&rawMode==='wiperSlash')mode='wiper';
-  const hitRadius=(mode==='roller-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
+  const hitRadius=(mode==='roller-flick'||mode==='brush-flick'||mode==='brush')?2.2:(mode==='roller-roll'?1.55:(mode==='wiper'?1.65:.95));
   // Helper needs the firing team's identity so friendly players are never hit.
   w._attackerTeam=player.team;
-  const trajectory=serverFindTrajectoryHit(room,origin,dir,w,hitRadius);
+  const trajectoryWeapon=mode==='roller-flick'
+    ? Object.assign({},w,{cat:'shooter',range:w.flickRange||14,speed:18,gravity:15})
+    : w;
+  trajectoryWeapon._attackerTeam=player.team;
+  const trajectory=serverFindTrajectoryHit(room,origin,dir,trajectoryWeapon,hitRadius);
   const nearest=trajectory.hit;
 
   /* V116: shots also paint the server's turf state. Remote visuals are
@@ -695,6 +727,7 @@ function serverResolveShot(room,player,m){
   if(nearest){
     let dmg=w.damage||0;
     if(mode==='roller-roll')dmg=Math.min(65,dmg);
+    else if(mode==='roller-flick')dmg=w.flickDamage||dmg;
     serverApplyDamage(room,nearest.target,dmg,player,w.cat);
   }
   return true;
@@ -1475,7 +1508,7 @@ wss.on('connection', ws => {
       const prevInkAt=player.serverInkLastAt||now;
       const inkDt=Math.max(0,Math.min(.25,(now-prevInkAt)/1000));
       if(player.serverSquid&&now-(player.serverInkUseAt||0)>=450){
-        player.serverInk=Math.min(100,(player.serverInk??100)+42*inkDt);
+        player.serverInk=Math.min(100,(player.serverInk??100)+serverInkRegenRate(player)*inkDt);
       }
       player.serverInkLastAt=now;
       if(room.started&&player.serverAlive&&player.team&&now-(player.lastHazardAt||0)>=350){
