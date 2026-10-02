@@ -1069,6 +1069,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }catch(err){
       try{console.warn('[V117 remote shot]',err);}catch(_){}
       return false;
+    }finally{
+      receivingRemoteShot=false;
     }
   }
   window.__receiveOnlineShotV60=receiveRemoteShotCanonical;
