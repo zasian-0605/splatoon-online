@@ -366,6 +366,10 @@ function serverShotInkCost(w,m){
       const frac=Math.max(0,Math.min(1,Number(m?.charge)||0));
       return base*(.55+.90*frac);
     }
+    if(w?.cat==='spinner'){
+      const burst=Math.max(1,Math.min(32,Math.floor(Number(m?.burstShots)||1)));
+      return base*burst;
+    }
     return base;
   }
   const cat=w?.cat||'shooter';
@@ -463,6 +467,20 @@ function serverResolveShot(room,player,m){
   if(w.cat==='charger'){
     const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
     if(nearest)serverApplyDamage(room,nearest.target,w.tap+(w.full-w.tap)*frac,player,'charger');
+    return true;
+  }
+  if(w.cat==='spinner'){
+    const wid=Number(player.weaponId);
+    const defs={
+      31:{min:6,max:12},
+      32:{min:10,max:24},
+      33:{min:10,max:32}
+    };
+    const def=defs[wid]||{min:1,max:32};
+    const frac=Math.max(0,Math.min(1,Number(m.charge)||0));
+    const requested=Math.floor(Number(m.burstShots)||Math.round(def.max*frac));
+    const count=Math.max(def.min,Math.min(def.max,Math.max(1,requested)));
+    if(nearest)serverApplyDamage(room,nearest.target,(w.damage||0)*count,player,'spinner-burst');
     return true;
   }
   if(w.cat==='wiper'){
