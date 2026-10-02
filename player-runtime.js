@@ -822,6 +822,15 @@
     .v107-key{display:inline-flex;align-items:center;justify-content:center;min-width:58px;height:48px;padding:4px 10px;box-sizing:border-box;border:3px solid #fff;border-bottom-width:6px;border-radius:9px;background:#111;color:#fff;font:900 20px/1 Arial Black,Arial,Meiryo,sans-serif;}
     .v107-key.wide{min-width:100px;}
     .v107-key.space{min-width:180px;}
+    .v107-mouse-guide{margin-top:8px;text-align:center;}
+    .v107-mouse-head{position:relative;width:74px;height:108px;margin:0 auto;border:3px solid #fff;border-radius:34px 34px 28px 28px;background:#111;box-sizing:border-box;}
+    .v107-mouse-left,.v107-mouse-right{position:absolute;top:0;width:50%;height:48px;}
+    .v107-mouse-left{left:0;border-right:2px solid #777;}
+    .v107-mouse-right{right:0;}
+    .v107-mouse-wheel{position:absolute;left:50%;top:13px;transform:translateX(-50%);width:10px;height:22px;border:2px solid #fff;border-radius:7px;}
+    .v107-mouse-lines{display:flex;justify-content:center;gap:14px;height:28px;}
+    .v107-mouse-lines span{width:2px;background:#e3ff00;display:block;}
+    .v107-mouse-labels{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;color:#fff;font:900 14px/1.2 Arial,Meiryo,sans-serif;}
     @media(max-width:700px){.v107-keyboard{gap:20px}.v107-krow{gap:7px}.v107-kitem{min-width:62px}.v107-kitem i{height:22px}.v107-key{min-width:48px;height:42px;font-size:17px}.v107-key.space{min-width:135px}.v107-kitem small{font-size:12px}}
   `;
   document.head.appendChild(style);
@@ -853,6 +862,11 @@
         <div class="v107-krow">
           <div class="v107-kitem"><span class="v107-key wide">Shift</span><i></i><small>イカ</small></div>
           <div class="v107-kitem"><span class="v107-key space">Space</span><i></i><small>ジャンプ</small></div>
+        </div>
+        <div class="v107-mouse-guide">
+          <div class="v107-mouse-head"><span class="v107-mouse-left"></span><span class="v107-mouse-wheel"></span><span class="v107-mouse-right"></span></div>
+          <div class="v107-mouse-lines"><span></span><span></span><span></span></div>
+          <div class="v107-mouse-labels"><small>左クリック：射撃</small><small>マウス：視点</small><small>右クリック：サブ</small></div>
         </div>
       </div>
     </div>
