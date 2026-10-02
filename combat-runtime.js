@@ -979,7 +979,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   /* ---------- Canonical remote ranged-shot receiver ----------
      V117 hardening: never allow the remote-shot receiver to re-enter itself. */
   const legacyReceive=window.__receiveOnlineShotV60;
-  const canonicalProjectileSpawner=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
   let receivingRemoteShot=false;
   function receiveRemoteShotCanonical(m){
     if(receivingRemoteShot){
