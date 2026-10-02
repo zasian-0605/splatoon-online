@@ -1082,13 +1082,19 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const b=fn(f,d,opts);
     if(!b)return null;
 
-    /* Online shots must have an explicit, non-zero local flight state.
-       Do not depend on whichever legacy spawner happened to be active when
-       this message was received. */
+    /* Immediately remove it from the legacy shared bullets array. The mesh
+       remains alive in the scene, but only the dedicated online updater owns
+       its movement/collision lifecycle from this point on. */
+    try{
+      const legacyIndex=Array.isArray(bullets)?bullets.indexOf(b):-1;
+      if(legacyIndex>=0)bullets.splice(legacyIndex,1);
+    }catch(_){}
+
     const speed=Math.max(8,numV117(opts.speed,35));
     b.__onlineRemote=true;
     b.__onlineRemoteDir=d.clone();
     b.__onlineRemoteSpeed=speed;
+    b.__onlineRemoteOwner='V118';
     if(!b.velocity||typeof b.velocity.lengthSq!=='function'||b.velocity.lengthSq()<.0001){
       b.velocity=d.clone().multiplyScalar(speed);
     }else{
@@ -1099,6 +1105,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       b.lastPos=b.mesh.position.clone();
       if(b.startPos)b.startPos=b.mesh.position.clone();
     }
+
+    const list=window.__V117_REMOTE_PROJECTILES||(window.__V117_REMOTE_PROJECTILES=[]);
+    list.push(b);
     return b;
   }
 
