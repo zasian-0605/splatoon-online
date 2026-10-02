@@ -1255,7 +1255,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
        canonical cooldown rejects that duplicate. This removes the browser-
        dependent pointerdown -> mousedown gap that could make all shots vanish. */
     if(e.type==='pointerdown' &&
-       w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'){
+       w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'&&w.category!=='roller'){
       canonicalMouseHeld=true;
       try{window.directPlayerShot?.();}catch(err){
         try{console.warn('[V120 pointer shot]',err);}catch(_){}
