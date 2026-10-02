@@ -1099,7 +1099,12 @@ function updateAccountResult(player, winnerTeam) {
 }
 
 const server = http.createServer(async (req, res) => {
-  let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  let p;
+  try {
+    p = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch (_) {
+    return res.writeHead(400).end('Bad request');
+  }
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -1174,14 +1179,31 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (p === '/') p = '/index.html';
-  const file = path.resolve(ROOT, p.replace(/^\/+/, ''));
+  const clean = p.replace(/^\/+/, '');
+  /* Only game assets are public. Server code, account data, package metadata,
+     .github and other repository files must never be downloadable. */
+  const PUBLIC_FILE = /^(index\.html|about\.html|sitemap\.xml|favicon\.ico|(?:world|player|combat|online)-runtime\.js|node_modules\/three\/build\/three\.min\.js)$/;
+  if (!PUBLIC_FILE.test(clean)) return res.writeHead(404).end('Not found');
+
+  const file = path.resolve(ROOT, clean);
   const relativeFile = path.relative(ROOT, file);
   if (relativeFile.startsWith('..') || path.isAbsolute(relativeFile)) return res.writeHead(403).end();
+
   fs.readFile(file, (err, data) => {
     if (err) return res.writeHead(404).end('Not found');
     const ext = path.extname(file).toLowerCase();
-    const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'text/javascript; charset=utf-8' : 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'no-store' }); res.end(data);
+    const types = {
+      '.html':'text/html; charset=utf-8',
+      '.js':'text/javascript; charset=utf-8',
+      '.xml':'application/xml; charset=utf-8',
+      '.txt':'text/plain; charset=utf-8',
+      '.ico':'image/x-icon'
+    };
+    res.writeHead(200, {
+      'Content-Type': types[ext] || 'application/octet-stream',
+      'Cache-Control': 'no-store'
+    });
+    res.end(data);
   });
 });
 
@@ -1227,7 +1249,12 @@ function messageBudget(player,type='gameplay'){
   return false;
 }
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  /* A gameplay packet is tiny; 64 KiB is more than enough and prevents a
+     client from allocating huge WebSocket payloads. */
+  maxPayload: 64 * 1024
+});
 wss.on('connection', ws => {
   ws.isAlive=true;
   ws.missedHeartbeats=0;
