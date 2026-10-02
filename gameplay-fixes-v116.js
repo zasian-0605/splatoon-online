@@ -707,13 +707,34 @@
   let heavy=null;
   let suppressMouseUntil=0;
 
+  function clearLegacyHeavyFlags(f){
+    if(!f)return;
+    f.isCharging=false;
+    f.spinnerCharging=false;
+    f.spinnerFiring=false;
+    f._v60ChargeStart=0;
+    f.spinnerChargeStart=0;
+    f._v60BladeChargeStart=0;
+    f.wiperChargeStart=0;
+    const gauge=document.getElementById('charge-gauge');
+    if(gauge)gauge.style.display='none';
+  }
+
   function releaseHeavy(abort=false){
     const st=heavy;
     heavy=null;
-    if(!st)return;
     const f=player();
     const gauge=document.getElementById('charge-gauge');
     if(gauge)gauge.style.display='none';
+    if(!st){
+      clearLegacyHeavyFlags(f);
+      return;
+    }
+
+    /* Always clear the local/legacy charge flags first.
+       A missed pointerup/pointercancel must never leave the weapon locked. */
+    clearLegacyHeavyFlags(f);
+
     if(!f?.alive||abort)return;
     const frac=Math.max(0,Math.min(1,(performance.now()-st.start)/(st.time||800)));
     if(frac<.04)return;
@@ -728,11 +749,9 @@
       }
     }catch(err){
       try{console.warn('[V117 heavy release]',err);}catch(_){}
+    }finally{
+      clearLegacyHeavyFlags(f);
     }
-    f.isCharging=false;
-    f.spinnerCharging=false;
-    f._v60ChargeStart=0;
-    f._v60BladeChargeStart=0;
   }
 
   function beginDesktop(e){
@@ -766,7 +785,12 @@
       return;
     }
     if(w.category==='charger'||w.category==='spinner'||w.category==='wiper'){
-      if(heavy)return;
+      /* A stale heavy state must never block the next press.
+         Replace it with the newest valid charge state. */
+      if(heavy){
+        heavy=null;
+        clearLegacyHeavyFlags(f);
+      }
       const kind=w.category;
       heavy={kind,start:performance.now(),time:Number(w.chargeTime)||800};
       f.isCharging=true;
@@ -809,6 +833,24 @@
   /* Window capture runs before the old document-level handlers. */
   window.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')beginDesktop(e);},true);
   window.addEventListener('pointerup',e=>{if(e.pointerType==='mouse')endDesktop(e);},true);
+
+  /* Pointer cancellation is a valid end-of-input path too. */
+  window.addEventListener('pointercancel',e=>{
+    if(e.pointerType!=='mouse')return;
+    if(!heavy)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    releaseHeavy(true);
+    isShooting=false;
+  },true);
+
+  /* Some browsers release pointer capture without delivering pointerup. */
+  window.addEventListener('lostpointercapture',e=>{
+    if(!heavy)return;
+    releaseHeavy(true);
+    isShooting=false;
+  },true);
+
   window.addEventListener('mousedown',e=>{
     if(performance.now()<suppressMouseUntil){e.stopImmediatePropagation();return;}
     beginDesktop(e);
@@ -857,6 +899,14 @@
   },true);
 
   window.addEventListener('blur',()=>releaseHeavy(true));
+
+  /* Safety net: if an input device disappears while a charger is held,
+     clear the state so the next press always starts a fresh charge. */
+  window.addEventListener('mouseleave',e=>{
+    if(!heavy)return;
+    if(document.pointerLockElement===renderer?.domElement)return;
+    if(e.buttons===0)releaseHeavy(true);
+  },true);
 
   window.__V117_CANONICAL_RUNTIME={
     build:'V117-CANONICAL-RUNTIME-2026-10-02',
