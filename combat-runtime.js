@@ -903,6 +903,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     return !!t?.closest?.('#minimap,#fullmap,#online-panel,#result-screen,#v65-gear-panel,#v113-radio-next,.mobile-btn,#gear-panel,#ranking-panel');
   };
   const player=()=>{try{if(typeof playerFighter!=='undefined'&&playerFighter)return playerFighter;}catch(_){}return window.playerFighter||null;};
+  const numV117=(v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
+  const YV117=new THREE.Vector3(0,1,0);
+  const spawnRemoteBullet=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
+
   const aimDir=f=>{
     const d=new THREE.Vector3();
     try{camera?.getWorldDirection(d);}catch(_){}
@@ -964,33 +968,33 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         if(wp.kind==='stringer'||mode==='stringer'){
           const arrows=Math.max(3,Math.min(5,Math.floor(Number(wp.arrows)||3)));
           for(let i=0;i<arrows;i++){
-            const dd=d.clone().applyAxisAngle(Y,(i-(arrows-1)/2)*(.07+(1-charge)*.05));
-            spawnUnified(rf,dd,{
+            const dd=d.clone().applyAxisAngle(YV117,(i-(arrows-1)/2)*(.07+(1-charge)*.05));
+            spawnRemoteBullet(rf,dd,{
               kind:'charger',
-              speed:num(wp.speedShot,50)*(.75+.25*charge),
-              damage:num(wp.tapDamage,20)+(num(wp.fullDamage,80)-num(wp.tapDamage,20))*charge,
-              gravity:14,radius:.13,paintRadius:num(wp.paintRadius,.8),
-              life:2,maxRange:num(wp.range,45)
+              speed:numV117(wp.speedShot,50)*(.75+.25*charge),
+              damage:numV117(wp.tapDamage,20)+(numV117(wp.fullDamage,80)-numV117(wp.tapDamage,20))*charge,
+              gravity:14,radius:.13,paintRadius:numV117(wp.paintRadius,.8),
+              life:2,maxRange:numV117(wp.range,45)
             });
           }
         }else{
-          spawnUnified(rf,d,{
-            kind:'charger',speed:num(wp.speedShot,85),
+          spawnRemoteBullet(rf,d,{
+            kind:'charger',speed:numV117(wp.speedShot,85),
             gravity:18,radius:.12,
-            damage:num(wp.tapDamage,30)+(num(wp.fullDamage,120)-num(wp.tapDamage,30))*charge,
-            paintRadius:num(wp.paintRadius,1),life:2,maxRange:num(wp.range,55)
+            damage:numV117(wp.tapDamage,30)+(numV117(wp.fullDamage,120)-numV117(wp.tapDamage,30))*charge,
+            paintRadius:numV117(wp.paintRadius,1),life:2,maxRange:numV117(wp.range,55)
           });
         }
         return true;
       }
 
       if(wp.category==='blaster'){
-        spawnUnified(rf,d,{
-          kind:'blaster',speed:num(wp.speed,24),damage:num(wp.damage,70),
-          gravity:0,radius:.22,paintRadius:num(wp.paintRadius,1.35),life:2,
-          maxRange:num(wp.range,23),explosive:true,
-          explosionRadius:num(wp.explosionRadius,2.5),
-          splashDamage:num(wp.splashDamage,35)
+        spawnRemoteBullet(rf,d,{
+          kind:'blaster',speed:numV117(wp.speed,24),damage:numV117(wp.damage,70),
+          gravity:0,radius:.22,paintRadius:numV117(wp.paintRadius,1.35),life:2,
+          maxRange:numV117(wp.range,23),explosive:true,
+          explosionRadius:numV117(wp.explosionRadius,2.5),
+          splashDamage:numV117(wp.splashDamage,35)
         });
         return true;
       }
@@ -999,12 +1003,12 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         const count=wp.name==='ヒッセン'?3:wp.name==='オーバーフロッシャー'?4:1;
         for(let i=0;i<count;i++){
           const dd=count>1
-            ? d.clone().applyAxisAngle(Y,(i-(count-1)/2)*.12)
+            ? d.clone().applyAxisAngle(YV117,(i-(count-1)/2)*.12)
             : d.clone();
-          spawnUnified(rf,dd,{
-            kind:'slosher',speed:num(wp.speed,18),damage:num(wp.damage,60),
-            gravity:10.5,radius:.28,paintRadius:num(wp.paintRadius,1.4),
-            life:num(wp.life,1.35),maxRange:num(wp.range,18)
+          spawnRemoteBullet(rf,dd,{
+            kind:'slosher',speed:numV117(wp.speed,18),damage:numV117(wp.damage,60),
+            gravity:10.5,radius:.28,paintRadius:numV117(wp.paintRadius,1.4),
+            life:numV117(wp.life,1.35),maxRange:numV117(wp.range,18)
           });
         }
         return true;
@@ -1012,43 +1016,43 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
       if(wp.category==='maneuver'){
         for(const side of [-1,1]){
-          const dd=d.clone().applyAxisAngle(Y,side*num(wp.spread,.05));
-          spawnUnified(rf,dd,{
-            kind:'dualies',speed:num(wp.speed,35),damage:num(wp.damage,20),
-            gravity:4.8,radius:.14,paintRadius:num(wp.paintRadius,.8),
-            life:num(wp.life,1.25),maxRange:num(wp.range,30)
+          const dd=d.clone().applyAxisAngle(YV117,side*numV117(wp.spread,.05));
+          spawnRemoteBullet(rf,dd,{
+            kind:'dualies',speed:numV117(wp.speed,35),damage:numV117(wp.damage,20),
+            gravity:4.8,radius:.14,paintRadius:numV117(wp.paintRadius,.8),
+            life:numV117(wp.life,1.25),maxRange:numV117(wp.range,30)
           });
         }
         return true;
       }
 
       if(wp.category==='brella'){
-        const pellets=Math.max(3,Math.min(8,Math.floor(num(wp.pellets,5))));
+        const pellets=Math.max(3,Math.min(8,Math.floor(numV117(wp.pellets,5))));
         for(let i=0;i<pellets;i++){
-          const dd=d.clone().applyAxisAngle(Y,(i-(pellets-1)/2)*num(wp.spread,.055));
-          spawnUnified(rf,dd,{
-            kind:'brella',speed:num(wp.speed,30),damage:num(wp.damage,18),
-            gravity:4.8,radius:.13,paintRadius:num(wp.paintRadius,.75),
-            life:num(wp.life,1.2),maxRange:num(wp.range,20)
+          const dd=d.clone().applyAxisAngle(YV117,(i-(pellets-1)/2)*numV117(wp.spread,.055));
+          spawnRemoteBullet(rf,dd,{
+            kind:'brella',speed:numV117(wp.speed,30),damage:numV117(wp.damage,18),
+            gravity:4.8,radius:.13,paintRadius:numV117(wp.paintRadius,.75),
+            life:numV117(wp.life,1.2),maxRange:numV117(wp.range,20)
           });
         }
         return true;
       }
 
       if(wp.category==='spinner'){
-        spawnUnified(rf,d,{
-          kind:'splatling',speed:num(wp.speed,43),damage:num(wp.damage,29),
-          gravity:5.2,radius:.13,paintRadius:num(wp.paintRadius,.6),
-          life:num(wp.life,1.35),maxRange:num(wp.range,30)
+        spawnRemoteBullet(rf,d,{
+          kind:'splatling',speed:numV117(wp.speed,43),damage:numV117(wp.damage,29),
+          gravity:5.2,radius:.13,paintRadius:numV117(wp.paintRadius,.6),
+          life:numV117(wp.life,1.35),maxRange:numV117(wp.range,30)
         });
         return true;
       }
 
       /* Ordinary shooter. */
-      spawnUnified(rf,d,{
-        kind:'shooter',speed:num(wp.speed,35),damage:num(wp.damage,30),
-        gravity:5.2,radius:.14,paintRadius:num(wp.paintRadius,.9),
-        life:num(wp.life,1.55),maxRange:num(wp.range,30)
+      spawnRemoteBullet(rf,d,{
+        kind:'shooter',speed:numV117(wp.speed,35),damage:numV117(wp.damage,30),
+        gravity:5.2,radius:.14,paintRadius:numV117(wp.paintRadius,.9),
+        life:numV117(wp.life,1.55),maxRange:numV117(wp.range,30)
       });
       return true;
     }catch(err){
@@ -1136,9 +1140,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
   function chargerFrac(st){
     const f=st?.target,w=f?.weapon;
-    const ms=Math.max(120,num(w?.chargeTime,900));
+    const ms=Math.max(120,numV117(w?.chargeTime,900));
     return Math.max(0,Math.min(1,
-      (performance.now()-num(st?.start,performance.now()))/ms
+      (performance.now()-numV117(st?.start,performance.now()))/ms
     ));
   }
 
@@ -1160,7 +1164,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
     const q=chargerFrac(st);
     const now=performance.now();
-    if(now<num(f.__canonicalHeavyNextAt,0))return false;
+    if(now<numV117(f.__canonicalHeavyNextAt,0))return false;
 
     let ok=false;
     try{
@@ -1204,7 +1208,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     /* A heavy weapon must have a real charge period; accidental micro-clicks
        no longer become full/rapid shots. */
     if(elapsed<60)return;
-    const heavyCooldown=num(f?.__canonicalHeavyNextAt,0);
+    const heavyCooldown=numV117(f?.__canonicalHeavyNextAt,0);
     if(performance.now()<heavyCooldown)return;
     const frac=Math.max(0,Math.min(1,elapsed/chargeTime));
     const d=aimDir(f);
