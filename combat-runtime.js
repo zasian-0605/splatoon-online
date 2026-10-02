@@ -1208,11 +1208,17 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
 
     const w=f.weapon||{};
-    /* Pointerdown exists mainly to suppress the legacy heavy-input handler.
-       Normal weapons fire once from mousedown; charged weapons start here. */
+    /* V120: normal weapons fire immediately on the primary pointer event.
+       The same physical click may also generate mousedown, but fireBasic's
+       canonical cooldown rejects that duplicate. This removes the browser-
+       dependent pointerdown -> mousedown gap that could make all shots vanish. */
     if(e.type==='pointerdown' &&
        w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'){
-      isShooting=false;
+      canonicalMouseHeld=true;
+      try{window.directPlayerShot?.();}catch(err){
+        try{console.warn('[V120 pointer shot]',err);}catch(_){}
+      }
+      isShooting=true;
       return;
     }
     if(w.category==='charger'){
@@ -1505,7 +1511,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
   window.__V116_UPDATE_BULLETS=updateUnifiedBullets;
   window.__V117_CANONICAL_RUNTIME={
-    build:'V117-CANONICAL-RUNTIME-2026-10-03',
+    build:'V120-CANONICAL-CHARGER-AND-POINTER-SHOT-2026-10-03',
     projectile:'V116',
     input:'single-desktop-action-path',
     remoteShots:'V117-canonical-ranged',
