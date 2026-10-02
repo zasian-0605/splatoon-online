@@ -239,11 +239,45 @@ function serverResolveHorizontalMove(oldPos,newPos){
     z:oldPos.z+(newPos.z-oldPos.z)*lo
   };
 }
+/* Canonical online main-weapon projectile values.
+   These must match combat-runtime.js so the authoritative hit/paint simulation
+   and the remote visual projectile use the same numbers. */
 const SERVER_WEAPONS={
-  0:{cat:'shooter',damage:32,rate:95,range:32,speed:34},
-  1:{cat:'slosher',damage:68,rate:500,range:25,speed:19,explosion:2.4},
-  2:{cat:'maneuver',damage:28,rate:55,range:30,speed:38}
+  0:{cat:'shooter',damage:32,rate:95,range:30,speed:37,gravity:5.2,straightDistance:7.5,
+     radius:.14,paintRadius:1.15,life:1.55,trajectory:'delayed'},
+  1:{cat:'slosher',damage:70,rate:500,range:16,speed:17,gravity:10.5,verticalSpeed:7.5,
+     radius:.28,paintRadius:1.75,life:1.35,trajectory:'arc',explosion:2.4},
+  2:{cat:'maneuver',damage:28,rate:55,range:30,speed:38,gravity:4.8,straightDistance:7.5,
+     radius:.14,paintRadius:.72,life:1.0,trajectory:'delayed',spread:.055,count:2}
 };
+
+function serverProjectileSpec(w,m={}){
+  if(!w)return null;
+  const out={
+    kind:w.cat==='maneuver'?'dualies':w.cat,
+    trajectory:w.trajectory||'delayed',
+    speed:Number(w.speed)||35,
+    maxRange:Number(w.range)||30,
+    straightDistance:Number(w.straightDistance)||0,
+    gravity:Number(w.gravity)||0,
+    verticalSpeed:Number(w.verticalSpeed)||0,
+    radius:Number(w.radius)||.14,
+    paintRadius:Number(w.paintRadius)||.9,
+    life:Number(w.life)||1.5,
+    damage:Number(w.damage)||0,
+    count:Math.max(1,Math.min(8,Math.floor(Number(w.count)||1))),
+    spread:Number(w.spread)||0,
+    explosive:w.cat==='slosher',
+    explosionRadius:Number(w.explosion)||0,
+    splashDamage:w.cat==='slosher'?Number(w.damage)||0:0
+  };
+  if(w.cat==='charger'){
+    const q=Math.max(0,Math.min(1,Number(m.charge)||0));
+    out.speed=Number(w.speedShot||w.speed)||85;
+    out.damage=Number(w.tap||0)+(Number(w.full||0)-Number(w.tap||0))*q;
+  }
+  return out;
+}
 const SERVER_SUBS={
   instant:{delay:0,radius:2.1,damage:60},timed:{delay:1100,radius:3.4,damage:180},stick:{delay:1500,radius:4.0,damage:180},
   bounce:{delay:1800,radius:1.8,damage:50},seek:{delay:1800,radius:3.6,damage:180},slide:{delay:1400,radius:2.8,damage:180},
@@ -595,7 +629,14 @@ function serverResolveShot(room,player,m){
   }
   player.lastShotAt=now;
   serverBeginPaintTrace(player);
-  const dir={x:dx/len,y:dy/len,z:dz/len},origin={x:player.serverPos?.x||0,y:(player.serverPos?.y||0)+1.2,z:player.serverPos?.z||0},range=w.range||35;
+  const dir={x:dx/len,y:dy/len,z:dz/len};
+  const muzzleForward=.55;
+  const origin={
+    x:(player.serverPos?.x||0)+dir.x*muzzleForward,
+    y:(player.serverPos?.y||0)+1.2,
+    z:(player.serverPos?.z||0)+dir.z*muzzleForward
+  };
+  const range=w.range||35;
   const rawMode=String(m.mode||'');
   let mode='';
   if(w.cat==='roller'&&(rawMode==='roller-flick'||rawMode==='rollerFlick'||rawMode==='roller-roll'||rawMode==='brushFlick'))mode=rawMode==='rollerFlick'?'roller-flick':rawMode==='brushFlick'?'brush-flick':rawMode;
@@ -1298,13 +1339,19 @@ wss.on('connection', ws => {
       const mode = typeof m.mode === 'string' ? String(m.mode).slice(0, 32) : null;
       const accepted=serverResolveShot(room,player,Object.assign({},m,{weaponId,dx:nums[3],dy:nums[4],dz:nums[5],charge}));
       if(!accepted)return;
+      const projectile=serverProjectileSpec(SERVER_WEAPONS[weaponId],{charge,mode});
+      const bDir={x:nums[3]/dirLen,y:nums[4]/dirLen,z:nums[5]/dirLen};
+      const bOrigin=player.serverPos||{x:nums[0],y:Number(nums[1])-1.2,z:nums[2]};
       broadcast(room, {
         type: 'shot',
+        protocol: 'v117-projectile-1',
         id: player.id,
         team: player.team,
-        x: player.serverPos?.x ?? nums[0], y: (player.serverPos?.y ?? (nums[1]-1.2)) + 1.2, z: player.serverPos?.z ?? nums[2],
-        dx: nums[3] / dirLen, dy: nums[4] / dirLen, dz: nums[5] / dirLen,
-        weaponId, charge, mode
+        x: (bOrigin.x||0)+bDir.x*.55,
+        y: (bOrigin.y||0)+1.2,
+        z: (bOrigin.z||0)+bDir.z*.55,
+        dx:bDir.x,dy:bDir.y,dz:bDir.z,
+        weaponId, charge, mode, projectile
       }, player.id);
       return;
     }
