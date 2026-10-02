@@ -456,6 +456,9 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
   const remain=Math.max(0,range-straightDist);
   const gravity=w.cat==='slosher' ? 10.5
     : ((w.cat==='brella'||w.cat==='maneuver'||w.cat==='dualies') ? 4.8 : 5.2);
+  const launchY=w.cat==='slosher'
+    ? 7.5 + Number(w.arc||0)*4
+    : dir.y*speed;
   const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
   const totalTime=remain/Math.max(1,speed*horizontal);
   const steps=Math.max(16,Math.min(64,Math.ceil(totalTime*50)));
@@ -467,7 +470,7 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
     const t=totalTime*j/steps;
     const cur={
       x:straight.x+dir.x*speed*t,
-      y:straight.y+dir.y*speed*t-.5*gravity*t*t,
+      y:straight.y+launchY*t-.5*gravity*t*t,
       z:straight.z+dir.z*speed*t
     };
     considerSegment(prev,cur,orderBase+(j/steps)*(1-orderBase));
