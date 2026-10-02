@@ -901,6 +901,29 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     cancel:()=>releaseCanonicalCharger(true)
   };
 
+  /* V116 is the single projectile updater. */
+  window.updateBullets=updateUnifiedBullets;
+  try{updateBullets=updateUnifiedBullets;}catch(_){}
+  window.__V116_BUILD=BUILD;
+  console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
+})();
+
+/* =========================================================
+   V117 FINAL: canonical runtime/input arbiter
+   - V116 remains the single projectile movement path.
+   - V117 only owns online shot reception and input arbitration.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__V117_CANONICAL_RUNTIME)return;
+  const battle=()=>typeof currentPhase!=='undefined'&&(currentPhase===1.5||currentPhase===2);
+  const excluded=e=>{
+    const t=e?.target;
+    return !!t?.closest?.('#minimap,#fullmap,#online-panel,#result-screen,#v65-gear-panel,#v113-radio-next,.mobile-btn,#gear-panel,#ranking-panel');
+  };
+  const player=()=>{try{if(typeof playerFighter!=='undefined'&&playerFighter)return playerFighter;}catch(_){}return window.playerFighter||null;};
+  const numV117=(v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
+  const canonicalProjectileSpawner=window.__spawnBulletV60||window.spawnBulletV60||window.spawnBullet;
   /* Restored V117 canonical remote-shot bridge.  The previous cleanup accidentally
      removed these declarations while deleting the obsolete per-frame fallback. */
   const YV117=new THREE.Vector3(0,1,0);
