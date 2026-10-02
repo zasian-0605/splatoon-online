@@ -384,6 +384,12 @@ function serverDistanceToSegment(px,py,pz,ax,ay,az,bx,by,bz){
   return {distance:Math.hypot(px-qx,py-qy,pz-qz),t,x:qx,y:qy,z:qz};
 }
 function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
+  /* V117: authoritative trajectory now mirrors the client projectile runtime.
+     - charger: flies on the aimed line to max range
+     - blaster: gravity-free straight flight
+     - other ranged weapons: short straight phase, then gravity
+     - no hidden extra pitch is injected server-side
+  */
   const range=Math.max(1,Number(w.range)||35);
   let bestTarget=null,bestTargetOrder=Infinity,bestWall=null,bestWallOrder=Infinity;
 
@@ -391,7 +397,9 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
     for(const target of room.players.values()){
       if(!target.serverAlive||target.team===null||target.team===w._attackerTeam)continue;
       const p=target.serverPos||target.spawn;
-      const hit=serverDistanceToSegment(p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z);
+      const hit=serverDistanceToSegment(
+        p.x,p.y+.9,p.z,a.x,a.y,a.z,b.x,b.y,b.z
+      );
       if(hit.distance<hitRadius){
         const order=orderBase+hit.t;
         if(order<bestTargetOrder)bestTarget={target,hit,order};
@@ -404,7 +412,7 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
     }
   };
 
-  if(w.cat==='charger'&&w.kind!=='stringer'){
+  if(w.cat==='charger'){
     const end={
       x:origin.x+dir.x*range,
       y:origin.y+dir.y*range,
@@ -420,40 +428,53 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
     };
   }
 
-  const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
-  const basePitch=Math.atan2(dir.y,horizontal);
-  const extraPitch=w.cat==='slosher'
-    ? Math.PI*11/180
-    : (w.kind==='stringer'?Math.PI*8/180:0);
-  const pitch=basePitch+extraPitch;
-  const yaw=Math.atan2(dir.x,dir.z);
-  const cp=Math.cos(pitch),sp=Math.sin(pitch);
-  const fd={x:Math.sin(yaw)*cp,y:sp,z:Math.cos(yaw)*cp};
+  if(w.cat==='blaster'){
+    const end={
+      x:origin.x+dir.x*range,
+      y:origin.y+dir.y*range,
+      z:origin.z+dir.z*range
+    };
+    considerSegment(origin,end,0);
+    const targetWins=bestTarget&&bestTargetOrder<bestWallOrder;
+    return {
+      hit:targetWins?bestTarget:null,
+      wall:bestWall&&(!bestTarget||bestWallOrder<bestTargetOrder)?bestWall:null,
+      straightEnd:bestWall&&bestWallOrder<1?bestWall.wall.point:end,
+      dropEnd:end
+    };
+  }
 
-  const straightDist=Math.min(4.2,range*.24);
+  const straightDist=Math.min(7.5,range*.28);
   const straight={
-    x:origin.x+fd.x*straightDist,
-    y:origin.y+fd.y*straightDist,
-    z:origin.z+fd.z*straightDist
+    x:origin.x+dir.x*straightDist,
+    y:origin.y+dir.y*straightDist,
+    z:origin.z+dir.z*straightDist
   };
   considerSegment(origin,straight,0);
 
   const speed=Math.max(1,Number(w.speed)||35);
   const remain=Math.max(0,range-straightDist);
-  const gravity=w.cat==='slosher'?10.5:5.5;
-  const totalTime=remain/Math.max(1,speed*cp);
+  const gravity=w.cat==='slosher' ? 10.5
+    : ((w.cat==='brella'||w.cat==='maneuver'||w.cat==='dualies') ? 4.8 : 5.2);
+  const launchY=w.cat==='slosher'
+    ? 7.5 + Number(w.arc||0)*4
+    : dir.y*speed;
+  const horizontal=Math.max(.001,Math.hypot(dir.x,dir.z));
+  const totalTime=remain/Math.max(1,speed*horizontal);
   const steps=Math.max(16,Math.min(64,Math.ceil(totalTime*50)));
   let prev=straight;
   let lastVisible=straight;
-  for(let i=1;i<=steps;i++){
-    const t=totalTime*i/steps;
+  let orderBase=straightDist/Math.max(range,.001);
+
+  for(let j=1;j<=steps;j++){
+    const t=totalTime*j/steps;
     const cur={
-      x:straight.x+fd.x*speed*t,
-      y:straight.y+fd.y*speed*t-.5*gravity*t*t,
-      z:straight.z+fd.z*speed*t
+      x:straight.x+dir.x*speed*t,
+      y:straight.y+launchY*t-.5*gravity*t*t,
+      z:straight.z+dir.z*speed*t
     };
-    considerSegment(prev,cur,i/steps);
-    if(bestWallOrder<=i/steps)break;
+    considerSegment(prev,cur,orderBase+(j/steps)*(1-orderBase));
+    if(bestWallOrder<=orderBase+(j/steps)*(1-orderBase))break;
     lastVisible=cur;
     prev=cur;
   }

@@ -156,6 +156,7 @@
     let trajectory='delayed';
     let gravity=num(opts.gravity,5.2);
     let straight=Math.min(7.5,range*.28);
+    let launchY=num(opts.verticalSpeed,0);
 
     if(kind==='blaster'||w.category==='blaster'){
       kind='blaster';
@@ -173,6 +174,7 @@
       trajectory='arc';
       gravity=num(opts.gravity,10.5);
       straight=0;
+      launchY=num(opts.verticalSpeed,7.5+num(w.arc,0)*4);
     }else if(kind==='brella'||kind==='dualies'){
       trajectory='delayed';
       gravity=num(opts.gravity,4.8);
@@ -196,6 +198,7 @@
       __v116Unified:true,
       mesh,
       velocity:d.clone().multiplyScalar(speed),
+      verticalSpeed:launchY,
       startPos:s.clone(),
       lastPos:s.clone(),
       travelled:0,
@@ -289,6 +292,15 @@
         const dx=b.mesh.position.x-b.startPos.x,dz=b.mesh.position.z-b.startPos.z;
         b.horizontalTravel=Math.hypot(dx,dz);
         b.travelled+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
+      }else if(b.trajectory==='arc'){
+        if(!b.__arcStarted){
+          b.velocity.y=num(b.verticalSpeed,b.velocity.y);
+          b.__arcStarted=true;
+        }
+        b.velocity.y-=b.gravity*dt;
+        b.mesh.position.addScaledVector(b.velocity,dt);
+        b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
+        b.travelled+=b.mesh.position.distanceTo(prev);
       }else{
         b.velocity.y-=b.gravity*dt;
         b.mesh.position.addScaledVector(b.velocity,dt);
@@ -296,8 +308,9 @@
         b.travelled+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
       }
 
-      paintTravel(b,prev,b.mesh.position);
-
+      /* Collision must be resolved before path painting. Otherwise a fast
+         projectile can paint through a wall during the same frame in which
+         wallHit() discovers the collision. */
       const wh=wallHit(prev,b.mesh.position);
       if(wh){
         impact(b,wh.point.clone(),wh);
@@ -318,6 +331,7 @@
         }
       }
       if(hit){
+        paintTravel(b,prev,hitPoint);
         if(b.explosive){
           try{explodeAt(hitPoint.clone(),num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
             paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter
@@ -329,6 +343,8 @@
         removeBullet(b,i);
         continue;
       }
+
+      paintTravel(b,prev,b.mesh.position);
 
       if(b.horizontalTravel>=b.maxRange&&!b.rangeDropped){
         b.rangeDropped=true;
@@ -423,7 +439,8 @@
   function fireCharger(f,dir,frac){
     if(!f?.alive||isSquid(f)||!battle()||f.weapon?.category!=='charger')return false;
     const w=f.weapon,q=Math.max(.05,Math.min(1,num(frac,0)));
-    const cost=num(w.inkCost,8)*(.75+.75*q);
+    /* V117: client and server use the same authoritative charge cost. */
+    const cost=num(w.inkCost,8)*(.55+.90*q);
     if(!consume(f,cost))return false;
     const d=aim(f,dir);
     if(w.kind==='stringer'){
@@ -524,4 +541,328 @@
   const oldStartHeavy=window.__V112_START_HEAVY;
   window.__V116_BUILD=BUILD;
   console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
+})();
+
+
+/* =========================================================
+   V117 FINAL: canonical runtime/input arbiter
+   - V116 is the single effective projectile/firing implementation.
+   - Legacy document-level mouse/pointer handlers are blocked before they run.
+   - Keyboard Q/R/Shift are handled once; old handlers are gated in index.html.
+   - Remote normal weapon shots use the same projectile trajectory as local shots.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__V117_CANONICAL_RUNTIME)return;
+
+  const battle=()=>typeof currentPhase!=='undefined'&&(currentPhase===1.5||currentPhase===2);
+  const excluded=e=>{
+    const t=e?.target;
+    return !!t?.closest?.('#minimap,#fullmap,#online-panel,#result-screen,#v65-gear-panel,#v113-radio-next,.mobile-btn,#gear-panel,#ranking-panel');
+  };
+  const player=()=>window.playerFighter||null;
+  const aimDir=f=>{
+    const d=new THREE.Vector3();
+    try{camera?.getWorldDirection(d);}catch(_){}
+    if(d.lengthSq()<.0001){
+      const y=Number(f?.root?.rotation?.y)||0;
+      d.set(Math.sin(y),0,Math.cos(y));
+    }
+    return d.normalize();
+  };
+
+  /* ---------- Canonical remote ranged-shot receiver ---------- */
+  const legacyReceive=window.__receiveOnlineShotV60;
+  function receiveRemoteShotCanonical(m){
+    try{
+      const wid=Number(m?.weaponId)||0;
+      const wp=weaponList[wid]||weaponList[0];
+      let rf=(fighters||[]).find(x=>String(x?.id)===String(m?.id));
+      if(!rf&&typeof ensureRemoteFighter==='function'){
+        rf=ensureRemoteFighter({
+          id:m.id,team:m.team,weaponId:wp?.id,
+          spawn:{x:Number(m.x)||0,z:Number(m.z)||0},
+          config:{weapon:wp?.id}
+        });
+      }
+      if(!rf||!wp)return legacyReceive?.(m);
+
+      rf.weapon=wp;
+      const d=new THREE.Vector3(
+        Number(m.dx)||0,Number(m.dy)||0,Number(m.dz)||0
+      );
+      if(d.lengthSq()<.0001)return;
+      d.normalize();
+      const mode=String(m.mode||'');
+      const charge=Math.max(0,Math.min(1,Number.isFinite(Number(m.charge))?Number(m.charge):1));
+
+      /* Preserve legacy special-only and melee presentation paths. */
+      const legacyModes=new Set([
+        'trizooka','crab','inkjet','ultra-stamp','kraken',
+        'rollerFlick','roller-flick','roller-roll','brushFlick','wiperSlash'
+      ]);
+      if(legacyModes.has(mode) || wp.category==='roller' || wp.category==='wiper' || wp.brush){
+        return legacyReceive?.(m);
+      }
+
+      if(wp.category==='charger'){
+        if(wp.kind==='stringer'||mode==='stringer'){
+          const arrows=Math.max(3,Math.min(5,Math.floor(Number(wp.arrows)||3)));
+          for(let i=0;i<arrows;i++){
+            const dd=d.clone().applyAxisAngle(Y,(i-(arrows-1)/2)*(.07+(1-charge)*.05));
+            spawnUnified(rf,dd,{
+              kind:'charger',
+              speed:num(wp.speedShot,50)*(.75+.25*charge),
+              damage:num(wp.tapDamage,20)+(num(wp.fullDamage,80)-num(wp.tapDamage,20))*charge,
+              gravity:14,radius:.13,paintRadius:num(wp.paintRadius,.8),
+              life:2,maxRange:num(wp.range,45)
+            });
+          }
+        }else{
+          spawnUnified(rf,d,{
+            kind:'charger',speed:num(wp.speedShot,85),
+            gravity:18,radius:.12,
+            damage:num(wp.tapDamage,30)+(num(wp.fullDamage,120)-num(wp.tapDamage,30))*charge,
+            paintRadius:num(wp.paintRadius,1),life:2,maxRange:num(wp.range,55)
+          });
+        }
+        return true;
+      }
+
+      if(wp.category==='blaster'){
+        spawnUnified(rf,d,{
+          kind:'blaster',speed:num(wp.speed,24),damage:num(wp.damage,70),
+          gravity:0,radius:.22,paintRadius:num(wp.paintRadius,1.35),life:2,
+          maxRange:num(wp.range,23),explosive:true,
+          explosionRadius:num(wp.explosionRadius,2.5),
+          splashDamage:num(wp.splashDamage,35)
+        });
+        return true;
+      }
+
+      if(wp.category==='slosher'){
+        const count=wp.name==='ヒッセン'?3:wp.name==='オーバーフロッシャー'?4:1;
+        for(let i=0;i<count;i++){
+          const dd=count>1
+            ? d.clone().applyAxisAngle(Y,(i-(count-1)/2)*.12)
+            : d.clone();
+          spawnUnified(rf,dd,{
+            kind:'slosher',speed:num(wp.speed,18),damage:num(wp.damage,60),
+            gravity:10.5,radius:.28,paintRadius:num(wp.paintRadius,1.4),
+            life:num(wp.life,1.35),maxRange:num(wp.range,18)
+          });
+        }
+        return true;
+      }
+
+      if(wp.category==='maneuver'){
+        for(const side of [-1,1]){
+          const dd=d.clone().applyAxisAngle(Y,side*num(wp.spread,.05));
+          spawnUnified(rf,dd,{
+            kind:'dualies',speed:num(wp.speed,35),damage:num(wp.damage,20),
+            gravity:4.8,radius:.14,paintRadius:num(wp.paintRadius,.8),
+            life:num(wp.life,1.25),maxRange:num(wp.range,30)
+          });
+        }
+        return true;
+      }
+
+      if(wp.category==='brella'){
+        const pellets=Math.max(3,Math.min(8,Math.floor(num(wp.pellets,5))));
+        for(let i=0;i<pellets;i++){
+          const dd=d.clone().applyAxisAngle(Y,(i-(pellets-1)/2)*num(wp.spread,.055));
+          spawnUnified(rf,dd,{
+            kind:'brella',speed:num(wp.speed,30),damage:num(wp.damage,18),
+            gravity:4.8,radius:.13,paintRadius:num(wp.paintRadius,.75),
+            life:num(wp.life,1.2),maxRange:num(wp.range,20)
+          });
+        }
+        return true;
+      }
+
+      if(wp.category==='spinner'){
+        spawnUnified(rf,d,{
+          kind:'splatling',speed:num(wp.speed,43),damage:num(wp.damage,29),
+          gravity:5.2,radius:.13,paintRadius:num(wp.paintRadius,.6),
+          life:num(wp.life,1.35),maxRange:num(wp.range,30)
+        });
+        return true;
+      }
+
+      /* Ordinary shooter. */
+      spawnUnified(rf,d,{
+        kind:'shooter',speed:num(wp.speed,35),damage:num(wp.damage,30),
+        gravity:5.2,radius:.14,paintRadius:num(wp.paintRadius,.9),
+        life:num(wp.life,1.55),maxRange:num(wp.range,30)
+      });
+      return true;
+    }catch(err){
+      try{console.warn('[V117 remote shot]',err);}catch(_){}
+      try{return legacyReceive?.(m);}catch(_){return false;}
+    }
+  }
+  window.__receiveOnlineShotV60=receiveRemoteShotCanonical;
+
+  /* ---------- Single desktop input path ---------- */
+  let heavy=null;
+  let suppressMouseUntil=0;
+
+  function releaseHeavy(abort=false){
+    const st=heavy;
+    heavy=null;
+    if(!st)return;
+    const f=player();
+    const gauge=document.getElementById('charge-gauge');
+    if(gauge)gauge.style.display='none';
+    if(!f?.alive||abort)return;
+    const frac=Math.max(0,Math.min(1,(performance.now()-st.start)/(st.time||800)));
+    if(frac<.04)return;
+    const d=aimDir(f);
+    try{
+      if(st.kind==='charger'){
+        window.__V116_HEAVY_RELEASE?.(f,'charger',frac,d);
+      }else if(st.kind==='spinner'){
+        window.__V116_HEAVY_RELEASE?.(f,'spinner',frac,d);
+      }else if(st.kind==='wiper'&&typeof fireBladeSlashV60==='function'){
+        fireBladeSlashV60(f,frac,d);
+      }
+    }catch(err){
+      try{console.warn('[V117 heavy release]',err);}catch(_){}
+    }
+    f.isCharging=false;
+    f.spinnerCharging=false;
+    f._v60ChargeStart=0;
+    f._v60BladeChargeStart=0;
+  }
+
+  function beginDesktop(e){
+    if(e.pointerType==='touch')return;
+    if(!battle()||excluded(e))return;
+    const f=player();
+    if(!f?.alive)return;
+
+    if(e.type==='pointerdown'&&e.button!==0)return;
+    if(e.type==='mousedown'&&e.button!==0)return;
+
+    e.stopImmediatePropagation();
+
+    if(e.button===2){
+      e.preventDefault();
+      if(!f.squid_mode)try{doPlayerSubThrow();}catch(_){}
+      return;
+    }
+
+    if(f.squid_mode){
+      isShooting=false;
+      return;
+    }
+
+    const w=f.weapon||{};
+    /* Pointerdown exists mainly to suppress the legacy heavy-input handler.
+       Normal weapons fire once from mousedown; charged weapons start here. */
+    if(e.type==='pointerdown' &&
+       w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'){
+      isShooting=false;
+      return;
+    }
+    if(w.category==='charger'||w.category==='spinner'||w.category==='wiper'){
+      if(heavy)return;
+      const kind=w.category;
+      heavy={kind,start:performance.now(),time:Number(w.chargeTime)||800};
+      f.isCharging=true;
+      if(kind==='spinner'){
+        f.spinnerCharging=true;
+        f._v60ChargeStart=heavy.start;
+        f.spinnerChargeStart=heavy.start;
+      }
+      if(kind==='wiper')f._v60BladeChargeStart=heavy.start;
+      const gauge=document.getElementById('charge-gauge');
+      if(gauge)gauge.style.display='block';
+      return;
+    }
+
+    /* Roller/brush retain their existing hold-to-roll/flick behavior,
+       but there is now only one mouse state producer. */
+    if(w.category==='roller'||w.brush){
+      isShooting=true;
+      return;
+    }
+
+    try{window.directPlayerShot?.();}catch(_){}
+    isShooting=true;
+  }
+
+  function endDesktop(e){
+    if(e.pointerType==='touch')return;
+    if(e.type==='mouseup'&&e.button!==0)return;
+    if(e.type==='pointerup'&&e.button!==0)return;
+    if(!battle()&& !heavy)return;
+    e.stopImmediatePropagation();
+    if(heavy){
+      e.preventDefault();
+      releaseHeavy(false);
+    }
+    isShooting=false;
+    if(e.type==='mouseup')suppressMouseUntil=performance.now()+50;
+  }
+
+  /* Window capture runs before the old document-level handlers. */
+  window.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')beginDesktop(e);},true);
+  window.addEventListener('pointerup',e=>{if(e.pointerType==='mouse')endDesktop(e);},true);
+  window.addEventListener('mousedown',e=>{
+    if(performance.now()<suppressMouseUntil){e.stopImmediatePropagation();return;}
+    beginDesktop(e);
+  },true);
+  window.addEventListener('mouseup',endDesktop,true);
+  window.addEventListener('contextmenu',e=>{
+    if(battle()&&!excluded(e)){e.preventDefault();e.stopImmediatePropagation();}
+  },true);
+
+  /* Touchscreens may synthesize a mouse event after touchend. Keep that
+     synthetic event away from the desktop shooting path. */
+  window.addEventListener('touchstart',()=>{
+    suppressMouseUntil=performance.now()+900;
+  },true);
+  window.addEventListener('touchend',()=>{
+    suppressMouseUntil=Math.max(suppressMouseUntil,performance.now()+80);
+  },true);
+
+  /* Q / R / Shift are the only keyboard action keys owned here. */
+  window.addEventListener('keydown',e=>{
+    if(!battle())return;
+    if(e.code==='ShiftLeft'||e.code==='ShiftRight'){
+      if(e.repeat)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      try{beginSquidHoldV66(e);}catch(_){keys.shift=true;}
+      return;
+    }
+    if(e.code==='KeyQ'){
+      e.preventDefault();e.stopImmediatePropagation();
+      const f=player();
+      if(f?.alive&&!f.squid_mode)try{doPlayerSubThrow();}catch(_){}
+      return;
+    }
+    if(e.code==='KeyR'){
+      e.preventDefault();e.stopImmediatePropagation();
+      const f=player();
+      if(f?.alive&&!f.squid_mode)try{fireSpecial(f);}catch(_){}
+    }
+  },true);
+
+  window.addEventListener('keyup',e=>{
+    if(e.code!=='ShiftLeft'&&e.code!=='ShiftRight')return;
+    if(!battle())return;
+    e.preventDefault();e.stopImmediatePropagation();
+    try{endSquidHoldV66(e);}catch(_){keys.shift=false;}
+  },true);
+
+  window.addEventListener('blur',()=>releaseHeavy(true));
+
+  window.__V117_CANONICAL_RUNTIME={
+    build:'V117-CANONICAL-RUNTIME-2026-10-02',
+    projectile:'V116',
+    input:'single-desktop-action-path',
+    remoteShots:'V117-canonical-ranged'
+  };
+  console.log('[SPLATOON ONLINE][V117] canonical runtime active');
 })();
