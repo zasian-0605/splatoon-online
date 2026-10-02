@@ -687,7 +687,7 @@ let isTyping=false;
 
 const playerConfig = { style:'girl', hair:0, color:0, outfit:0, weapon:0, gear:0, device:'pc' };
 const inkColorPalette = [0xe3ff00, 0xff0055, 0x00d4ff, 0x9900ff];
-const originalWeaponDisplayNames = ["ネオンランナー","クロスランチャー","ライトパルス","ロングパルス","ゴールドレイ","ノヴァコア","クラッシュコア","ラピッドコア","エリートバースト","ロングチャージャー","ヴァンガード4K","バンブースピア","ローラーロード","ダイナモギア","ペイントブラシ","ツインスパーク","デュアルフロー","ケルビン・ドライブ","バケットコア","トライバケット","フローバケット","エクスブレイカー"];
+const originalWeaponDisplayNames = ["スプラシューター","スプラローラー","スプラチャージャー","バケットスロッシャー","スプラマニューバー"];
 function displayWeaponName(w){return w?.displayName||w?.name||"不明ブキ";}
 
 function loadPlayerConfig(){
@@ -702,7 +702,8 @@ function loadPlayerConfig(){
     playerConfig.hair=Number.isFinite(Number(playerConfig.hair))?Number(playerConfig.hair):0;
     playerConfig.color=Math.max(0,Math.min(inkColorPalette.length-1,Number(playerConfig.color)||0));
     playerConfig.outfit=Math.max(0,Math.min(49,Number(playerConfig.outfit)||0));
-    playerConfig.weapon=Math.max(0,Math.min(200,Number(playerConfig.weapon)||0));
+    const savedWeapon=Number(playerConfig.weapon);
+    playerConfig.weapon=(Number.isInteger(savedWeapon)&&savedWeapon>=0&&savedWeapon<5)?savedWeapon:0;
     playerConfig.gear=Math.max(0,Math.min(3,Number(playerConfig.gear)||0));
   }catch(e){}
 }
@@ -750,62 +751,23 @@ const outfitList = [
    武器データ（カテゴリごとにトレードオフを設定）
    ========================================================= */
 const weaponList = [
-// --- シューター：バランス型。連射と威力と塗りのバランスが良いが、突出した強さはない ---
-{id:0,category:"shooter",name:"スプラシューター",displayName:"ネオンランナー",color:0x2f059c,length:.4,thickness:.12,scope:false,
- damage:28,rate:100,speed:34,spread:.05,life:1.3,paintRadius:1.0,sub:"バーストボム",special:"トライアークトルネード"},
-{id:1,category:"shooter",name:".52ガロン",displayName:"クロスランチャー",color:0x555555,length:.35,thickness:.22,scope:false,
- damage:38,rate:170,speed:32,spread:.08,life:1.1,paintRadius:1.15,sub:"マグネットボム",special:"チャージオーブ"},
-{id:2,category:"shooter",name:"N-ZAP85",displayName:"ライトパルス",color:0xdddddd,length:.36,thickness:.10,scope:false,
- damage:22,rate:72,speed:33,spread:.02,life:1.2,paintRadius:0.9,sub:"フラッシュボム",special:"センチネルミサイル"},
-{id:3,category:"shooter",name:"プライムシューター",displayName:"ロングパルス",color:0x227733,length:.55,thickness:.13,scope:false,
- damage:32,rate:135,speed:38,spread:.02,life:1.6,paintRadius:1.0,sub:"バーストボム",special:"パルスノード"},
-{id:4,category:"shooter",name:".96ガロンデコ",displayName:"ゴールドレイ",color:0xffd700,length:.65,thickness:.24,scope:false,
- damage:46,rate:235,speed:36,spread:.09,life:1.1,paintRadius:1.3,sub:"ドローンボム",special:"スカイパック"},
-
-// --- ブラスター：直撃は重いが連射が非常に遅い。直撃しなくても爆風でダメージが入る ---
-{id:5,category:"blaster",name:"ノヴァブラスター",displayName:"ノヴァコア",color:0x9900ff,length:.30,thickness:.28,scope:false,
- damage:70,rate:650,speed:20,spread:.14,life:1.4,paintRadius:1.4,explosionRadius:2.6,splashDamage:36,sub:"スパークボム",special:"ペイントクラウド"},
-{id:6,category:"blaster",name:"クラッシュブラスター",displayName:"クラッシュコア",color:0xff0055,length:.30,thickness:.30,scope:false,
- damage:95,rate:820,speed:16,spread:.18,life:1.0,paintRadius:1.5,explosionRadius:3.2,splashDamage:55,sub:"バーストボム",special:"ドームシールド"},
-{id:7,category:"blaster",name:"ラピッドブラスター",displayName:"ラピッドコア",color:0xee5500,length:.55,thickness:.20,scope:true,
- damage:52,rate:420,speed:28,spread:.08,life:1.9,paintRadius:1.2,explosionRadius:2.0,splashDamage:26,sub:"ドローンボム",special:"ラッシュカート"},
-{id:8,category:"blaster",name:"Rブラスターエリート",displayName:"エリートバースト",color:0xee1111,length:.42,thickness:.27,scope:false,
- damage:80,rate:700,speed:22,spread:.15,life:1.3,paintRadius:1.4,explosionRadius:2.8,splashDamage:44,sub:"ハンターボム",special:"トリガーキャノン"},
-
-// --- チャージャー：長押しでチャージ、離した瞬間に着弾。フルチャージは一撃が非常に重い ---
-{id:9,category:"charger",name:"スプラチャージャー",displayName:"ロングチャージャー",color:0x222244,length:.85,thickness:.12,scope:true,
- chargeTime:900,tapDamage:34,fullDamage:120,speedShot:70,paintRadius:1.3,sub:"バーストボム",special:"アサルトシェル"},
-{id:10,category:"charger",name:"リッター4K",displayName:"ヴァンガード4K",color:0x444444,length:.9,thickness:.16,scope:true,
- chargeTime:1350,tapDamage:30,fullDamage:170,speedShot:85,paintRadius:1.1,sub:"ハンターボム",special:"センチネルミサイル"},
-{id:11,category:"charger",name:"14式竹筒銃",displayName:"バンブースピア",color:0x338833,length:.62,thickness:.11,scope:true,
- chargeTime:640,tapDamage:26,fullDamage:100,speedShot:60,paintRadius:1.4,sub:"フラッシュボム",special:"グラップラー"},
-
-// --- ローラー：射程はゼロだが、スイングは高威力かつ着地面を広く塗れる。近距離最強・遠距離無力 ---
-{id:12,category:"roller",name:"スプラローラー",displayName:"ローラーロード",color:0xe3ff00,length:.5,thickness:.22,scope:false,
- swingDamage:78,swingRate:380,swingRange:3.0,paintFan:2.1,sub:"スライドボム",special:"ギガスタンプ"},
-{id:13,category:"roller",name:"ダイナモローラー",displayName:"ダイナモギア",color:0x333366,length:.62,thickness:.30,scope:false,
- swingDamage:105,swingRate:560,swingRange:3.6,paintFan:2.7,sub:"バーストボム",special:"ブーストステーション"},
-{id:14,category:"roller",name:"パブロ(筆)",displayName:"ペイントブラシ",color:0xff66cc,length:.4,thickness:.16,scope:false,
- swingDamage:45,swingRate:190,swingRange:2.2,paintFan:1.6,sub:"スパークボム",special:"オムニレーザー"},
-
-// --- マニューバー：連射が非常に速く、撃ちながらでも移動速度が落ちない。ただし威力は低い ---
-{id:15,category:"maneuver",name:"スパッタリー",displayName:"ツインスパーク",color:0x00aaff,length:.28,thickness:.10,scope:false,
- damage:15,rate:60,speed:34,spread:.10,life:1.0,paintRadius:0.8,sub:"フラッシュボム",special:"スワームビーコン"},
-{id:16,category:"maneuver",name:"デュアルスイーパー",displayName:"デュアルフロー",color:0x888888,length:.4,thickness:.09,scope:false,
- damage:19,rate:82,speed:37,spread:.05,life:1.4,paintRadius:0.8,sub:"ドローンボム",special:"コロッサス"},
-{id:17,category:"maneuver",name:"ケルビン525",displayName:"ケルビン・ドライブ",color:0x556644,length:.3,thickness:.14,scope:false,
- damage:26,rate:135,speed:29,spread:.16,life:0.9,paintRadius:0.9,sub:"バーストボム",special:"トリプルクラッシュ"},
-
-// --- バケツ(スロッシャー)：山なり軌道で壁の向こうにも届き、着弾範囲にまとまったダメージ ---
-{id:18,category:"slosher",name:"バケツスロッシャー",displayName:"バケットコア",color:0x2266cc,length:.34,thickness:.30,scope:false,
- damage:65,rate:520,speed:19,life:1.3,paintRadius:1.6,explosionRadius:2.4,sub:"マグネットボム",special:"ヴァキュームコア"},
-{id:19,category:"slosher",name:"ヒッセン",displayName:"トライバケット",color:0x442222,length:.26,thickness:.22,scope:false,
- damage:48,rate:420,speed:21,life:1.1,paintRadius:1.3,explosionRadius:1.9,sub:"スライドボム",special:"スモークスクリーン"},
-{id:20,category:"slosher",name:"オーバーフロッシャー",displayName:"フローバケット",color:0x774411,length:.42,thickness:.34,scope:false,
- damage:88,rate:780,speed:16,life:1.5,paintRadius:2.0,explosionRadius:3.0,sub:"ハンターボム",special:"ドームシールド"},
-{id:21,category:"slosher",name:"エクスプロッシャー",displayName:"エクスブレイカー",color:0x995500,length:.5,thickness:.30,scope:true,
- damage:70,rate:600,speed:24,life:1.8,paintRadius:1.7,explosionRadius:2.6,sub:"ドローンボム",special:"チャージオーブ"}
-];
+  // Exactly five playable main weapons: one representative from each requested category.
+  {id:0,category:"shooter",name:"スプラシューター",displayName:"スプラシューター",color:0x2f059c,
+    length:.4,thickness:.12,scope:false,damage:32,rate:95,speed:34,spread:.05,life:1.3,range:32,paintRadius:1.35,inkCost:1.0,
+    sub:"splatBomb",special:"トリプルトルネード"},
+  {id:1,category:"roller",name:"スプラローラー",displayName:"スプラローラー",color:0xe3ff00,
+    length:.5,thickness:.22,scope:false,swingDamage:78,swingRate:380,swingRange:3.0,paintFan:2.5,inkCost:5.0,
+    sub:"curlingBomb",special:"グレートバリア"},
+  {id:2,category:"charger",name:"スプラチャージャー",displayName:"スプラチャージャー",color:0x222244,
+    length:.85,thickness:.12,scope:true,chargeTime:900,tapDamage:34,fullDamage:120,speedShot:70,
+    range:55,paintRadius:1.55,inkCost:9.0,sub:"splatBomb",special:"ホップソナー"},
+  {id:3,category:"slosher",name:"バケットスロッシャー",displayName:"バケットスロッシャー",color:0x2266cc,
+    length:.34,thickness:.30,scope:false,damage:68,rate:500,speed:19,life:1.3,range:25,
+    paintRadius:1.85,explosionRadius:2.4,inkCost:4.8,sub:"fizzyBomb",special:"ナイスダマ"},
+  {id:4,category:"maneuver",name:"スプラマニューバー",displayName:"スプラマニューバー",color:0x66ccff,
+    length:.30,thickness:.10,scope:false,damage:28,rate:55,speed:38,spread:.055,life:1.0,range:30,
+    paintRadius:.72,inkCost:.75,dual:true,sub:"splatBomb",special:"カニタンク"}
+]
 
 const categoryLabel = {shooter:"シューター",blaster:"ブラスター",charger:"チャージャー",roller:"ローラー",maneuver:"マニューバー",slosher:"バケツ(スロッシャー)"};
 
@@ -4294,40 +4256,15 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     rebuildFighterModel: rebuildFighterModel
   };
 
-  /* ---------- Weapon expansion ---------- */
-  weaponList.push(
-    {id:22,category:"wiper",name:"ドライブワイパー",color:0x55ddaa,length:.62,thickness:.10,scope:false,
-      slashDamage:72,chargedDamage:105,slashRange:4.2,slashWidth:2.4,chargeTime:520,
-      paintRadius:1.55,inkCost:7.0,sub:"クイックボム",special:"ホップソナー"},
-    {id:23,category:"wiper",name:"ジムワイパー",color:0x99aacc,length:.72,thickness:.15,scope:false,
-      slashDamage:95,chargedDamage:140,slashRange:5.2,slashWidth:2.7,chargeTime:720,
-      paintRadius:1.9,inkCost:9.0,sub:"キューバンボム",special:"ショクワンダー"}
-  );
+  /* The playable roster is fixed to the five weapons above. */
   categoryLabel.wiper = "ワイパー";
   // Game-balance pass: normalize extreme values so no single weapon dominates the sandbox.
   const balance = {
     "スプラシューター":{damage:32,rate:95,paintRadius:1.35,inkCost:1.0},
-    ".52ガロン":{damage:42,rate:180,paintRadius:1.45,inkCost:1.8},
-    "N-ZAP85":{damage:24,rate:70,paintRadius:1.25,inkCost:.85},
-    "プライムシューター":{damage:35,rate:145,paintRadius:1.30,inkCost:1.5},
-    ".96ガロンデコ":{damage:48,rate:245,paintRadius:1.55,inkCost:2.2},
-    "ノヴァブラスター":{damage:76,rate:590,paintRadius:1.65,inkCost:3.2},
-    "クラッシュブラスター":{damage:58,rate:180,paintRadius:1.55,inkCost:2.7},
-    "ラピッドブラスター":{damage:55,rate:430,paintRadius:1.45,inkCost:2.8},
-    "Rブラスターエリート":{damage:82,rate:720,paintRadius:1.55,inkCost:3.0},
-    "スプラチャージャー":{paintRadius:1.55,inkCost:9.0},
-    "リッター4K":{paintRadius:1.45,inkCost:12.0},
-    "14式竹筒銃":{paintRadius:1.65,inkCost:6.0},
     "スプラローラー":{swingDamage:78,swingRate:380,paintFan:2.5,inkCost:5.0},
-    "ダイナモローラー":{swingDamage:108,swingRate:570,paintFan:3.2,inkCost:7.0},
-    "パブロ(筆)":{swingDamage:42,swingRate:170,paintFan:2.0,inkCost:2.4},
-    "スパッタリー":{damage:18,rate:55,paintRadius:1.15,inkCost:.7},
-    "デュアルスイーパー":{damage:20,rate:78,paintRadius:1.15,inkCost:.8},
-    "ケルビン525":{damage:30,rate:145,paintRadius:1.20,inkCost:1.2},
-    "バケツスロッシャー":{damage:68,rate:500,paintRadius:1.85,inkCost:4.8},
-    "ヒッセン":{damage:50,rate:400,paintRadius:1.65,inkCost:3.8},
-    "オーバーフロッシャー":{damage:84,rate:720,paintRadius:2.25,inkCost:5.5},
-    "エクスプロッシャー":{damage:72,rate:640,paintRadius:1.95,inkCost:6.0}
+    "スプラチャージャー":{paintRadius:1.55,inkCost:9.0},
+    "バケットスロッシャー":{damage:68,rate:500,paintRadius:1.85,inkCost:4.8},
+    "スプラマニューバー":{damage:28,rate:55,paintRadius:.72,inkCost:.75}
   };
   weaponList.forEach(w=>Object.assign(w,balance[w.name]||{}));
 
@@ -7617,7 +7554,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   const V60_BUILD='V60-WEAPON-GAMEPLAY-2026-09-27';
 
   /* ---------- Realistic loadout expansion ---------- */
-  const addedWeapons=[
+  const addedWeapons=[]; /* roster locked: no extra weapons */
+  /* Legacy expansion data intentionally removed: only five weapons are playable. */
+  const removedLegacyWeapons=[];
+  if(false){ const addedWeapons=[
     {id:24,category:'shooter',name:'シャープマーカー',displayName:'シャープマーカー',color:0x6fd3ff,length:.34,thickness:.09,
       damage:28,rate:70,speed:43,spread:.025,life:1.15,range:32,paintRadius:.95,inkCost:.9,sub:'burstBomb',special:'カニタンク'},
     {id:25,category:'shooter',name:'プロモデラーMG',displayName:'プロモデラーMG',color:0xdddddd,length:.31,thickness:.08,
@@ -7664,7 +7604,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     {id:44,category:'slosher',name:'スクリュースロッシャー',displayName:'スクリュースロッシャー',color:0xaa55ee,length:.42,thickness:.28,
       damage:70,rate:540,speed:18,life:1.35,range:25,paintRadius:1.8,inkCost:4.8,arc:1.0,sub:'fizzyBomb',special:'ナイスダマ'}
   ];
-  addedWeapons.forEach(w=>{ if(!weaponList.some(x=>x.id===w.id)) weaponList.push(w); });
+  removedLegacyWeapons.length=0; }
 
   categoryLabel.spinner='スピナー';
   categoryLabel.brella='シェルター';
