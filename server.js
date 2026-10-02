@@ -314,16 +314,12 @@ const SERVER_SPECIAL_BY_WEAPON={
 };
 function serverPointInStage(x,z){
   x=Number(x);z=Number(z);
-  if(!Number.isFinite(x)||!Number.isFinite(z))return false;
-  if(x<-SERVER_PLAYABLE_HALF_X||x>SERVER_PLAYABLE_HALF_X||z<-SERVER_PLAYABLE_HALF_Z||z>SERVER_PLAYABLE_HALF_Z)return false;
-  let inside=false;
-  for(let i=0,j=SERVER_STAGE_POLYGON.length-1;i<SERVER_STAGE_POLYGON.length;j=i++){
-    const xi=SERVER_STAGE_POLYGON[i][0],zi=SERVER_STAGE_POLYGON[i][1];
-    const xj=SERVER_STAGE_POLYGON[j][0],zj=SERVER_STAGE_POLYGON[j][1];
-    const hit=((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/(zj-zi||1e-9)+xi);
-    if(hit)inside=!inside;
-  }
-  return inside;
+  /* Keep server gameplay geometry aligned with the client's canonical
+     rectangular STAGE_SOLID floor. The AA polygon is an obstacle-reference
+     shape only and must not reject valid spawn/turf coordinates. */
+  return Number.isFinite(x)&&Number.isFinite(z)
+    && x>=-SERVER_PLAYABLE_HALF_X && x<=SERVER_PLAYABLE_HALF_X
+    && z>=-SERVER_PLAYABLE_HALF_Z && z<=SERVER_PLAYABLE_HALF_Z;
 }
 function serverCellKey(x,z,y){
   return Math.floor(Number(x)/SERVER_CELL)+','+Math.floor(Number(z)/SERVER_CELL)+','+Math.round(Number(y||0)/SERVER_Y_STEP);
@@ -353,10 +349,22 @@ function markServerPaint(room,x,z,radius,team,y,x2,z2){
     }
   }
 }
-function seedServerSpawnInk(room){
-  for(let gx=-21;gx<=19;gx++){
-    for(let gz=-35;gz<=-28;gz++)if(serverPointInStage((gx+.5)*SERVER_CELL,(gz+.5)*SERVER_CELL))room.inkCells.set(gx+','+gz+',0','A');
-    for(let gz=27;gz<=34;gz++)if(serverPointInStage((gx+.5)*SERVER_CELL,(gz+.5)*SERVER_CELL))room.inkCells.set(gx+','+gz+',0','B');
+function seedServerSpawnInk(room,players){
+  if(!room?.inkCells)return;
+  const ps=Array.isArray(players)?players:[...room.players.values()];
+  for(const p of ps){
+    const sp=p?.spawn;if(!sp||!p.team)continue;
+    const sx=Number(sp.x),sz=Number(sp.z);
+    if(!Number.isFinite(sx)||!Number.isFinite(sz))continue;
+    /* Compact friendly refill pad centered on the actual server spawn. */
+    const pts=[
+      [0,0],[3.2,0],[-3.2,0],[0,3.2],[0,-3.2],
+      [3.2,3.2],[-3.2,3.2],[3.2,-3.2],[-3.2,-3.2]
+    ];
+    for(const [ox,oz] of pts){
+      const x=sx+ox,z=sz+oz;
+      if(serverPointInStage(x,z))markServerPaint(room,x,z,2.7,p.team,0);
+    }
   }
 }
 function serverInkTeamAt(room,p){
@@ -1050,6 +1058,7 @@ function assignTeamsAndStart(room) {
   /* Online battles always start dry. Practice/local match paint must never
      leak into a new server-authoritative online room. */
   room.inkCells=new Map();
+  seedServerSpawnInk(room,ps);
   for(const p of ps){
     p.serverHp=100;p.serverAlive=true;p.serverInk=100;p.serverSquid=false;p.serverInkLastAt=Date.now();p.serverInkUseAt=0;p.serverRespawnAt=0;p.serverPos=Object.assign({},p.spawn);
     p.lastStatePos=Object.assign({},p.spawn);p.lastStateAt=Date.now();p.lastShotAt=0;p.lastSubAt=0;p.lastHazardAt=0;
@@ -1600,6 +1609,9 @@ wss.on('connection', ws => {
         x=resolved.x;z=resolved.z;
         player.serverPos={x,y,z}; player.lastStateAt=now;
       }
+      const serverPosForInk=player.serverPos||player.spawn;
+      const enemyInkNow=room.started&&player.team&&serverInkTeamAt(room,serverPosForInk)!=null&&serverInkTeamAt(room,serverPosForInk)!==player.team;
+      player.serverSquid=!!m.squid&&!enemyInkNow;
       const prevInkAt=player.serverInkLastAt||now;
       const inkDt=Math.max(0,Math.min(.25,(now-prevInkAt)/1000));
       if(player.serverSquid&&now-(player.serverInkUseAt||0)>=450){
@@ -1610,8 +1622,7 @@ wss.on('connection', ws => {
         player.lastHazardAt=now; const inkTeam=serverInkTeamAt(room,player.serverPos||player.spawn);
         if(inkTeam&&inkTeam!==player.team){const damage=Math.max(0,Math.min(4,Math.max(0,player.serverHp-1)));if(damage>0)serverApplyDamage(room,player,damage,null,'enemy-ink');}
       }
-      const serverPos=player.serverPos||player.spawn,enemyInk=room.started&&player.team&&serverInkTeamAt(room,serverPos)!=null&&serverInkTeamAt(room,serverPos)!==player.team;
-      player.serverSquid=!!m.squid&&!enemyInk;
+      const serverPos=player.serverPos||player.spawn,enemyInk=enemyInkNow;
       const packet={type:'state',seq:++player.stateSeq,id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,corrected,
         hp:Math.max(0,Math.min(100,player.serverHp||0)),ink:Math.max(0,Math.min(100,player.serverInk??100)),alive:!!player.serverAlive,squid:!!m.squid&&!enemyInk,moving:!!m.moving,weaponId:player.weaponId,colorHex:applyCanonicalPlayerColor(player)};
       broadcast(room,packet,player.id); send(player.ws,packet); return;
