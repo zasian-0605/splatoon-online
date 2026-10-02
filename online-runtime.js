@@ -333,6 +333,16 @@
       case 'serverInk':{
         const f=getPlayer();if(f&&Number.isFinite(Number(m.ink)))f.ink=Math.max(0,Math.min(100,Number(m.ink)));break;
       }
+      case 'shotResult':{
+        const f=getPlayer();
+        if(f&&Number.isFinite(Number(m.ink)))f.ink=Math.max(0,Math.min(100,Number(m.ink)));
+        if(m.accepted===false){
+          log('SHOT_REJECTED',{reason:String(m.reason||'unknown'),ink:Number(m.ink)});
+        }else{
+          log('SHOT_ACCEPTED',{ink:Number(m.ink)});
+        }
+        break;
+      }
       case 'antiCheatWarning':try{window.showToast?.(String(m.reason||'通信に異常が検知されました'));}catch(_){}break;
       case 'matchEnd':
         try{
