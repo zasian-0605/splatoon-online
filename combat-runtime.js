@@ -398,9 +398,16 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const w=f.weapon;
     let kind=String(opts.kind||w.category||'shooter');
     const d=aim(f,dir);
-    /* Every projectile gets a tiny upward launch bias. Keep it small so the
-       existing camera aim and weapon-specific gravity remain the main factors. */
-    d.y+=num(opts.upwardBias,.035);
+    /* Launch every shot about 15 degrees above the horizontal aim direction. */
+    const horizontal=Math.hypot(d.x,d.z);
+    if(horizontal>.0001){
+      const angle=15*Math.PI/180;
+      d.x=d.x/horizontal*Math.cos(angle);
+      d.z=d.z/horizontal*Math.cos(angle);
+      d.y=Math.sin(angle);
+    }else{
+      d.set(0,Math.sin(15*Math.PI/180),Math.cos(15*Math.PI/180));
+    }
     d.normalize();
     let speed=Math.max(8,num(opts.speed,w.speed||35));
     let range=Math.max(5,num(opts.maxRange,w.range||30));
