@@ -4108,7 +4108,7 @@ function animate3D(token){
   prevTime = time;
 
   if(playerFighter.alive){
-    updatePlayerMovement(delta);
+    window.updatePlayerMovement?.(delta);
   } else {
     const left=Math.max(0,Math.ceil((playerFighter.respawnAt-time)/1000));
     const overlayMsg=document.querySelector('#respawn-overlay .msg');
@@ -4152,7 +4152,7 @@ function animate3D(token){
           }
           return;
         }
-        updateAI(f, delta, time);
+        window.updateAI?.(f, delta, time);
       }catch(err){
         // One CPU error must never stop the others.
         try{
@@ -4175,7 +4175,7 @@ function animate3D(token){
 
   updateMarketStageGimmicks(time,delta);
 
-  updateBullets(delta);
+  window.updateBullets?.(delta);
   updateSubs(delta);
   updateOngoingEffects(delta);
   updateChargeOrbSystems(delta);
@@ -14074,6 +14074,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 <script src="/online-runtime.js?v=20261003-input-fix"></script>
 <script src="/world-runtime.js?v=20261003-input-fix"></script>
 <script src="/player-runtime.js?v=20261003-festival-fix2"></script>
-<script src="/combat-runtime.js?v=20261003-festival-fix"></script>
+<script src="/combat-runtime.js?v=20261003-festival-fix3"></script>
 </body>
 </html>
