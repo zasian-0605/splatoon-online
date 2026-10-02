@@ -17,7 +17,8 @@ while ((match = externalRe.exec(html))) {
     console.log('Skipping remote script: ' + src);
     continue;
   }
-  const file = require('path').resolve(process.cwd(), src.replace(/^\/+/, ''));
+  const localSrc = src.split(/[?#]/,1)[0];
+  const file = require('path').resolve(process.cwd(), localSrc.replace(/^\/+/, ''));
   const code = fs.readFileSync(file, 'utf8');
   scripts.push({ type: 'external', index: scripts.length + 1, src, code });
 }
