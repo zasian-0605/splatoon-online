@@ -2320,7 +2320,11 @@ function spawnParticle(x,y,z,colorHex){
 function explodeAt(pos, radius, damage, team, opts={}){
   const col = opts.colorHex ?? (team==='A'?teamAHex:teamBHex);
   paintGround(pos.x, pos.z, opts.paintRadius||radius, col);
-  for(let p=0;p<16;p++) spawnParticle(pos.x, pos.y+0.2, pos.z, col);
+  /* Blaster explosion uses the large ink splash only; do not leave tiny
+     projectile-like spheres behind after the blast. */
+  if(!opts.skipParticles){
+    for(let p=0;p<16;p++) spawnParticle(pos.x, pos.y+0.2, pos.z, col);
+  }
   fighters.forEach(o=>{
     if(!o.alive) return;
     if(!opts.friendlyFire && o.team===team) return;
