@@ -5069,7 +5069,10 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   /* room counts update without changing the stable v25 combat core */
   const _oldTryShoot=tryShoot;
   tryShoot=function(f,dir,now){
-    if(f.weapon?.category==='spinner'){shootSpinner(f,dir,now);return;}
+    if(f.weapon?.category==='spinner'&&typeof shootSpinner==='function'){
+      shootSpinner(f,dir,now);
+      return;
+    }
     _oldTryShoot(f,dir,now);
   };
 
@@ -5165,7 +5168,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   /* ---------- HUD gear names ---------- */
   const oldEnsureHud=window.ensureHud;
   if(typeof oldEnsureHud==='function'){
-    window.ensureHud=function(){ oldEnsureHud(); const e=document.getElementById('gear-effects'); if(e&&playerFighter?._customGearApplied){ const gp=playerFighter.gearProfile; e.textContent=`ギア：${[...Object.values(playerConfig.gearSlots).flat()].map(k=>GEAR_POWERS[k]?.label).filter(Boolean).join(' / ')}`; } };
+    window.ensureHud=function(){ oldEnsureHud(); const e=document.getElementById('gear-effects'); if(e&&playerFighter?._customGearApplied){ const gp=playerFighter.gearProfile; e.textContent=`ギア：${[...Object.values(playerConfig.gearSlots).flat()].map(k=>(typeof GEAR_POWERS!=='undefined'?GEAR_POWERS[k]?.label:'')).filter(Boolean).join(' / ')}`; } };
   }
 })();
 
