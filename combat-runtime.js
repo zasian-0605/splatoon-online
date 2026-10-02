@@ -453,7 +453,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(!f?.alive||!f.weapon)return null;
     const w=f.weapon;
     let kind=String(opts.kind||w.category||'shooter');
-    const aimed=aim(f,dir);\n    const d=opts.exactDirection?aimed:applyLaunchPitch(aimed);
+    const aimed=aim(f,dir);
+    const d=opts.exactDirection?aimed:applyLaunchPitch(aimed);
     /* Preserve actual up/down aim while applying the lower upward bias. */
     d.normalize();
     let speed=Math.max(8,num(opts.speed,w.speed||35));
