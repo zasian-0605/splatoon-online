@@ -1050,6 +1050,11 @@ function setupCustomizeUI(){
    ========================================================= */
 function getFighterInkHex(f){
   const fallback = f?.team==='B' ? teamBHex : teamAHex;
+  /* During online matches, team color is authoritative. Player cosmetics must
+     never override the team's ink color for turf, shots, or recharge checks. */
+  if(window.onlineActive && window.onlineStarted && (f?.team==='A'||f?.team==='B')){
+    return f.team==='B' ? 0xff2255 : 0xe3ff00;
+  }
   const v = f?.cfg?.inkColorHex;
   return Number.isFinite(Number(v)) ? Number(v) : fallback;
 }
@@ -5058,16 +5063,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
      are immediately usable after the dry-state reset. The spawn pad is local
      presentation only; authoritative turf is seeded by server.js too. */
   function seedOnlineSpawnInk(f){
-    if(!f?.onlineSpawn)return;
-    const col=getFighterInkHex(f);
-    const sx=Number(f.onlineSpawn.x)||0, sz=Number(f.onlineSpawn.z)||0;
-    const points=[
-      [0,0],[3.2,0],[-3.2,0],[0,3.2],[0,-3.2],
-      [3.2,3.2],[-3.2,3.2],[3.2,-3.2],[-3.2,-3.2]
-    ];
-    for(const [ox,oz] of points){
-      try{ paintGround(sx+ox,sz+oz,2.7,col,{noNetwork:true,team:f.team}); }catch(_){}
-    }
+    if(!f?.team)return;
+    /* Use the same simple spawn turf shape used by the stage builder.
+       No special raised blob/charging object is created here. */
+    const col=f.team==='B'?0xff2255:0xe3ff00;
+    try{
+      if(f.team==='A')paintRectWorld(-40,-68,40,-55,col);
+      else paintRectWorld(-40,55,40,68,col);
+    }catch(_){}
   }
 
 function startOnlineBattle(m){
@@ -5075,14 +5078,15 @@ function startOnlineBattle(m){
     hideOnlinePanel(); clearRemoteFighters();
     const me=playerFighter;
     me.team=m.team;me.id=onlinePlayerId;
-    me.cfg=Object.assign({},playerConfig,{inkColorHex:inkColorPalette[playerConfig.color]});
+    teamAHex=0xe3ff00; teamBHex=0xff2255;
+    const teamHex=m.team==='B'?teamBHex:teamAHex;
+    me.cfg=Object.assign({},playerConfig,{inkColorHex:teamHex});
     me.weapon=weaponList[playerConfig.weapon]||weaponList[0];
     me.onlineSpawn=Object.assign({},m.spawn||(m.team==='A'?spawnPointA:spawnPointB));
     rebuildFighterModel(me,me.cfg);
     me.root.position.copy(me.onlineSpawn);me.pos=me.root.position;me.hp=me.maxHp;me.ink=100;me.inkRegenBlockedUntil=0;me.alive=true;me.root.visible=true;me.squid_mode=false;me.human.visible=true;me.squid.visible=false;
     seedOnlineSpawnInk(me);
-    // チームカラーは固定（塗り判定用）。自分の見た目・弾の色はplayerConfig.colorを使う。
-    teamAHex=0xe3ff00; teamBHex=0xff2255;
+    // チームカラーは固定。弾・塗り・インク判定はチーム色を使う。
     battleTimer=180; playerFighter.specialGauge=0; window.__battleDeadline=Date.now()+181000; battleActive=true; currentPhase=2;
     document.getElementById('hud').style.display='block';document.getElementById('top-battle-status').style.display='block';document.getElementById('alive-count').style.display='block';document.getElementById('range-hint').style.display='none';document.getElementById('kill-feed').innerHTML='';
     (m.players||[]).forEach(p=>{if(p.id!==onlinePlayerId)ensureRemoteFighter(p);});
@@ -5115,9 +5119,11 @@ function startOnlineBattle(m){
       weapon:Number.isFinite(Number(p.weaponId))?Number(p.weaponId):Number(src.weapon)||0,
       gear:Number.isFinite(Number(src.gear))?Number(src.gear):0,
       device:'pc',
-      inkColorHex:Number.isFinite(Number(src.inkColorHex))
-        ? Math.max(0,Math.min(0xffffff,Math.floor(Number(src.inkColorHex))))
-        : (inkColorPalette[Math.max(0,Math.min(3,Number(src.color)||0))]||teamBHex)
+      inkColorHex:(p.team==='B' ? 0xff2255
+        : p.team==='A' ? 0xe3ff00
+        : (Number.isFinite(Number(src.inkColorHex))
+          ? Math.max(0,Math.min(0xffffff,Math.floor(Number(src.inkColorHex))))
+          : 0xe3ff00))
     };
     const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
     rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;
@@ -14145,6 +14151,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 <script src="/online-runtime.js?v=20261003-input-fix"></script>
 <script src="/world-runtime.js?v=20261003-input-fix"></script>
 <script src="/player-runtime.js?v=20261003-festival-fix2"></script>
-<script src="/combat-runtime.js?v=20261003-online-projectile-fix11"></script>
+<script src="/combat-runtime.js?v=20261003-online-projectile-fix12"></script>
 </body>
 </html>
