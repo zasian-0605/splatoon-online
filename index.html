@@ -1700,8 +1700,16 @@ function computeTurf(){
     if(da<0.06) aCount++;
     else if(db<0.06) bCount++;
   }
-  turfPct.a = Math.round((aCount/total)*100);
-  turfPct.b = Math.round((bCount/total)*100);
+  /* Turf bar denominator = only wet/painted area.
+     Dry/unpainted stage pixels do not dilute either team's share. */
+  const wetTotal=aCount+bCount;
+  if(wetTotal<=0){
+    turfPct.a=0;
+    turfPct.b=0;
+  }else{
+    turfPct.a=Math.round((aCount/wetTotal)*100);
+    turfPct.b=100-turfPct.a;
+  }
 }
 
 /* =========================================================
