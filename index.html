@@ -13338,6 +13338,7 @@ function updateSpecialsV91(dt){
   for(let i=sp91.screens.length-1;i>=0;i--){const s=sp91.screens[i];if(t>=s.end){rm(s.group);sp91.screens.splice(i,1);continue;}s.pos.addScaledVector(s.dir,.8*dt);s.group.position.copy(s.pos);const p=playerFighter;if(p?.alive){const r=p.pos.clone().sub(s.pos),side=Math.abs(r.dot(new THREE.Vector3(-s.dir.z,0,s.dir.x))),front=Math.abs(r.dot(s.dir));if(side<7&&front<.45){gray=true;if(t>s.hit){s.hit=t+500;applyDamage(p,8,s.owner);}}}}
   if(renderer?.domElement)renderer.domElement.style.filter=gray?'grayscale(1) saturate(.3)':'';
 }
+}
 const ongoingBeforeV91=window.updateOngoingEffects;
 window.updateOngoingEffects=function(dt){try{ongoingBeforeV91?.(dt);}catch(e){console.warn('[V91 base effects]',e);}updateGuideBombs(dt);updateSpecialsV91(dt);};
 try{updateOngoingEffects=window.updateOngoingEffects;}catch(_){}
