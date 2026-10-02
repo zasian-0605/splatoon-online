@@ -5126,7 +5126,7 @@ function startOnlineBattle(m){
           : 0xe3ff00))
     };
     const rf=createFighter({id:p.id,isPlayer:false,team:p.team,x:p.spawn?.x||0,z:p.spawn?.z||0,cfg});
-    rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;
+    rf.ai=null;rf.weapon=weaponList[cfg.weapon]||weaponList[0];rf.remote=true;rf.alive=true;rf.hp=rf.maxHp||100;
     rf.displayName=String(p.name||p.accountName||p.id);
     remoteMap.set(id,rf);fighters.push(rf);return rf;
   }
