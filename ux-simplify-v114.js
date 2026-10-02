@@ -25,6 +25,15 @@ function phase(){try{return Number(currentPhase)}catch(_){return -1}}
 function sync(){
  const p=phase(),practice=p===1.5,playable=practice||p===2;
  title.style.display=practice?'block':'none';
+ const hint=document.getElementById('range-hint');
+ const inst=document.getElementById('instructions');
+ const life=document.getElementById('alive-count');
+ const teamHud=document.getElementById('v67-team-hud');
+ if(practice&&hint)hint.innerHTML='🎯 試し撃ち場<br>好きなブキを自由に試そう！';
+ if(practice&&inst)inst.innerHTML='WASD：うごく　Space：ジャンプ　Shift：イカ　左クリック：撃つ　Q：ボム　R：スペシャル';
+ if(p===2&&inst)inst.innerHTML='WASD：うごく　Space：ジャンプ　Shift：イカ　左クリック：撃つ　Q：ボム　R：スペシャル';
+ if(p===2&&life)life.style.display='none';
+ if(p===2&&teamHud)teamHud.style.display='none';
  const next=document.getElementById('v113-radio-next');
  const help=document.getElementById('v113-radio-help');
  if(next)next.textContent='タップして次へ ▶';
