@@ -687,7 +687,7 @@ let isTyping=false;
 
 const playerConfig = { style:'girl', hair:0, color:0, outfit:0, weapon:0, gear:0, device:'pc' };
 const inkColorPalette = [0xe3ff00, 0xff0055, 0x00d4ff, 0x9900ff];
-const originalWeaponDisplayNames = ["スプラシューター","スプラローラー","スプラチャージャー","バケットスロッシャー","スプラマニューバー"];
+const originalWeaponDisplayNames = ["スプラシューター","バケットスロッシャー","スプラマニューバー"];
 function displayWeaponName(w){return w?.displayName||w?.name||"不明ブキ";}
 
 function loadPlayerConfig(){
@@ -702,8 +702,21 @@ function loadPlayerConfig(){
     playerConfig.hair=Number.isFinite(Number(playerConfig.hair))?Number(playerConfig.hair):0;
     playerConfig.color=Math.max(0,Math.min(inkColorPalette.length-1,Number(playerConfig.color)||0));
     playerConfig.outfit=Math.max(0,Math.min(49,Number(playerConfig.outfit)||0));
+    /*
+     * Migrate old saved weapon slots:
+     * old 0 = shooter -> 0
+     * old 3 = slosher -> 1
+     * old 4 = maneuver -> 2
+     * old 1/2 were roller/charger and are intentionally removed -> shooter
+     */
     const savedWeapon=Number(playerConfig.weapon);
-    playerConfig.weapon=(Number.isInteger(savedWeapon)&&savedWeapon>=0&&savedWeapon<5)?savedWeapon:0;
+    const migratedWeapon =
+      savedWeapon===3 ? 1 :
+      savedWeapon===4 ? 2 :
+      savedWeapon===0 ? 0 :
+      0;
+    playerConfig.weapon=migratedWeapon;
+    savePlayerConfig();
     playerConfig.gear=Math.max(0,Math.min(3,Number(playerConfig.gear)||0));
   }catch(e){}
 }
@@ -751,22 +764,16 @@ const outfitList = [
    武器データ（カテゴリごとにトレードオフを設定）
    ========================================================= */
 const weaponList = [
-  // Exactly five playable main weapons: one representative from each requested category.
+  // Playable main weapons: only 3 remain.
   {id:0,category:"shooter",name:"スプラシューター",displayName:"スプラシューター",color:0x2f059c,
     length:.4,thickness:.12,scope:false,damage:32,rate:95,speed:34,spread:.05,life:1.3,range:32,paintRadius:1.35,inkCost:1.0,
     sub:"splatBomb",special:"トリプルトルネード"},
-  {id:1,category:"roller",name:"スプラローラー",displayName:"スプラローラー",color:0xe3ff00,
-    length:.5,thickness:.22,scope:false,swingDamage:78,swingRate:380,swingRange:3.0,paintFan:2.5,inkCost:5.0,
-    sub:"curlingBomb",special:"グレートバリア"},
-  {id:2,category:"charger",name:"スプラチャージャー",displayName:"スプラチャージャー",color:0x222244,
-    length:.85,thickness:.12,scope:true,chargeTime:900,tapDamage:34,fullDamage:120,speedShot:70,
-    range:55,paintRadius:1.55,inkCost:9.0,sub:"splatBomb",special:"ホップソナー"},
-  {id:3,category:"slosher",name:"バケットスロッシャー",displayName:"バケットスロッシャー",color:0x2266cc,
+  {id:1,category:"slosher",name:"バケットスロッシャー",displayName:"バケットスロッシャー",color:0x2266cc,
     length:.34,thickness:.30,scope:false,damage:68,rate:500,speed:19,life:1.3,range:25,
     paintRadius:1.85,explosionRadius:2.4,inkCost:4.8,sub:"fizzyBomb",special:"ナイスダマ"},
-  {id:4,category:"maneuver",name:"スプラマニューバー",displayName:"スプラマニューバー",color:0x66ccff,
-    length:.30,thickness:.10,scope:false,damage:28,rate:55,speed:38,spread:.055,life:1.0,range:30,
-    paintRadius:.72,inkCost:.75,dual:true,sub:"splatBomb",special:"カニタンク"}
+  {id:2,category:"maneuver",name:"スプラマニューバー",displayName:"スプラマニューバー",color:0x66ccff,
+    length:.30,thickness:.10,scope:false,damage:28,rate:55,speed:38,spread:.055,life:1.0,range:30,paintRadius:.72,inkCost:.75,
+    dual:true,sub:"splatBomb",special:"カニタンク"}
 ]
 
 const categoryLabel = {shooter:"シューター",blaster:"ブラスター",charger:"チャージャー",roller:"ローラー",maneuver:"マニューバー",slosher:"バケツ(スロッシャー)"};
@@ -4264,7 +4271,7 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
     rebuildFighterModel: rebuildFighterModel
   };
 
-  /* The playable roster is fixed to the five weapons above. */
+  /* The playable roster is fixed to exactly three weapons: shooter / slosher / maneuver. */
   categoryLabel.wiper = "ワイパー";
   // Game-balance pass: normalize extreme values so no single weapon dominates the sandbox.
   const balance = {
@@ -9927,12 +9934,9 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   makeAiCfg=function(team){
     const cfg=oldMakeAiCfg(team);
     const choices=[
-      'スプラシューター','N-ZAP85','プライムシューター','.52ガロン',
-      'バケツスロッシャー','ヒッセン','ノヴァブラスター',
-      'スプラローラー','ダイナモローラー','パブロ','ホクサイ',
-      'スプラスピナー','バレルスピナー','スプラチャージャー','リッター4K',
-      'スパッタリー','デュアルスイーパー','スプラマニューバー',
-      'ドライブワイパー','ジムワイパー','トライストリンガー'
+      'スプラシューター',
+      'バケットスロッシャー',
+      'スプラマニューバー'
     ];
     /* Keep random variety, but make sure the AI pool is drawn from actual named weapons. */
     const valid=choices.map(n=>weaponList.findIndex(w=>w.name===n)).filter(i=>i>=0);
