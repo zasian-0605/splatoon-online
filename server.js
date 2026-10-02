@@ -402,11 +402,30 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
       const playerHalfHeight=1.85;
       const targetCenterY=Number(p.y)||0;
       const verticalDistance=Math.abs((hit.y||0)-(targetCenterY+.9));
+
+      /*
+       * Also evaluate the X/Z ray independently. This prevents a small camera
+       * pitch difference from turning a visually centered shot into a miss.
+       */
+      const abx=b.x-a.x, abz=b.z-a.z;
+      const apx=p.x-a.x, apz=p.z-a.z;
+      const hDen=abx*abx+abz*abz;
+      const ht=hDen>1e-9
+        ? Math.max(0,Math.min(1,(apx*abx+apz*abz)/hDen))
+        : 0;
+      const hqx=a.x+abx*ht, hqz=a.z+abz*ht;
+      const horizontalDistance=Math.hypot(p.x-hqx,p.z-hqz);
+      const horizontalBodyHit=horizontalDistance<=playerRadius &&
+        verticalDistance<=playerHalfHeight;
+
       const bodyHit=hit.distance<playerRadius ||
-        (verticalDistance<=playerHalfHeight && hit.distance<=playerRadius+.55);
+        (verticalDistance<=playerHalfHeight && hit.distance<=playerRadius+.55) ||
+        horizontalBodyHit;
       if(bodyHit){
-        const order=orderBase+hit.t;
-        if(order<bestTargetOrder)bestTarget={target,hit,order};
+        const order=orderBase+Math.min(hit.t,ht);
+        if(order<bestTargetOrder){
+          bestTarget={target,hit:Object.assign({},hit,{t:Math.min(hit.t,ht)}),order};
+        }
       }
     }
     const wall=serverStageOcclusion(a,b);
