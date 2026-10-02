@@ -490,9 +490,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
 
     const s=opts.origin?.clone ? opts.origin.clone() : f.pos.clone();
-    /* Spawn from the upper weapon/muzzle area rather than from the feet/center. */
+    /* Local shots start 0.55m ahead of the fighter. Online packets already
+       contain the authoritative muzzle position, so they pass muzzleForward:0. */
     s.y+=num(opts.yOffset,1.45);
-    s.addScaledVector(d,.55);
+    s.addScaledVector(d,num(opts.muzzleForward,.55));
     const mat=new THREE.MeshBasicMaterial({color:Number(fourHex(f))});
     const mesh=new THREE.Mesh(
       new THREE.SphereGeometry(Math.max(.10,Math.min(.34,num(opts.radius,.13))),8,8),
@@ -1005,7 +1006,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
         Number.isFinite(Number(m.y))?Number(m.y):rf.pos.y,
         Number.isFinite(Number(m.z))?Number(m.z):rf.pos.z
       );
-      const spawnAtShot=(dir,opts={})=>spawnRemoteBullet(rf,dir,Object.assign({origin:shotOrigin,yOffset:0,exactDirection:true},opts));
+      const spawnAtShot=(dir,opts={})=>spawnRemoteBullet(
+        rf,dir,Object.assign({origin:shotOrigin,yOffset:0,muzzleForward:0,exactDirection:true},opts)
+      );
       const mode=String(m.mode||'');
       const charge=Math.max(0,Math.min(1,Number.isFinite(Number(m.charge))?Number(m.charge):1));
 
@@ -1080,7 +1083,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       /* Ordinary shooter. The three currently playable online weapons use
          this canonical branch; unsupported legacy modes are handled above. */
       spawnAtShot(d,makeOpts({kind:'shooter'}));
-      return true;
       return true;
     }catch(err){
       try{console.warn('[V117 remote shot]',err);}catch(_){}
