@@ -758,6 +758,13 @@
     }
 
     const w=f.weapon||{};
+    /* Pointerdown exists mainly to suppress the legacy heavy-input handler.
+       Normal weapons fire once from mousedown; charged weapons start here. */
+    if(e.type==='pointerdown' &&
+       w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'){
+      isShooting=false;
+      return;
+    }
     if(w.category==='charger'||w.category==='spinner'||w.category==='wiper'){
       if(heavy)return;
       const kind=w.category;
@@ -809,6 +816,15 @@
   window.addEventListener('mouseup',endDesktop,true);
   window.addEventListener('contextmenu',e=>{
     if(battle()&&!excluded(e)){e.preventDefault();e.stopImmediatePropagation();}
+  },true);
+
+  /* Touchscreens may synthesize a mouse event after touchend. Keep that
+     synthetic event away from the desktop shooting path. */
+  window.addEventListener('touchstart',()=>{
+    suppressMouseUntil=performance.now()+900;
+  },true);
+  window.addEventListener('touchend',()=>{
+    suppressMouseUntil=Math.max(suppressMouseUntil,performance.now()+80);
   },true);
 
   /* Q / R / Shift are the only keyboard action keys owned here. */
