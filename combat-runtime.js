@@ -407,11 +407,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
   }
 
-  /* Online remote projectiles are deliberately kept out of the legacy
-     global bullets array. That array is still touched by old V60/V82/V86
-     compatibility code, which can otherwise freeze or rewrite a remote shot. */
-  const remoteProjectiles=window.__V117_REMOTE_PROJECTILES||(window.__V117_REMOTE_PROJECTILES=[]);
-
   function removeBullet(b,i){
     try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
     if(Array.isArray(bullets)&&i>=0)bullets.splice(i,1);
@@ -657,6 +652,11 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
       if(hit){
         paintTravel(b,prev,hitPoint);
+        if(b.__onlineRemote){
+          /* Online HP changes come from the server damage packet. */
+          removeBullet(b,i);
+          continue;
+        }
         if(b.explosive){
           try{explodeAt(hitPoint.clone(),num(b.explosionRadius,0),num(b.splashDamage,0),b.team,{
             paintRadius:num(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter,
@@ -1025,29 +1025,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   }
 
 
-  const canonicalUpdateBullets=window.updateBullets;
-  function updateBulletsWithRemoteFallback(delta){
-    const dt=Math.max(.001,Math.min(.06,Number(delta)||.016));
-
-    /* Normal/local projectiles continue through the canonical unified updater. */
-    try{canonicalUpdateBullets?.(delta);}catch(err){
-      try{console.warn('[V117 projectile updater]',err);}catch(_){}
-    }
-
-    /* Remote projectiles have their own list and cannot be touched by the
-       legacy global projectile loops. */
-    for(let i=remoteProjectiles.length-1;i>=0;i--){
-      const b=remoteProjectiles[i];
-      const result=updateDedicatedRemoteProjectile(b,dt);
-      if(result==='remove'||!b?.mesh?.parent){
-        try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
-        remoteProjectiles.splice(i,1);
-      }
-    }
-  }
-
-  window.updateBullets=updateBulletsWithRemoteFallback;
-  try{updateBullets=updateBulletsWithRemoteFallback;}catch(_){}
+  /* One projectile updater for local and online shots. */
+  window.updateBullets=updateUnifiedBullets;
+  try{updateBullets=updateUnifiedBullets;}catch(_){}
 
   window.__V116_BUILD=BUILD;
   console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
@@ -1082,14 +1062,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     const b=fn(f,d,opts);
     if(!b)return null;
 
-    /* Immediately remove it from the legacy shared bullets array. The mesh
-       remains alive in the scene, but only the dedicated online updater owns
-       its movement/collision lifecycle from this point on. */
-    try{
-      const legacyIndex=Array.isArray(bullets)?bullets.indexOf(b):-1;
-      if(legacyIndex>=0)bullets.splice(legacyIndex,1);
-    }catch(_){}
-
     const speed=Math.max(8,numV117(opts.speed,35));
     b.__onlineRemote=true;
     b.__onlineRemoteDir=d.clone();
@@ -1106,8 +1078,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       if(b.startPos)b.startPos=b.mesh.position.clone();
     }
 
-    const list=window.__V117_REMOTE_PROJECTILES||(window.__V117_REMOTE_PROJECTILES=[]);
-    list.push(b);
     return b;
   }
 
