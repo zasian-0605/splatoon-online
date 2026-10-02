@@ -14,12 +14,26 @@ function getState(f,now){
  return s;
 }
 function ownInk(f){try{return !!onFighterInk(f)}catch(_){return false}}
+function hasLineOfSight(f,o){
+ try{
+  const a=f.pos.clone(),b=o.pos.clone();
+  a.y+=.85;b.y+=.85;
+  if(typeof segmentWall==='function')return !segmentWall(a,b);
+  const d=b.clone().sub(a),len=d.length(),steps=Math.max(1,Math.ceil(len/.45));
+  for(let i=1;i<steps;i++){
+   const p=a.clone().lerp(b,i/steps);
+   if(typeof getBlockingWall==='function'&&getBlockingWall(p.x,p.z,p.y))return false;
+  }
+  return true;
+ }catch(_){return true;}
+}
 function targetFor(f){
  let best=null,bestScore=Infinity;
  for(const o of (fighters||[])){
   if(!o||o===f||!o.alive||o.team===f.team)continue;
   const d=dist(f.pos,o.pos);
-  const score=d+(o.squid_mode?2.5:0)+(o.isPlayer?-4:0);
+  const visible=hasLineOfSight(f,o);
+  const score=d+(o.squid_mode?2.5:0)+(o.isPlayer?-4:0)+(visible?0:10);
   if(score<bestScore){bestScore=score;best=o}
  }
  return best;
@@ -101,8 +115,10 @@ function moveAI(f,s,destination,delta,squid){
 }
 function attackAI(f,target,now,s){
  if(!target||!target.alive)return;
- const dx=target.pos.x-f.pos.x,dz=target.pos.z-f.pos.z,len=Math.hypot(dx,dz)||1;
- const dir=new THREE.Vector3(dx/len,0,dz/len);
+ const dx=target.pos.x-f.pos.x,dz=target.pos.z-f.pos.z;
+ const dy=(target.pos.y+.9)-(f.pos.y+1.0);
+ const len=Math.hypot(dx,dy,dz)||1;
+ const dir=new THREE.Vector3(dx/len,dy/len,dz/len);
  const w=f.weapon||{};
  try{f.human.rotation.y=Math.atan2(dir.x,dir.z);f.root.rotation.y=f.human.rotation.y}catch(_){}
  if(w.category==='charger'){
