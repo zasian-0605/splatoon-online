@@ -312,9 +312,9 @@
       if(q>=.05){
         try{
           if(st.kind==='charger'){
-            reliableChargerFire(f,aimDir(),q);
+            (window.__V116_HEAVY_RELEASE?window.__V116_HEAVY_RELEASE(f,'charger',q,aimDir()):reliableChargerFire(f,aimDir(),q));
           }else{
-            reliableSplatlingFire(f,q,aimDir());
+            (window.__V116_HEAVY_RELEASE?window.__V116_HEAVY_RELEASE(f,'spinner',q,aimDir()):reliableSplatlingFire(f,q,aimDir()));
           }
         }catch(err){
           try{console.warn('[V112 heavy release]',err);}catch(_){}
