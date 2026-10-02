@@ -271,6 +271,18 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     return d.normalize();
   }
 
+  /* Lower the old upward launch setting by about 10 degrees: canonical +5 degrees.
+     Existing camera pitch is preserved, including downward aiming. */
+  const CANONICAL_LAUNCH_PITCH_DEG=5;
+  function applyLaunchPitch(dir){
+    const d=dir.clone().normalize();
+    const h=Math.hypot(d.x,d.z);
+    if(h<.0001)return d;
+    const pitch=Math.atan2(d.y,h)+THREE.MathUtils.degToRad(CANONICAL_LAUNCH_PITCH_DEG);
+    const hp=Math.cos(pitch);
+    return new THREE.Vector3((d.x/h)*hp,Math.sin(pitch),(d.z/h)*hp).normalize();
+  }
+
   function compensateProjectileDrop(dir,gravity=5.2,speed=35){
     const d=dir.clone();
     /* Counter the short-range ballistic drop while preserving camera pitch. */
@@ -439,10 +451,8 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(!f?.alive||!f.weapon)return null;
     const w=f.weapon;
     let kind=String(opts.kind||w.category||'shooter');
-    const d=aim(f,dir);
-    /* Preserve the actual aim direction, including downward shots.
-       Older code forced every projectile to +5 degrees, which made shots aimed
-       at the floor/raised platforms miss the surface below. */
+    const d=applyLaunchPitch(aim(f,dir));
+    /* Preserve actual up/down aim while applying the lower upward bias. */
     d.normalize();
     let speed=Math.max(8,num(opts.speed,w.speed||35));
     let range=Math.max(5,num(opts.maxRange,w.range||30));
@@ -752,6 +762,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   function fireCharger(f,dir,frac){
     if(!f?.alive||isSquid(f)||!battle()||f.weapon?.category!=='charger')return false;
     const w=f.weapon,q=Math.max(.05,Math.min(1,num(frac,0)));
+    try{f.isCharging=false;f.chargeStart=0;}catch(_){}
     /* Canonical charger release: one shot per release, with a small post-shot
        lock so legacy input loops cannot create an infinite stream. */
     const nowShot=performance.now();
@@ -1037,6 +1048,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   /* ---------- Single desktop input path ---------- */
   let heavy=null;
   let suppressMouseUntil=0;
+  let canonicalMouseHeld=false;
 
   function clearLegacyHeavyFlags(f){
     if(!f)return;
@@ -1149,10 +1161,12 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     /* Roller/brush retain their existing hold-to-roll/flick behavior,
        but there is now only one mouse state producer. */
     if(w.category==='roller'||w.brush){
+      canonicalMouseHeld=true;
       isShooting=true;
       return;
     }
 
+    canonicalMouseHeld=true;
     try{window.directPlayerShot?.();}catch(_){}
     isShooting=true;
   }
@@ -1161,12 +1175,13 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(e.pointerType==='touch')return;
     if(e.type==='mouseup'&&e.button!==0)return;
     if(e.type==='pointerup'&&e.button!==0)return;
-    if(!battle()&& !heavy)return;
+    if(!battle()&& !heavy){canonicalMouseHeld=false;return;}
     e.stopImmediatePropagation();
     if(heavy){
       e.preventDefault();
       releaseHeavy(false);
     }
+    canonicalMouseHeld=false;
     isShooting=false;
     if(e.type==='mouseup')suppressMouseUntil=performance.now()+50;
   }
@@ -1322,7 +1337,17 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   const movementBeforeSquidRepair=window.updatePlayerMovement;
   if(typeof movementBeforeSquidRepair==='function'){
     window.updatePlayerMovement=function(delta){
-      const result=movementBeforeSquidRepair(delta);
+      const f0=player();
+      const suppressLegacyNormalFire=!!(f0?.alive&&f0.isPlayer&&f0.weapon&&
+        !['charger','spinner','wiper','roller'].includes(f0.weapon.category)&&!f0.weapon.brush);
+      const savedShooting=isShooting;
+      if(suppressLegacyNormalFire)isShooting=false;
+      let result;
+      try{
+        result=movementBeforeSquidRepair(delta);
+      }finally{
+        if(suppressLegacyNormalFire)isShooting=savedShooting;
+      }
       const f=player();
       if(!f?.alive||!battle())return result;
       let held=!!keys.shift;
@@ -1335,16 +1360,27 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       try{window.__V66_SET_SQUID_VISUAL?.(f,squid);}catch(_){}
       try{if(f.human)f.human.visible=!squid;if(f.squid)f.squid.visible=squid;}catch(_){}
       try{window.updateFighterAnimation?.(f,!!f._moving,squid);}catch(_){}
+
+      /* One authoritative held-fire loop for normal ranged weapons. */
+      if(f?.alive&&f.isPlayer&&canonicalMouseHeld&&!squid&&f.weapon&&
+         !['charger','spinner','wiper','roller'].includes(f.weapon.category)&&!f.weapon.brush){
+        try{fireBasic(f,aimDir(f),performance.now());}catch(err){
+          try{console.warn('[V117 held-shot]',err);}catch(_){}
+        }
+      }
       return result;
     };
     try{updatePlayerMovement=window.updatePlayerMovement;}catch(_){}
   }
 
+  window.__V116_UPDATE_BULLETS=updateUnifiedBullets;
   window.__V117_CANONICAL_RUNTIME={
-    build:'V117-CANONICAL-RUNTIME-2026-10-02',
+    build:'V117-CANONICAL-RUNTIME-2026-10-03',
     projectile:'V116',
     input:'single-desktop-action-path',
-    remoteShots:'V117-canonical-ranged'
+    remoteShots:'V117-canonical-ranged',
+    launchPitchDeg:CANONICAL_LAUNCH_PITCH_DEG,
+    heldFire:'canonical'
   };
   console.log('[SPLATOON ONLINE][V117] canonical runtime active');
 })();
