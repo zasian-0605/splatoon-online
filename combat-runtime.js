@@ -1298,12 +1298,19 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
      * - jump + short press = vertical flick
      * Keep one state producer so pointerdown/mousedown cannot double-start it.
      */
-    if(w.category==='roller'||w.brush){
+    if(w.category==='roller'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      try{e.target?.setPointerCapture?.(e.pointerId);}catch(_){}
       const n=performance.now();
       if(!f.__rollerInput){
-        f.__rollerInput={pointerId:e.pointerId ?? 'mouse',start:n,flicked:false};
+        f.__rollerInput={
+          pointerId:e.type==='pointerdown'?e.pointerId:'mouse',
+          source:e.pointerType==='touch'?'touch':'mouse',
+          start:n,lastPaintAt:0,lastPos:f.pos.clone()
+        };
+        f.__rollerLastRollAt=0;
       }
-      canonicalMouseHeld=true;
       isShooting=true;
       return;
     }
@@ -1329,20 +1336,9 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       const f=player();
       if(f?.alive&&f.weapon?.category==='roller'&&f.__rollerInput){
         e.preventDefault();
-        const st=f.__rollerInput;
-        const elapsed=Math.max(0,performance.now()-st.start);
-        const holdMs=240;
-        /*
-         * The normal movement loop handles the roll while held.
-         * A short click must still produce exactly one flick at release.
-         */
-        if(elapsed<holdMs && !st.flicked){
-          try{window.__ROLLER_CANONICAL_FLICK?.(f);}catch(err){
-            try{console.warn('[canonical roller flick]',err);}catch(_){}
-          }
-          st.flicked=true;
+        try{window.__ROLLER_CANONICAL_RELEASE?.(false);}catch(err){
+          try{console.warn('[canonical roller release]',err);}catch(_){}
         }
-        f.__rollerInput=null;
       }
     }
     canonicalMouseHeld=false;
@@ -1360,6 +1356,11 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(chargerInput){
       e.preventDefault();e.stopImmediatePropagation();
       releaseCanonicalCharger(true);isShooting=false;return;
+    }
+    if(player()?.__rollerInput){
+      e.preventDefault();e.stopImmediatePropagation();
+      try{window.__ROLLER_CANONICAL_RELEASE?.(true);}catch(_){}
+      isShooting=false;return;
     }
     if(!heavy)return;
     e.preventDefault();
@@ -1598,40 +1599,33 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 })();
 
 /*
- * FINAL WEAPON BEHAVIOR REPAIR
- * Charger:
- *   release -> public V116 heavy bridge -> canonical fireCharger -> spawnUnified
- * Roller:
- *   short click -> one flick
- *   hold -> continuous ground painting
- *   jump click -> vertical wall/air-facing flick
- * Practice:
- *   compare all five weapons on one fully inked floor.
+ * FINAL WEAPON BEHAVIOR REPAIR — V124
+ * Roller is now an independent canonical action:
+ *   - short press: one short downward flick
+ *   - hold: continuous ink directly under the roller
+ *   - jump + press: narrow long/vertical flick, plus vertical wall ink
  */
 (function(){
   'use strict';
 
-  const rollerHoldMs=240;
-  const rollerRollEvery=82;
-  const rollerRollInk=2.15;
-  const rollerFlickInk=5.0;
-  const rollerGroundRadius=0.95;
-  const rollerReach=4.25;
+  const HOLD_MS=180;
+  const ROLL_EVERY=70;
+  const ROLL_INK=.58;
+  const FLICK_INK=5.0;
+  const GROUND_RADIUS=.92;
+  const GROUND_REACH=3.1;
+  const AIR_REACH=4.15;
 
-  function num(v,d=0){
+  const num=(v,d=0)=>{
     const n=Number(v);
     return Number.isFinite(n)?n:d;
-  }
+  };
+  const inBattle=()=>typeof currentPhase!=='undefined'&&(currentPhase===1.5||currentPhase===2);
+  const player=()=>{try{return playerFighter||null;}catch(_){return null;}};
 
-  function battleNow(){
-    try{return typeof currentPhase!=='undefined'&&(currentPhase===1.5||currentPhase===2);}catch(_){return false;}
-  }
-
-  function rollerFacing(f){
+  function dirOf(f){
     const d=new THREE.Vector3();
-    try{
-      if(f?.isPlayer&&camera)camera.getWorldDirection(d);
-    }catch(_){}
+    try{if(f?.isPlayer&&camera)camera.getWorldDirection(d);}catch(_){}
     d.y=0;
     if(d.lengthSq()<.0001){
       const y=num(f?.root?.rotation?.y,0);
@@ -1640,257 +1634,243 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     return d.normalize();
   }
 
-  function consumeRollerInk(f,amount){
-    const cost=Math.max(.1,num(amount,0));
+  function floorY(f){
+    try{return num(getSupportHeight(f.pos.x,f.pos.z,Math.max(f.pos.y,1)),0);}catch(_){return 0;}
+  }
+
+  function airborne(f){
+    return num(f.pos.y,0)>floorY(f)+.48 || num(window.playerVelocity?.y,0)>1.0;
+  }
+
+  function spend(f,cost){
+    const c=Math.max(.1,num(cost,.1));
     try{
-      if(typeof window.__consumeInkForGame==='function'){
-        return !!window.__consumeInkForGame(f,cost);
-      }
+      if(typeof window.__consumeInkForGame==='function')return !!window.__consumeInkForGame(f,c);
     }catch(_){}
-    if(num(f?.ink,0)<cost)return false;
-    f.ink=Math.max(0,num(f.ink,0)-cost);
+    if(num(f?.ink,0)<c)return false;
+    f.ink=Math.max(0,num(f.ink,0)-c);
     return true;
   }
 
-  function hurtInFront(f,dir,reach,jump){
+  function safePaint(x,z,r,col,opts){
+    try{paintGround(x,z,r,col,opts);}catch(err){
+      try{console.warn('[V124 roller paint]',err);}catch(_){}
+    }
+  }
+
+  function enemyHit(f,d,reach,damage,maxDy){
     try{
-      const max=jump?4.5:Math.min(2.2,reach);
-      const dy=jump?2.0:1.3;
       for(const o of fighters||[]){
         if(!o?.alive||o.team===f.team)continue;
         const rel=o.pos.clone().sub(f.pos);
         const planar=new THREE.Vector3(rel.x,0,rel.z);
         const dist=planar.length();
-        if(dist<.15||dist>max)continue;
+        if(dist<.12||dist>reach)continue;
         planar.normalize();
-        if(planar.dot(dir)<0.15)continue;
-        if(Math.abs((o.pos.y||0)-(f.pos.y||0))>dy)continue;
-        applyDamage(o,jump?78:72,f);
+        if(planar.dot(d)<.15)continue;
+        if(Math.abs(num(o.pos.y)-num(f.pos.y))>maxDy)continue;
+        applyDamage(o,damage,f);
       }
     }catch(_){}
   }
 
-  function paintGroundFlick(f,dir){
-    const col=f?.team==='A'?teamAHex:teamBHex;
-    const center=f.pos.clone();
-    const width=1.45;
-    const reach=rollerReach;
-
-    for(let i=0;i<=7;i++){
-      const t=i/7;
+  function groundFlick(f,d){
+    const col=f.team==='A'?teamAHex:teamBHex;
+    /* Short, compact sweep. It does not launch a long-distance projectile. */
+    const reach=GROUND_REACH,width=1.35;
+    for(let i=0;i<=6;i++){
+      const t=i/6;
       const side=(t-.5)*width;
-      const p=center.clone().addScaledVector(dir,0.65+reach*.82*t);
-      p.x+=-dir.z*side;
-      p.z+=dir.x*side;
-      paintGround(p.x,p.z,rollerGroundRadius*(1-.22*t),col,{
-        noNetwork:false,
-        team:f.team,
-        sourceFighter:f
-      });
+      const p=f.pos.clone().addScaledVector(d,.42+reach*t);
+      p.x+=-d.z*side;
+      p.z+=d.x*side;
+      safePaint(p.x,p.z,GROUND_RADIUS*(1-.16*t),col,{team:f.team,sourceFighter:f});
     }
   }
 
-  function findWallAhead(f,dir){
-    const base=f.pos.clone();
-    const samples=[2.0,2.7,3.35,4.0,4.5];
-    for(const dist of samples){
-      const p=base.clone().addScaledVector(dir,dist);
-      const wall=getBlockingWall(p.x,p.z,Math.max(f.pos.y+1.0,.8));
-      if(wall)return {wall,p};
+  function airGroundFlick(f,d){
+    const col=f.team==='A'?teamAHex:teamBHex;
+    /* Jump flick: narrow, elongated strip instead of a wide splash. */
+    const reach=AIR_REACH,width=.58;
+    let prev=null;
+    for(let i=0;i<=10;i++){
+      const t=i/10;
+      const p=f.pos.clone().addScaledVector(d,.45+reach*t);
+      p.x+=-d.z*((t-.5)*width);
+      p.z+=d.x*((t-.5)*width);
+      if(prev){
+        safePaint(prev.x,prev.z,.48,col,{to:{x:p.x,z:p.z},team:f.team,sourceFighter:f});
+      }else{
+        safePaint(p.x,p.z,.52,col,{team:f.team,sourceFighter:f});
+      }
+      prev=p;
+    }
+  }
+
+  function wallHitAhead(f,d){
+    for(const distance of [1.4,1.9,2.5,3.1,3.8]){
+      const p=f.pos.clone().addScaledVector(d,distance);
+      try{
+        const block=getBlockingWall(p.x,p.z,num(f.pos.y)+1.0);
+        if(block)return {block,p};
+      }catch(_){}
     }
     return null;
   }
 
-  function wallFacePoint(b,from,y){
-    const x=num(from.x),z=num(from.z);
-    const left=Math.abs(x-b.minX),right=Math.abs(x-b.maxX);
-    const back=Math.abs(z-b.minZ),front=Math.abs(z-b.maxZ);
-    const best=Math.min(left,right,back,front);
-    if(best===left)return new THREE.Vector3(b.minX-.015,num(y),Math.max(b.minZ,Math.min(b.maxZ,z)));
-    if(best===right)return new THREE.Vector3(b.maxX+.015,num(y),Math.max(b.minZ,Math.min(b.maxZ,z)));
-    if(best===back)return new THREE.Vector3(Math.max(b.minX,Math.min(b.maxX,x)),num(y),b.minZ-.015);
-    return new THREE.Vector3(Math.max(b.minX,Math.min(b.maxX,x)),num(y),b.maxZ+.015);
+  function verticalWallFlick(f,d){
+    const hit=wallHitAhead(f,d);
+    if(!hit)return;
+    const block=hit.block?.block||hit.block;
+    if(!block)return;
+    const col=f.team==='A'?teamAHex:teamBHex;
+    const center=num(f.pos.y)+1.0;
+    const bottom=Math.max(num(block.minY)+.12,center-1.2);
+    const top=Math.min(num(block.maxY)-.08,center+1.2);
+    for(let i=0;i<=8;i++){
+      const y=bottom+(top-bottom)*(i/8);
+      try{
+        const fp=getFaceHitPoint(block,new THREE.Vector3(hit.p.x,y,hit.p.z));
+        paintWallSurface(block,fp.point,col,f.team,.58);
+      }catch(_){}
+    }
+    const base=f.pos.clone().addScaledVector(d,1.8);
+    safePaint(base.x,base.z,.52,col,{team:f.team,sourceFighter:f});
   }
 
-  function paintVerticalFlick(f,dir){
-    const hit=findWallAhead(f,dir);
-    if(!hit){
-      /* No wall: keep the flick useful by leaving a narrow forward strip on the floor. */
-      paintGroundFlick(f,dir);
-      return;
+  function doFlick(f){
+    if(!f?.alive||f.weapon?.category!=='roller'||!inBattle()||f.squid_mode)return false;
+    if(!spend(f,FLICK_INK))return false;
+    const d=dirOf(f);
+    const jump=airborne(f);
+    try{
+      if(jump){
+        airGroundFlick(f,d);
+        verticalWallFlick(f,d);
+      }else{
+        groundFlick(f,d);
+      }
+    }catch(err){
+      try{console.warn('[V124 roller flick]',err);}catch(_){}
     }
+    enemyHit(f,d,jump?4.0:1.95,jump?78:72,jump?2.2:1.25);
 
-    const b=hit.wall.block||hit.wall;
-    if(!b)return;
-
-    const centerY=Math.max(num(b.minY,0)+.35,Math.min(num(b.maxY,3)-.35,num(f.pos.y,0)+.8));
-    const spread=2.45;
-    const col=f?.team==='A'?teamAHex:teamBHex;
-
-    for(let i=0;i<7;i++){
-      const y=centerY-spread*.5+spread*(i/6);
-      if(y<b.minY+.12||y>b.maxY-.05)continue;
-      const p=wallFacePoint(b,hit.p,y);
-      paintWallSurface(b,p,col,f.team,.68);
-    }
-
-    /* Paint a short base strip too, so the jump flick visibly connects to the floor. */
-    const base=f.pos.clone().addScaledVector(dir,2.1);
-    paintGround(base.x,base.z,.62,col,{team:f.team,sourceFighter:f});
-  }
-
-  function rollerFlick(f){
-    if(!f?.alive||f.weapon?.category!=='roller'||!battleNow()||f.squid_mode)return false;
-    if(!consumeRollerInk(f,rollerFlickInk))return false;
-
-    const d=rollerFacing(f);
-    const supportY=(()=>{try{return getSupportHeight(f.pos.x,f.pos.z,Math.max(f.pos.y,1));}catch(_){return 0;}})();
-    const jumping=num(f.pos.y,0)>supportY+.48 || num(playerVelocity?.y,0)>1.0;
-
-    if(jumping)paintVerticalFlick(f,d);
-    else paintGroundFlick(f,d);
-
-    hurtInFront(f,d,rollerReach,jumping);
-    f.lastSwing=performance.now();
-    f.specialGauge=Math.min(100,num(f.specialGauge,0)+3*(f.gearProfile?.specialGain||1));
+    const t=performance.now();
+    f.lastSwing=t;
+    f.__rollerLastFlickAt=t;
+    try{
+      const al=f.armL?.rotation?.x,ar=f.armR?.rotation?.x;
+      if(f.armL)f.armL.rotation.x=-1.3;
+      if(f.armR)f.armR.rotation.x=-1.55;
+      setTimeout(()=>{
+        try{
+          if(f.armL&&Number.isFinite(al))f.armL.rotation.x=al;
+          if(f.armR&&Number.isFinite(ar))f.armR.rotation.x=ar;
+        }catch(_){}
+      },110);
+    }catch(_){}
     try{sfx('shoot');}catch(_){}
     return true;
   }
 
-  function rollerRoll(f,now){
-    if(!f?.alive||f.weapon?.category!=='roller'||!battleNow()||f.squid_mode)return false;
-    const st=f.__rollerInput;
-    if(!st)return false;
-
-    const elapsed=Math.max(0,num(now,performance.now())-num(st.start,now));
-    if(elapsed<rollerHoldMs)return false;
-
-    const last=num(f.__rollerLastRollAt,0);
-    if(num(now,performance.now())-last<rollerRollEvery)return false;
-    if(!consumeRollerInk(f,rollerRollInk))return false;
-
-    const d=rollerFacing(f);
-    const col=f?.team==='A'?teamAHex:teamBHex;
-    const start=f.pos.clone();
-    const end=start.clone().addScaledVector(d,1.85);
-
-    paintGround(start.x,start.z,1.05,col,{team:f.team,sourceFighter:f});
-    paintGround(start.x,start.z,.90,col,{to:{x:end.x,z:end.z},team:f.team,sourceFighter:f});
-    paintGround(end.x,end.z,.88,col,{team:f.team,sourceFighter:f});
-
-    for(const o of fighters||[]){
-      if(!o?.alive||o.team===f.team)continue;
-      const rel=o.pos.clone().sub(f.pos);rel.y=0;
-      const dist=rel.length();
-      if(dist<1.75){applyDamage(o,55,f);}
+  function updateHold(f,now){
+    const st=f?.__rollerInput;
+    if(!f?.isPlayer||f.weapon?.category!=='roller'||!st||!inBattle())return false;
+    if(f.squid_mode){
+      f.__rollerInput=null;
+      return false;
     }
+    const t=num(now,performance.now());
+    if(t-num(st.start,t)<HOLD_MS)return false;
+    if(t-num(st.lastPaintAt,0)<ROLL_EVERY)return false;
+    if(!spend(f,ROLL_INK))return false;
 
-    f.__rollerLastRollAt=num(now,performance.now());
-    f.lastSwing=f.__rollerLastRollAt;
-    f.specialGauge=Math.min(100,num(f.specialGauge,0)+1.2*(f.gearProfile?.specialGain||1));
-    try{sfx('shoot');}catch(_){}
+    const col=f.team==='A'?teamAHex:teamBHex;
+    const cur=f.pos.clone();
+    const prev=st.lastPos?.clone?st.lastPos.clone():cur.clone();
+    if(cur.distanceTo(prev)>.04){
+      safePaint(prev.x,prev.z,.84,col,{
+        to:{x:cur.x,z:cur.z},team:f.team,sourceFighter:f
+      });
+    }
+    /* The roller always inks immediately below itself while held. */
+    safePaint(cur.x,cur.z,1.02,col,{team:f.team,sourceFighter:f});
+    st.lastPos=cur.clone();
+    st.lastPaintAt=t;
+    f.__rollerLastRollAt=t;
+    f.lastSwing=t;
+    enemyHit(f,dirOf(f),1.7,52,1.35);
     return true;
   }
 
-  function canonicalRollerAction(f,now){
-    if(!f?.alive||f.weapon?.category!=='roller')return false;
-    return rollerRoll(f,num(now,performance.now()));
+  function release(aborted){
+    const f=player();
+    const st=f?.__rollerInput;
+    if(f)f.__rollerInput=null;
+    if(!st||aborted||!f?.alive||!inBattle()||f.weapon?.category!=='roller')return false;
+    const elapsed=Math.max(0,performance.now()-num(st.start,performance.now()));
+    if(elapsed<HOLD_MS)return doFlick(f);
+    return true;
   }
 
   /*
-   * The old roller function remains in the historical code, but it is no longer
-   * authoritative. Player movement, CPU AI, and legacy callers all arrive here.
+   * Player movement: legacy roller code is completely suppressed while the
+   * canonical input is held. Then only the canonical under-roller painter runs.
    */
-  const authoritativeRoller=canonicalRollerAction;
+  const previous=window.updatePlayerMovement;
+  if(typeof previous==='function'&&!window.__V124_ROLLER_MOVEMENT){
+    window.__V124_ROLLER_MOVEMENT=true;
+    window.updatePlayerMovement=function(delta){
+      const f=player();
+      const active=!!(f?.isPlayer&&f.weapon?.category==='roller'&&f.__rollerInput);
+      const saved=isShooting;
+      if(active)isShooting=false;
+      let out;
+      try{out=previous(delta);}
+      finally{if(active)isShooting=saved;}
+      if(active&&!f.squid_mode)updateHold(f,performance.now());
+      return out;
+    };
+    try{updatePlayerMovement=window.updatePlayerMovement;}catch(_){}
+  }
+
+  /*
+   * This function is used by CPU AI and legacy callers. A CPU has no input state,
+   * so each attack request is one controlled flick.
+   */
   window.performRollerSwing=function(f,now){
-    return authoritativeRoller(f,now);
+    if(!f?.alive||f.weapon?.category!=='roller')return false;
+    if(f.isPlayer)return f.__rollerInput?updateHold(f,num(now,performance.now())):false;
+    return doFlick(f);
   };
   try{performRollerSwing=window.performRollerSwing;}catch(_){}
 
-  /* One short click becomes one flick at release. */
-  window.__ROLLER_CANONICAL_FLICK=rollerFlick;
+  window.__ROLLER_CANONICAL_RELEASE=release;
+  window.__ROLLER_CANONICAL_FLICK=doFlick;
+  window.__ROLLER_CANONICAL_HOLD_UPDATE=updateHold;
 
-  /* Reset roller state when a new fighter/respawn starts, without altering movement controls. */
-  const originalRespawn=window.respawnFighter;
-  if(typeof originalRespawn==='function'){
+  const oldRespawn=window.respawnFighter;
+  if(typeof oldRespawn==='function'&&!window.__V124_ROLLER_RESPAWN){
+    window.__V124_ROLLER_RESPAWN=true;
     window.respawnFighter=function(f){
       try{
         if(f){
           f.__rollerInput=null;
           f.__rollerLastRollAt=0;
+          f.__rollerLastFlickAt=0;
         }
       }catch(_){}
-      return originalRespawn.apply(this,arguments);
+      return oldRespawn.apply(this,arguments);
     };
   }
 
   /*
-   * Practice comparison surface:
-   * the whole playable floor is covered with the player's ink before comparison.
-   * This is deliberately limited to practice mode; battle starts still build
-   * their normal turf.
+   * The previous build repainted the entire practice canvas on entry.
+   * That made the turf comparison meaningless and hid roller paint tests.
+   * The turf bar now compares only wet A/B pixels, so no pre-painting is needed.
    */
-  function wetEntirePracticeFloor(){
-    if(!battleNow()||typeof currentPhase==='undefined'||currentPhase!==1.5)return;
-    try{
-      if(!paintCtx||!paintCanvas)return;
-      const f=(()=>{try{return playerFighter||null;}catch(_){return null;}})();
-      const col=f?.team==='B'?teamBHex:teamAHex;
-      paintCtx.fillStyle=hexToCss(col);
-      paintCtx.fillRect(0,0,paintCanvas.width,paintCanvas.height);
-      paintTexture.needsUpdate=true;
-    }catch(_){}
-  }
 
-  const practice=window.__forcePractice;
-  if(typeof practice==='function'&&!window.__WET_PRACTICE_WRAPPED){
-    window.__WET_PRACTICE_WRAPPED=true;
-    window.__forcePractice=function(){
-      const out=practice.apply(this,arguments);
-      setTimeout(wetEntirePracticeFloor,0);
-      return out;
-    };
-  }
-
-  /*
-   * Mobile roller input uses the same short-press / hold state.
-   * The look pad itself keeps receiving camera movement; this listener only
-   * records the roller action and resolves the short click at pointerup.
-   */
-  let mobileRollerPointer=null;
-  window.addEventListener('pointerdown',e=>{
-    if(e.pointerType!=='touch'||!battleNow())return;
-    const f=(()=>{try{return playerFighter||null;}catch(_){return null;}})();
-    if(!f?.alive||f.squid_mode||f.weapon?.category!=='roller')return;
-    if(!e.target?.closest?.('#v109-look-pad'))return;
-    mobileRollerPointer={id:e.pointerId,start:performance.now()};
-    isShooting=true;
-  },true);
-
-  window.addEventListener('pointerup',e=>{
-    if(e.pointerType!=='touch'||!mobileRollerPointer||mobileRollerPointer.id!==e.pointerId)return;
-    const st=mobileRollerPointer;
-    mobileRollerPointer=null;
-    const f=(()=>{try{return playerFighter||null;}catch(_){return null;}})();
-    if(f?.alive&&f.weapon?.category==='roller'){
-      const elapsed=performance.now()-st.start;
-      if(elapsed<rollerHoldMs){
-        try{window.__ROLLER_CANONICAL_FLICK?.(f);}catch(err){
-          try{console.warn('[canonical mobile roller flick]',err);}catch(_){}
-        }
-      }
-    }
-    isShooting=false;
-  },true);
-
-  window.addEventListener('pointercancel',e=>{
-    if(e.pointerType!=='touch'||!mobileRollerPointer||mobileRollerPointer.id!==e.pointerId)return;
-    mobileRollerPointer=null;
-    isShooting=false;
-  },true);
-
-  window.__WEAPON_BEHAVIOR_REPAIR_READY=true;
-  console.log('[SPLATOON ONLINE][weapon behavior repair] charger/roller canonical paths active');
+  window.__V124_ROLLER_READY=true;
+  console.log('[SPLATOON ONLINE][V124] roller canonical behavior active');
 })();
-
 /* --- end gameplay-fixes-v116.js --- */
