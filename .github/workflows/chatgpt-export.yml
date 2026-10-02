@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - chatgpt-export-2026-09-29
+      - chatgpt-export-2026-10-02
 jobs:
   zip:
     runs-on: ubuntu-latest
