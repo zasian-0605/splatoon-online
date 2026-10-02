@@ -1045,9 +1045,6 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   window.__V116_BUILD=BUILD;
   console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
 })();
-  window.__V116_BUILD=BUILD;
-  console.log('[SPLATOON ONLINE]['+BUILD+'] unified projectile runtime active');
-})();
 
 
 /* =========================================================
