@@ -4166,7 +4166,14 @@ function animate3D(token){
 
   updateMarketStageGimmicks(time,delta);
 
-  window.updateBullets?.(delta);
+  /* Canonical projectile runtime: always use the unified updater first. */
+  try{
+    const projectileUpdater=window.__canonicalProjectileUpdater;
+    if(typeof projectileUpdater==='function') projectileUpdater(delta);
+    else window.updateBullets?.(delta);
+  }catch(err){
+    try{console.warn('[PROJECTILE UPDATE]',String(err));}catch(_){ }
+  }
   updateSubs(delta);
   updateOngoingEffects(delta);
   updateChargeOrbSystems(delta);
@@ -14117,6 +14124,6 @@ console.log('[SPLATOON ONLINE]['+V+'] complete bombs+specials loaded');
 <script src="/online-runtime.js?v=20261003-input-fix"></script>
 <script src="/world-runtime.js?v=20261003-input-fix"></script>
 <script src="/player-runtime.js?v=20261003-festival-fix2"></script>
-<script src="/combat-runtime.js?v=20261003-online-projectile-fix8"></script>
+<script src="/combat-runtime.js?v=20261003-online-projectile-fix10"></script>
 </body>
 </html>
