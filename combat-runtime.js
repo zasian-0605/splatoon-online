@@ -407,6 +407,11 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
   }
 
+  /* Online remote projectiles are deliberately kept out of the legacy
+     global bullets array. That array is still touched by old V60/V82/V86
+     compatibility code, which can otherwise freeze or rewrite a remote shot. */
+  const remoteProjectiles=window.__V117_REMOTE_PROJECTILES||(window.__V117_REMOTE_PROJECTILES=[]);
+
   function removeBullet(b,i){
     try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
     if(Array.isArray(bullets)&&i>=0)bullets.splice(i,1);
@@ -905,136 +910,138 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
      only remote bullets that demonstrably did not move during that call.
      This is a fallback, not a second normal projectile path.
      ========================================================== */
-  function fallbackMoveRemoteBullet(b,dt){
+  function updateDedicatedRemoteProjectile(b,dt){
     if(!b?.mesh||!b.__onlineRemote||!b.__v116Unified)return false;
-    const d=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1)).normalize();
-    const speed=Math.max(8,numV117(b.__onlineRemoteSpeed,35));
-    if(!b.velocity||typeof b.velocity.lengthSq!=='function')b.velocity=d.clone().multiplyScalar(speed);
-    const v=b.velocity;
+
+    const d=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1));
+    if(d.lengthSq()<.0001)d.set(0,0,1);
+    d.normalize();
+
+    const speed=Math.max(8,num(b.__onlineRemoteSpeed,35));
+    if(!b.velocity||typeof b.velocity.lengthSq!=='function'||b.velocity.lengthSq()<.0001){
+      b.velocity=d.clone().multiplyScalar(speed);
+    }
+
+    b.age+=dt;
     const prev=b.mesh.position.clone();
 
     try{
       if(b.trajectory==='charger'){
         if(!b.chargerDrop){
-          const h=Math.max(.001,Math.hypot(v.x,v.z));
+          const h=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
           const move=Math.min(h*dt,Math.max(0,b.maxRange-b.horizontalTravel));
           const t=move/h;
-          b.mesh.position.x+=v.x*t;b.mesh.position.y+=v.y*t;b.mesh.position.z+=v.z*t;
-          b.horizontalTravel+=move;b.travelled+=move;
-          if(b.horizontalTravel>=b.maxRange-.0001){
-            b.chargerDrop=true;v.x=0;v.z=0;v.y=0;
-          }
+          b.mesh.position.x+=b.velocity.x*t;
+          b.mesh.position.y+=b.velocity.y*t;
+          b.mesh.position.z+=b.velocity.z*t;
+          b.horizontalTravel+=move;
         }else{
-          v.y-=b.gravity*dt;b.mesh.position.y+=v.y*dt;
-          b.travelled+=Math.abs(v.y)*dt;
+          b.velocity.y-=num(b.gravity,18)*dt;
+          b.mesh.position.y+=b.velocity.y*dt;
         }
       }else if(b.trajectory==='arc'){
         if(!b.__arcStarted){
-          v.y=numV117(b.verticalSpeed,v.y||7.5);b.__arcStarted=true;
+          b.velocity.y=num(b.verticalSpeed,7.5);
+          b.__arcStarted=true;
         }
-        v.y-=numV117(b.gravity,10.5)*dt;
-        b.mesh.position.addScaledVector(v,dt);
+        b.velocity.y-=num(b.gravity,10.5)*dt;
+        b.mesh.position.addScaledVector(b.velocity,dt);
         b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
-        b.travelled+=b.mesh.position.distanceTo(prev);
+      }else if(b.trajectory==='blaster'){
+        b.mesh.position.addScaledVector(b.velocity,dt);
+        b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
       }else{
-        if(b.trajectory==='delayed'&&b.horizontalTravel<b.straightDistance){
-          const h=Math.max(.001,Math.hypot(v.x,v.z));
-          const move=Math.min(h*dt,Math.max(0,b.straightDistance-b.horizontalTravel));
-          const t=move/h;
-          b.mesh.position.addScaledVector(v,t);
-          b.horizontalTravel+=move;b.travelled+=move;
+        const speedXZ=Math.max(.001,Math.hypot(b.velocity.x,b.velocity.z));
+        if(b.horizontalTravel<b.straightDistance){
+          const move=Math.min(speedXZ*dt,Math.max(0,b.straightDistance-b.horizontalTravel));
+          const t=move/speedXZ;
+          b.mesh.position.addScaledVector(b.velocity,t);
+          b.horizontalTravel+=move;
         }else{
-          if(b.trajectory==='delayed'){
-            v.y-=numV117(b.gravity,5.2)*dt;
-            const drag=Math.max(.86,1-.035*dt);
-            v.x*=drag;v.z*=drag;
-          }
-          b.mesh.position.addScaledVector(v,dt);
+          b.velocity.y-=num(b.gravity,5.2)*dt;
+          const drag=Math.max(.86,1-.035*dt);
+          b.velocity.x*=drag;b.velocity.z*=drag;
+          b.mesh.position.addScaledVector(b.velocity,dt);
           b.horizontalTravel+=Math.hypot(b.mesh.position.x-prev.x,b.mesh.position.z-prev.z);
-          b.travelled+=b.mesh.position.distanceTo(prev);
         }
       }
+
+      b.travelled+=b.mesh.position.distanceTo(prev);
 
       const wh=wallHit(prev,b.mesh.position);
       if(wh){
         impact(b,wh.point.clone(),wh);
-        return true;
+        return 'remove';
       }
 
-      const seg=b.mesh.position.clone().sub(prev),den=Math.max(.0001,seg.lengthSq());
-      let hit=null,hitPoint=null,bestT=Infinity;
+      const seg=b.mesh.position.clone().sub(prev);
+      const den=Math.max(.0001,seg.lengthSq());
+      let hit=null,bestT=Infinity;
       for(const f of fighters||[]){
         if(!f?.alive||f.team===b.team||String(f.id)===String(b.fromId))continue;
         const target=f.pos.clone();target.y+=.9;
         const t=Math.max(0,Math.min(1,target.clone().sub(prev).dot(seg)/den));
         const q=prev.clone().addScaledVector(seg,t);
-        if(q.distanceTo(target)<=b.radius+.55&&t<bestT){bestT=t;hit=f;hitPoint=q;}
+        if(q.distanceTo(target)<=b.radius+.55&&t<bestT){
+          bestT=t;hit=f;
+        }
       }
       if(hit){
-        if(b.explosive){
-          try{explodeAt(hitPoint.clone(),numV117(b.explosionRadius,0),numV117(b.splashDamage,0),b.team,{
-            paintRadius:numV117(b.paintRadius,.8),colorHex:b.colorHex,sourceFighter:b.sourceFighter,skipParticles:b.kind==='blaster'
-          });}catch(_){}
-          try{applyDamage(hit,Math.max(0,b.damage-b.splashDamage),b.sourceFighter);}catch(_){}
-        }else{
-          try{applyDamage(hit,b.damage,b.sourceFighter);}catch(_){}
-        }
-        removeBullet(b,bullets.indexOf(b));
-        return true;
+        /* Damage is server-authoritative. The remote visual only stops at
+           the hit point; the matching server damage packet updates HP. */
+        return 'remove';
       }
 
-      try{paintTravel(b,prev,b.mesh.position);}catch(_){}
+      paintTravel(b,prev,b.mesh.position);
 
       if(b.horizontalTravel>=b.maxRange&&!b.rangeDropped){
         b.rangeDropped=true;
         if(b.trajectory==='charger'){
-          b.chargerDrop=true;v.x=0;v.z=0;v.y=0;
+          b.chargerDrop=true;
+          b.velocity.x=0;b.velocity.z=0;b.velocity.y=0;
         }else if(b.trajectory==='blaster'){
           impact(b,b.mesh.position.clone(),null);
-          return true;
+          return 'remove';
         }else{
-          v.x*=3/50;v.z*=3/50;
+          b.velocity.x*=3/50;b.velocity.z*=3/50;
           b.life=Math.max(b.life,b.age+.38);
         }
       }
 
       const ground=support(b.mesh.position.x,b.mesh.position.z,Math.max(b.mesh.position.y,1));
-      if(b.mesh.position.y<=ground+.02&&v.y<=0){
+      if(b.mesh.position.y<=ground+.02&&b.velocity.y<=0){
         impact(b,b.mesh.position.clone(),null);
-        return true;
+        return 'remove';
       }
       if(b.age>b.life){
-        impact(b,b.mesh.position.clone(),null);
-        return true;
+        return 'remove';
       }
-      return true;
-    }catch(_){
-      /* Even if a collision/paint helper is unavailable, the visual projectile
-         still advances; never leave it frozen. */
-      b.mesh.position.addScaledVector(v,dt);
-      return true;
+      return 'keep';
+    }catch(err){
+      /* Even if a legacy collision helper fails, remote visuals still move. */
+      try{b.mesh.position.addScaledVector(b.velocity,dt);}catch(_){}
+      return 'keep';
     }
   }
+
 
   const canonicalUpdateBullets=window.updateBullets;
   function updateBulletsWithRemoteFallback(delta){
     const dt=Math.max(.001,Math.min(.06,Number(delta)||.016));
-    const before=new Map();
-    try{
-      for(const b of bullets||[]){
-        if(b?.__onlineRemote&&b.mesh)before.set(b,b.mesh.position.clone());
-      }
-    }catch(_){}
 
+    /* Normal/local projectiles continue through the canonical unified updater. */
     try{canonicalUpdateBullets?.(delta);}catch(err){
       try{console.warn('[V117 projectile updater]',err);}catch(_){}
     }
 
-    for(const [b,p0] of before){
-      if(!b?.mesh||!b.__onlineRemote||!Array.isArray(bullets)||!bullets.includes(b))continue;
-      const moved=b.mesh.position.distanceTo(p0);
-      if(moved<.001){
-        fallbackMoveRemoteBullet(b,dt);
+    /* Remote projectiles have their own list and cannot be touched by the
+       legacy global projectile loops. */
+    for(let i=remoteProjectiles.length-1;i>=0;i--){
+      const b=remoteProjectiles[i];
+      const result=updateDedicatedRemoteProjectile(b,dt);
+      if(result==='remove'||!b?.mesh?.parent){
+        try{if(b?.mesh?.parent)b.mesh.parent.remove(b.mesh);}catch(_){}
+        remoteProjectiles.splice(i,1);
       }
     }
   }
