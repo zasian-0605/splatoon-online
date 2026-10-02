@@ -7554,57 +7554,8 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   const V60_BUILD='V60-WEAPON-GAMEPLAY-2026-09-27';
 
   /* ---------- Realistic loadout expansion ---------- */
-  const addedWeapons=[]; /* roster locked: no extra weapons */
-  /* Legacy expansion data intentionally removed: only five weapons are playable. */
-  const removedLegacyWeapons=[];
-  if(false){ const addedWeapons=[
-    {id:24,category:'shooter',name:'シャープマーカー',displayName:'シャープマーカー',color:0x6fd3ff,length:.34,thickness:.09,
-      damage:28,rate:70,speed:43,spread:.025,life:1.15,range:32,paintRadius:.95,inkCost:.9,sub:'burstBomb',special:'カニタンク'},
-    {id:25,category:'shooter',name:'プロモデラーMG',displayName:'プロモデラーMG',color:0xdddddd,length:.31,thickness:.08,
-      damage:14,rate:42,speed:38,spread:.10,life:.95,range:28,paintRadius:1.05,inkCost:.65,sub:'sprinkler',special:'サメライド'},
-    {id:26,category:'shooter',name:'L3リールガン',displayName:'L3リールガン',color:0x7755cc,length:.42,thickness:.12,
-      damage:29,rate:240,speed:41,spread:.045,life:1.2,range:35,paintRadius:1.0,inkCost:1.4,burst:3,sub:'burstBomb',special:'ウルトラハンコ'},
-    {id:27,category:'shooter',name:'H3リールガン',displayName:'H3リールガン',color:0xaa7755,length:.50,thickness:.15,
-      damage:41,rate:300,speed:43,spread:.018,life:1.3,range:38,paintRadius:1.0,inkCost:1.9,burst:3,sub:'pointSensor',special:'エナジースタンド'},
-    {id:28,category:'blaster',name:'ホットブラスター',displayName:'ホットブラスター',color:0xff6633,length:.46,thickness:.24,
-      damage:85,rate:600,speed:27,spread:.02,life:1.4,range:23,paintRadius:1.45,explosionRadius:2.35,splashDamage:50,inkCost:3.1,sub:'suctionBomb',special:'グレートバリア'},
-    {id:29,category:'roller',name:'カーボンローラー',displayName:'カーボンローラー',color:0x55ddff,length:.44,thickness:.17,
-      swingDamage:70,swingRate:300,swingRange:2.65,paintFan:2.0,inkCost:4.2,flickRange:14,flickDamage:90,sub:'burstBomb',special:'ウルトラショット'},
-    {id:30,category:'roller',name:'ホクサイ',displayName:'ホクサイ',color:0xcc7733,length:.43,thickness:.16,brush:true,
-      swingDamage:42,swingRate:120,swingRange:2.35,paintFan:1.75,inkCost:2.0,sub:'robotBomb',special:'ショクワンダー'},
-    {id:31,category:'spinner',name:'スプラスピナー',displayName:'スプラスピナー',color:0x99ddff,length:.55,thickness:.16,
-      damage:28,rate:52,speed:46,spread:.035,life:.95,range:30,paintRadius:.72,inkCost:1.3,chargeTime:500,minShots:4,maxShots:10,sub:'burstBomb',special:'ウルトラハンコ'},
-    {id:32,category:'spinner',name:'バレルスピナー',displayName:'バレルスピナー',color:0x66aacc,length:.68,thickness:.19,
-      damage:30,rate:65,speed:48,spread:.018,life:1.1,range:38,paintRadius:.62,inkCost:1.5,chargeTime:950,minShots:8,maxShots:24,sub:'sprinkler',special:'ホップソナー'},
-    {id:33,category:'spinner',name:'ハイドラント',displayName:'ハイドラント',color:0x887766,length:.74,thickness:.23,
-      damage:40,rate:72,speed:50,spread:.012,life:1.2,range:45,paintRadius:.58,inkCost:1.9,chargeTime:1500,minShots:8,maxShots:32,sub:'autobomb',special:'ナイスダマ'},
-    {id:34,category:'maneuver',name:'スプラマニューバー',displayName:'スプラマニューバー',color:0x66ccff,length:.30,thickness:.10,
-      damage:28,rate:55,speed:38,spread:.055,life:1.0,range:30,paintRadius:.72,inkCost:.75,dual:true,sub:'splatBomb',special:'カニタンク'},
-    {id:35,category:'brella',name:'パラシェルター',displayName:'パラシェルター',color:0x99bbcc,length:.48,thickness:.18,
-      damage:34,rate:550,speed:32,spread:.25,life:1.0,range:20,paintRadius:1.0,inkCost:2.6,pellets:8,
-      canopyHp:650,sub:'splatBomb',special:'グレートバリア'},
-    {id:36,category:'brella',name:'スパイガジェット',displayName:'スパイガジェット',color:0x77aa66,length:.42,thickness:.14,
-      damage:26,rate:330,speed:34,spread:.30,life:.95,range:18,paintRadius:1.05,inkCost:2.2,pellets:7,
-      canopyHp:420,sub:'pointSensor',special:'ホップソナー'},
-    {id:37,category:'charger',kind:'stringer',name:'トライストリンガー',displayName:'トライストリンガー',color:0x55aa99,length:.72,thickness:.12,
-      chargeTime:900,tapDamage:22,fullDamage:76,speedShot:48,paintRadius:.72,inkCost:6.0,range:48,arrows:3,sub:'toxicMist',special:'メガホンレーザー5.1ch'},
-    {id:38,category:'charger',kind:'stringer',name:'LACT-450',displayName:'LACT-450',color:0xdddddd,length:.60,thickness:.10,
-      chargeTime:620,tapDamage:18,fullDamage:52,speedShot:52,paintRadius:.62,inkCost:4.8,range:42,arrows:3,sub:'pointSensor',special:'マルチミサイル'},
-    {id:39,category:'charger',name:'スクイックリンα',displayName:'スクイックリンα',color:0x55cc99,length:.58,thickness:.11,
-      chargeTime:520,tapDamage:30,fullDamage:105,speedShot:66,paintRadius:1.0,inkCost:6.5,range:42,sub:'pointSensor',special:'グレートバリア'},
-    {id:40,category:'charger',name:'ソイチューバー',displayName:'ソイチューバー',color:0x99aa55,length:.65,thickness:.12,
-      chargeTime:1000,tapDamage:24,fullDamage:125,speedShot:70,paintRadius:.9,inkCost:7.2,range:50,sub:'fizzyBomb',special:'ウルトラハンコ'},
-    {id:41,category:'roller',name:'パブロ',displayName:'パブロ',color:0xff88cc,length:.36,thickness:.13,brush:true,
-      swingDamage:38,swingRate:100,swingRange:2.15,paintFan:1.45,inkCost:1.8,sub:'burstBomb',special:'メガホンレーザー5.1ch'},
-    {id:42,category:'roller',name:'フィンセント',displayName:'フィンセント',color:0xaa55cc,length:.55,thickness:.19,brush:true,
-      swingDamage:70,swingRate:170,swingRange:2.65,paintFan:2.3,inkCost:3.2,sub:'fizzyBomb',special:'ホップソナー'},
-    {id:43,category:'blaster',name:'S-BLAST91',displayName:'S-BLAST91',color:0xee8844,length:.52,thickness:.27,
-      damage:92,rate:750,speed:22,spread:.03,life:1.2,range:27,paintRadius:1.35,explosionRadius:2.7,splashDamage:55,
-      inkCost:3.6,sub:'suctionBomb',special:'ナイスダマ'},
-    {id:44,category:'slosher',name:'スクリュースロッシャー',displayName:'スクリュースロッシャー',color:0xaa55ee,length:.42,thickness:.28,
-      damage:70,rate:540,speed:18,life:1.35,range:25,paintRadius:1.8,inkCost:4.8,arc:1.0,sub:'fizzyBomb',special:'ナイスダマ'}
-  ];
-  removedLegacyWeapons.length=0; }
+  /* The playable roster is locked at exactly five weapons. No legacy weapon expansion is loaded. */
+  const addedWeapons=[];
 
   categoryLabel.spinner='スピナー';
   categoryLabel.brella='シェルター';
