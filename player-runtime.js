@@ -1359,6 +1359,9 @@
       try{lookPad.setPointerCapture(e.pointerId);}catch(_){}
 
       const f=playerFighter;
+      if(f?.alive&&f.weapon?.category==='charger'&&window.__V119_CHARGER_UNIFIED){
+        return;
+      }
       if(f?.alive&&f.weapon?.category!=='charger'&&f.weapon?.category!=='spinner'&&f.weapon?.category!=='wiper'){
         isShooting=true;
       }else if(f?.alive&&f.weapon?.category==='charger'){
@@ -1923,6 +1926,7 @@
   const baseChargerFire=window.fireChargerShot;
 
   function reliableChargerFire(f,dir,frac){
+    if(window.__V119_CHARGER_UNIFIED)return false;
     if(!f||!f.alive||f.weapon?.category!=='charger')return false;
     const q=Math.max(.05,Math.min(1,num(frac,0)));
     const d=(dir?.clone?dir.clone():aimDir()).normalize();
@@ -2100,6 +2104,7 @@
 
   function startHeavy(kind,pointerId){
     const f=playerFighter;
+    if(window.__V119_CHARGER_UNIFIED&&kind==='charger')return false;
     if(!f?.alive||!battle()||active)return false;
     const w=f.weapon;
     if(kind==='charger'&&w?.category!=='charger')return false;
@@ -2136,6 +2141,11 @@
 
   function finishHeavy(st,aborted=false){
     if(!st||!st.target)return;
+    if(window.__V119_CHARGER_UNIFIED&&st.kind==='charger'){
+      clearHeavyState(st.target,true);
+      active=null;
+      return false;
+    }
     const f=st.target;
     if(!aborted&&f.alive){
       const q=currentFrac(st,st.kind);
@@ -2160,6 +2170,7 @@
     if(excludedTarget(e.target))return false;
     if(e.button!==undefined&&e.button!==0)return false;
     const w=playerFighter.weapon;
+    if(window.__V119_CHARGER_UNIFIED&&w?.category==='charger')return false;
     return w?.category==='charger'||w?.category==='spinner';
   }
 
@@ -2223,6 +2234,7 @@
     if(!t)return;
     if(excludedTarget(e.target))return;
     const w=playerFighter.weapon;
+    if(window.__V119_CHARGER_UNIFIED&&w?.category==='charger')return;
     if(w?.category!=='charger'&&w?.category!=='spinner')return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -2284,6 +2296,7 @@
       return;
     }
     const w=playerFighter.weapon;
+    if(window.__V119_CHARGER_UNIFIED&&w?.category==='charger')return;
     if(w?.category!=='charger'&&w?.category!=='spinner')return;
     e.preventDefault();
     e.stopImmediatePropagation();
