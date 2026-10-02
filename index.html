@@ -5190,8 +5190,20 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   let mapFrame=0;
 
   function battleScreen(){ return currentPhase===1.5 || currentPhase===2; }
+  // UI表示中は、戦闘中でもマウスを絶対に再ロックしない。
+  function overlayForcesMouse(){
+    const visible=(id,display)=>{
+      const el=document.getElementById(id);
+      return !!el && (!display || el.style.display===display || getComputedStyle(el).display===display);
+    };
+    return visible('v107-howto-overlay','flex') ||
+           visible('online-panel','flex') ||
+           visible('fullmap','flex') ||
+           visible('v65-gear-panel','block') ||
+           visible('result-screen');
+  }
   function setCursorHard(hidden){
-    if(cursorForceVisible) hidden=false;
+    if(cursorForceVisible || overlayForcesMouse()) hidden=false;
     root.classList.toggle('battle-cursor-hidden',!!hidden);
     root.classList.toggle('cursor-force-visible',cursorForceVisible);
     document.body.classList.toggle('pointer-lock-ready',!!hidden);
@@ -5209,6 +5221,11 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   }
 
   function requestLock(){
+    // UI表示中の再ロック要求は完全に無視する。
+    if(overlayForcesMouse()){
+      releaseLock();
+      return;
+    }
     cursorForceVisible=false;
     root.classList.remove('cursor-force-visible');
     if(!battleScreen() || !renderer?.domElement) return;
@@ -5235,6 +5252,14 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
 
   document.addEventListener('pointerlockchange',()=>{
     const locked=document.pointerLockElement===renderer?.domElement;
+    // UIが表示中に誤ってロックされた場合も即解除する。
+    if(overlayForcesMouse()){
+      pointerLockWanted=false;
+      cursorForceVisible=true;
+      try{ if(document.pointerLockElement) document.exitPointerLock(); }catch(e){}
+      setCursorHard(false);
+      return;
+    }
     if(locked){
       setCursorHard(true);
     }else if(pointerLockWanted && battleScreen()){
@@ -5250,13 +5275,13 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   // Re-lock on click, not mousedown.
   // This keeps the actual shooting mouse-down event free from pointer-lock handling.
   document.addEventListener('click',(e)=>{
-    if(!battleScreen()) return;
-    if(e.target.closest?.('#minimap,#fullmap,.mobile-btn,#online-panel,#result-screen')) return;
+    if(!battleScreen() || overlayForcesMouse()) return;
+    if(e.target.closest?.('#minimap,#fullmap,.mobile-btn,#online-panel,#result-screen,#v107-howto-overlay,#v65-gear-panel')) return;
     requestLock();
   },true);
   document.addEventListener('click',(e)=>{
-    if(!battleScreen()) return;
-    if(e.target.closest?.('#minimap,#fullmap,.mobile-btn,#online-panel,#result-screen')) return;
+    if(!battleScreen() || overlayForcesMouse()) return;
+    if(e.target.closest?.('#minimap,#fullmap,.mobile-btn,#online-panel,#result-screen,#v107-howto-overlay,#v65-gear-panel')) return;
     requestLock();
   },true);
 
@@ -5395,7 +5420,16 @@ window.addEventListener('pointerdown', handleAdvanceEvent);
   // Keep cursor state correct after the game UI changes phases.
   setInterval(()=>{
     if(battleScreen()){
-      setCursorHard(true);
+      if(overlayForcesMouse()){
+        pointerLockWanted=false;
+        cursorForceVisible=true;
+        if(document.pointerLockElement){
+          try{ document.exitPointerLock(); }catch(e){}
+        }
+        setCursorHard(false);
+      }else{
+        setCursorHard(true);
+      }
       if(mini) mini.style.display='block';
     }else{
       if(full) full.style.display='none';
