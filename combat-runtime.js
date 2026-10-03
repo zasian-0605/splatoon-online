@@ -903,12 +903,15 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   };
 
   // V112 input must never initiate charging while squid.
+  // This IIFE cannot directly reference V117's charger functions: they live in
+  // a different function scope. Use deferred window bridges instead so V116
+  // initialization never aborts with ReferenceError.
   const oldStartHeavy=window.__V112_START_HEAVY;
   window.__V119_CHARGER_UNIFIED=true;
   window.__V119_CHARGER_CONTROLLER={
-    start:startCanonicalCharger,
-    release:releaseCanonicalCharger,
-    cancel:()=>releaseCanonicalCharger(true)
+    start:(...args)=>window.__V119_START_CANONICAL?.(...args)||false,
+    release:(...args)=>window.__V119_RELEASE_CANONICAL?.(...args)||false,
+    cancel:()=>window.__V119_RELEASE_CANONICAL?.(true)||false
   };
 
   /* V116 is the single projectile updater. */
@@ -1184,6 +1187,12 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
     try{document.documentElement.classList.remove('charger-charging');}catch(_){}
   }
+
+  /* Export the canonical charger functions only after this IIFE's
+     declarations exist. Earlier versions tried to reference them from V116,
+     which caused the line-909 ReferenceError during script initialization. */
+  window.__V119_START_CANONICAL=startCanonicalCharger;
+  window.__V119_RELEASE_CANONICAL=releaseCanonicalCharger;
 
   function startCanonicalCharger(pointerId,source='mouse'){
     const f=player();
