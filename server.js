@@ -406,8 +406,8 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
        * Keep wall ordering authoritative so this never turns into shooting
        * through a wall.
        */
-      const playerRadius=Math.max(1.55,Number(hitRadius)||1.55);
-      const playerHalfHeight=1.85;
+      const playerRadius=Math.max(1.85,Number(hitRadius)||1.85);
+      const playerHalfHeight=2.05;
       const targetCenterY=Number(p.y)||0;
       const verticalDistance=Math.abs((hit.y||0)-(targetCenterY+.9));
 
