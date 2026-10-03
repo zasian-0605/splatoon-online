@@ -250,7 +250,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 */
 (function(){
   'use strict';
-  const BUILD='V126-CANONICAL-HOLD-FIRE-TIMER-2026-10-03';
+  const BUILD='V127-CANONICAL-HOLD-FIRE-INPUT-HITBOX-2026-10-03';
   if(window.__V116_UNIFIED_READY)return;
   window.__V116_UNIFIED_READY=true;
 
@@ -1167,19 +1167,36 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   let chargerInput=null;
   let suppressMouseUntil=0;
   let canonicalMouseHeld=false;
-  let canonicalHoldTimer=null;
+  let canonicalHoldFrame=0;
+  let canonicalMousePointerId=null;
+  function isCanonicalNormalWeapon(f){
+    return !!f?.alive&&!!f.isPlayer&&!!f.weapon&&
+      !isSquid(f)&&!['charger','spinner','wiper','roller'].includes(f.weapon.category)&&!f.weapon.brush;
+  }
   function startCanonicalHoldFire(){
-    if(canonicalHoldTimer)return;
-    canonicalHoldTimer=setInterval(()=>{
-      const f=player();
-      if(!canonicalMouseHeld||!f?.alive||!battle()||isSquid(f)||!f.isPlayer||!f.weapon||
-         ['charger','spinner','wiper','roller'].includes(f.weapon.category)||f.weapon.brush)return;
-      try{fireBasic(f,aimDir(f),performance.now());}catch(err){try{console.warn('[V125 held-fire]',err);}catch(_){}
+    canonicalMouseHeld=true;
+    if(canonicalHoldFrame)return;
+    const tick=()=>{
+      if(!canonicalMouseHeld){
+        canonicalHoldFrame=0;
+        return;
       }
-    },30);
+      const f=player();
+      if(isCanonicalNormalWeapon(f)&&battle()){
+        try{fireBasic(f,aimDir(f),performance.now());}
+        catch(err){try{console.warn('[V127 held-fire]',err);}catch(_){}}
+      }
+      canonicalHoldFrame=requestAnimationFrame(tick);
+    };
+    canonicalHoldFrame=requestAnimationFrame(tick);
   }
   function stopCanonicalHoldFire(){
-    if(canonicalHoldTimer){clearInterval(canonicalHoldTimer);canonicalHoldTimer=null;}
+    canonicalMouseHeld=false;
+    if(canonicalHoldFrame){
+      cancelAnimationFrame(canonicalHoldFrame);
+      canonicalHoldFrame=0;
+    }
+    canonicalMousePointerId=null;
   }
 
   function clearLegacyHeavyFlags(f){
@@ -1380,10 +1397,11 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
        dependent pointerdown -> mousedown gap that could make all shots vanish. */
     if(e.type==='pointerdown' &&
        w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'&&w.category!=='roller'){
-      canonicalMouseHeld=true;
+      canonicalMousePointerId=e.pointerId;
+      try{e.target?.setPointerCapture?.(e.pointerId);}catch(_){}
       startCanonicalHoldFire();
       try{window.directPlayerShot?.();}catch(err){
-        try{console.warn('[V120 pointer shot]',err);}catch(_){}
+        try{console.warn('[V127 pointer shot]',err);}catch(_){}
       }
       isShooting=true;
       return;
@@ -1450,7 +1468,13 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(e.pointerType==='touch')return;
     if(e.type==='mouseup'&&e.button!==0)return;
     if(e.type==='pointerup'&&e.button!==0)return;
-    if(!battle()&& !heavy){canonicalMouseHeld=false;return;}
+    const current=player();
+    /* Normal mouse fire is released by mouseup only. */
+    if(e.type==='pointerup'&&current?.weapon&&
+       !['charger','spinner','wiper','roller'].includes(current.weapon.category)&&!current.weapon.brush){
+      return;
+    }
+    if(!battle()&& !heavy){stopCanonicalHoldFire();return;}
     e.stopImmediatePropagation();
     if(chargerInput){
       e.preventDefault();
@@ -1480,6 +1504,11 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   /* Pointer cancellation is a valid end-of-input path too. */
   window.addEventListener('pointercancel',e=>{
     if(e.pointerType!=='mouse')return;
+    const current=player();
+    if(!chargerInput&&!heavy&&!current?.__rollerInput&&current?.weapon&&
+       !['charger','spinner','wiper','roller'].includes(current.weapon.category)&&!current.weapon.brush){
+      return;
+    }
     if(chargerInput){
       e.preventDefault();e.stopImmediatePropagation();
       releaseCanonicalCharger(true);isShooting=false;return;
@@ -1701,13 +1730,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       try{if(f.human)f.human.visible=!squid;if(f.squid)f.squid.visible=squid;}catch(_){}
       try{window.updateFighterAnimation?.(f,!!f._moving,squid);}catch(_){}
 
-      /* One authoritative held-fire loop for normal ranged weapons. */
-      if(f?.alive&&f.isPlayer&&canonicalMouseHeld&&!squid&&f.weapon&&
-         !['charger','spinner','wiper','roller'].includes(f.weapon.category)&&!f.weapon.brush){
-        try{fireBasic(f,aimDir(f),performance.now());}catch(err){
-          try{console.warn('[V117 held-shot]',err);}catch(_){}
-        }
-      }
+      /* V127: normal held-fire has exactly one owner. */
       return result;
     };
     try{updatePlayerMovement=window.updatePlayerMovement;}catch(_){}
@@ -1715,7 +1738,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
   window.__V116_UPDATE_BULLETS=updateUnifiedBullets;
   window.__V117_CANONICAL_RUNTIME={
-    build:'V122-CHARGER-FULL-INPUT-AND-VISIBLE-CHARGE-2026-10-03',
+    build:'V127-CANONICAL-HOLD-FIRE-INPUT-HITBOX-2026-10-03',
     projectile:'V116',
     input:'single-desktop-action-path',
     remoteShots:'V117-canonical-ranged',
