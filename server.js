@@ -745,6 +745,39 @@ function serverResolveShot(room,player,m){
   const trajectory=serverFindTrajectoryHit(room,origin,dir,trajectoryWeapon,hitRadius);
   const nearest=trajectory.hit;
 
+  /*
+   * V128 hitbox fallback. If trajectory occlusion/ballistic stepping misses
+   * because the client's camera and server position are a few frames apart,
+   * use a wider cylindrical ray against the authoritative enemy positions.
+   * This is still distance-limited and team-filtered.
+   */
+  let fallbackNearest=nearest;
+  if(!fallbackNearest){
+    let best=null,bestT=Infinity;
+    const broadRadius=Math.max(2.55,Number(hitRadius)||2.55);
+    const rayEnd={
+      x:origin.x+dir.x*range,
+      y:origin.y+dir.y*range,
+      z:origin.z+dir.z*range
+    };
+    for(const target of room.players.values()){
+      if(!target.serverAlive||target.team===null||target.team===player.team)continue;
+      const p=target.serverPos||target.spawn;
+      const abx=rayEnd.x-origin.x,abz=rayEnd.z-origin.z;
+      const apx=(p.x||0)-origin.x,apz=(p.z||0)-origin.z;
+      const den=abx*abx+abz*abz||1;
+      const t=Math.max(0,Math.min(1,(apx*abx+apz*abz)/den));
+      const qx=origin.x+abx*t,qz=origin.z+abz*t;
+      const h= Math.hypot((p.x||0)-qx,(p.z||0)-qz);
+      const v= Math.abs((Number(p.y)||0)+.9-(origin.y+dir.y*range*t));
+      if(h<=broadRadius&&v<=2.35&&t<bestT){
+        bestT=t;
+        fallbackNearest={target,hit:{x:qx,y:origin.y+dir.y*range*t,z:qz,t},order:t};
+      }
+    }
+  }
+  const nearest=fallbackNearest;
+
   /* V121: keep server turf authoritative, but do not paint the entire
      shot trajectory here.  The old origin -> endpoint fill looked like a
      half-finished bomb path on the opponent's side.  The client projectile
