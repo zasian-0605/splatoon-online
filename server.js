@@ -741,7 +741,7 @@ function serverResolveShot(room,player,m){
     : w;
   trajectoryWeapon._attackerTeam=player.team;
   const trajectory=serverFindTrajectoryHit(room,origin,dir,trajectoryWeapon,hitRadius);
-  const nearest=trajectory.hit;
+  let nearest=trajectory.hit;
 
   /*
    * V128 hitbox fallback. If trajectory occlusion/ballistic stepping misses
@@ -774,7 +774,7 @@ function serverResolveShot(room,player,m){
       }
     }
   }
-  const nearest=fallbackNearest;
+  nearest=fallbackNearest;
 
   /* V121: keep server turf authoritative, but do not paint the entire
      shot trajectory here.  The old origin -> endpoint fill looked like a
