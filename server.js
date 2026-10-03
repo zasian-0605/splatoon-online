@@ -581,6 +581,19 @@ function serverApplyDamage(room,target,damage,attacker,reason){
   target.serverHp=Math.max(0,target.serverHp-d);
   const killed=target.serverHp<=0;
   broadcastDamage(room,target,d,attacker,reason,killed);
+  /* Also push an authoritative state immediately. This prevents an older
+     client-side damage handler or a concurrent state packet from leaving the
+     visible HP unchanged. */
+  const sp=target.serverPos||target.spawn||{x:0,y:0,z:0};
+  const hpState={
+    type:'state',seq:++target.stateSeq,id:target.id,name:target.accountName||target.id,
+    team:target.team,x:Number(sp.x)||0,y:Number(sp.y)||0,z:Number(sp.z)||0,
+    yaw:target.team==='A'?0:Math.PI,corrected:false,
+    hp:Math.max(0,Math.min(100,Math.round(target.serverHp))),
+    ink:Math.max(0,Math.min(100,Number(target.serverInk??100))),
+    alive:!!target.serverAlive,squid:false,moving:false,weaponId:target.weaponId
+  };
+  broadcast(room,hpState);
   if(killed)serverKillPlayer(room,target,attacker,reason);
   return true;
 }
