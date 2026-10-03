@@ -406,8 +406,10 @@ function serverFindTrajectoryHit(room,origin,dir,w,hitRadius){
        * Keep wall ordering authoritative so this never turns into shooting
        * through a wall.
        */
-      const playerRadius=Math.max(1.85,Number(hitRadius)||1.85);
-      const playerHalfHeight=2.05;
+      /* Online opponent hit volume is intentionally a little larger than
+         the local visual body to make centered shots reliably register. */
+      const playerRadius=Math.max(2.2,Number(hitRadius)||2.2);
+      const playerHalfHeight=2.25;
       const targetCenterY=Number(p.y)||0;
       const verticalDistance=Math.abs((hit.y||0)-(targetCenterY+.9));
 
@@ -1631,7 +1633,11 @@ wss.on('connection', ws => {
       player.serverInkLastAt=now;
       if(room.started&&player.serverAlive&&player.team&&now-(player.lastHazardAt||0)>=350){
         player.lastHazardAt=now; const inkTeam=serverInkTeamAt(room,player.serverPos||player.spawn);
-        if(inkTeam&&inkTeam!==player.team){const damage=Math.max(0,Math.min(4,Math.max(0,player.serverHp-1)));if(damage>0)serverApplyDamage(room,player,damage,null,'enemy-ink');}
+        if(inkTeam&&inkTeam!==player.team){
+          /* Enemy ink damage remains gradual, but HP is allowed to reach 0. */
+          const damage=Math.max(0,Math.min(4,Math.max(0,player.serverHp)));
+          if(damage>0)serverApplyDamage(room,player,damage,null,'enemy-ink');
+        }
       }
       const serverPos=player.serverPos||player.spawn,enemyInk=enemyInkNow;
       const packet={type:'state',seq:++player.stateSeq,id:player.id,name:player.accountName||player.id,team:player.team,x:serverPos.x,y:serverPos.y||0,z:serverPos.z,yaw,corrected,
