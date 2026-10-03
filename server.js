@@ -580,10 +580,9 @@ function serverApplyDamage(room,target,damage,attacker,reason){
   const d=Math.max(0,Number(damage)||0);if(d<=0)return false;
   target.serverHp=Math.max(0,target.serverHp-d);
   const killed=target.serverHp<=0;
+  if(killed)serverKillPlayer(room,target,attacker,reason);
   broadcastDamage(room,target,d,attacker,reason,killed);
-  /* Also push an authoritative state immediately. This prevents an older
-     client-side damage handler or a concurrent state packet from leaving the
-     visible HP unchanged. */
+  /* Push an authoritative state at the same instant. */
   const sp=target.serverPos||target.spawn||{x:0,y:0,z:0};
   const hpState={
     type:'state',seq:++target.stateSeq,id:target.id,name:target.accountName||target.id,
@@ -594,7 +593,6 @@ function serverApplyDamage(room,target,damage,attacker,reason){
     alive:!!target.serverAlive,squid:false,moving:false,weaponId:target.weaponId
   };
   broadcast(room,hpState);
-  if(killed)serverKillPlayer(room,target,attacker,reason);
   return true;
 }
 function serverApplyAoE(room,center,radius,damage,team,attacker,reason){
