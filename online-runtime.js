@@ -564,7 +564,7 @@ function onlineAIShot(f,mode,charge){
   const d=front(f),w=f.weapon||{};
   try{window.__v93SendShot({
     x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
-    dx:d.x,dy:d.y,dz:d.z,weaponId:Number(w.id)||0,
+    dx:d.x,dy:(d.y+Math.tan(8*Math.PI/180)),dz:d.z,weaponId:Number(w.id)||0,
     mode:mode||undefined,
     charge:Number.isFinite(Number(charge))?Number(charge):undefined
   });}catch(_){}
