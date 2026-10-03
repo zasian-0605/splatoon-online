@@ -250,7 +250,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 */
 (function(){
   'use strict';
-  const BUILD='V123-ONLINE-PROJECTILE-ANTI-STALL-2026-10-03';
+  const BUILD='V124-ONLINE-LAUNCH-PITCH-HP-FULLAUTO-2026-10-03';
   if(window.__V116_UNIFIED_READY)return;
   window.__V116_UNIFIED_READY=true;
 
@@ -795,8 +795,12 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       try{sfx('shoot');}catch(_){}
       if(f.isPlayer&&onlineActive&&onlineStarted){
         try{
+          /* Online/server shots must use the same small upward launch bias as
+             the local projectile. Otherwise the remote/server trajectory starts
+             from the raw camera direction and gravity makes it hit the floor. */
+          const netBase=applyLaunchPitch(base);
           const sent=window.__v93SendShot?.({
-            x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:base.x,dy:base.y,dz:base.z,
+            x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,dx:netBase.x,dy:netBase.y,dz:netBase.z,
             weaponId:f.weapon.id,mode:w.category
           });
           if(sent===false)console.warn('[ONLINE SHOT TX FAILED]',{
@@ -840,10 +844,13 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     f.__canonicalHeavyNextAt=nowShot+180;
     try{sfx('shoot');}catch(_){}
     if(f.isPlayer&&onlineActive&&onlineStarted){
-      try{window.__v93SendShot?.({
-        x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
-        dx:d.x,dy:d.y,dz:d.z,weaponId:f.weapon.id,mode:w.kind==='stringer'?'stringer':'charger',charge:q
-      });}catch(_){}
+      try{
+        const netD=applyLaunchPitch(d);
+        window.__v93SendShot?.({
+          x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+          dx:netD.x,dy:netD.y,dz:netD.z,weaponId:f.weapon.id,mode:w.kind==='stringer'?'stringer':'charger',charge:q
+        });
+      }catch(_){}
     }
     return true;
   }
@@ -868,11 +875,14 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
           gravity:5.2,drag:.035,radius:.13,paintRadius:num(w.paintRadius,.6),
           life:1.35,maxRange:num(w.range,30)});
         if(f.isPlayer&&onlineActive&&onlineStarted){
-          try{window.__v93SendShot?.({
-            x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
-            dx:d.x,dy:d.y,dz:d.z,weaponId:f.weapon.id,
-            mode:'splatling',charge:q,burstShots:1
-          });}catch(_){}
+          try{
+            const netD=applyLaunchPitch(d);
+            window.__v93SendShot?.({
+              x:f.pos.x,y:f.pos.y+1.2,z:f.pos.z,
+              dx:netD.x,dy:netD.y,dz:netD.z,weaponId:f.weapon.id,
+              mode:'splatling',charge:q,burstShots:1
+            });
+          }catch(_){}
         }
       },delay);
       fired++;
