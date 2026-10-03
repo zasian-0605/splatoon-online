@@ -250,7 +250,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 */
 (function(){
   'use strict';
-  const BUILD='V124-ONLINE-LAUNCH-PITCH-HP-FULLAUTO-2026-10-03';
+  const BUILD='V125-HIGHER-LAUNCH-ONLINE-HP-HIT-2026-10-03';
   if(window.__V116_UNIFIED_READY)return;
   window.__V116_UNIFIED_READY=true;
 
@@ -273,7 +273,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 
   /* Lower the old upward launch setting by about 10 degrees: canonical +5 degrees.
      Existing camera pitch is preserved, including downward aiming. */
-  const CANONICAL_LAUNCH_PITCH_DEG=5;
+  const CANONICAL_LAUNCH_PITCH_DEG=8;
   function applyLaunchPitch(dir){
     const d=dir.clone().normalize();
     const h=Math.hypot(d.x,d.z);
