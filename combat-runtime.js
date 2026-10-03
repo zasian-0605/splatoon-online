@@ -250,7 +250,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 */
 (function(){
   'use strict';
-  const BUILD='V116-UNIFIED-PROJECTILE-GAMEPLAY-2026-10-02';
+  const BUILD='V123-ONLINE-PROJECTILE-ANTI-STALL-2026-10-03';
   if(window.__V116_UNIFIED_READY)return;
   window.__V116_UNIFIED_READY=true;
 
@@ -545,6 +545,10 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }catch(_){return f?.team==='B'?0xff2255:0xe3ff00;}
   }
 
+  function rsafeOnlineStep(dt,speed){
+    return Math.max(.0001,Math.min(.06,num(dt,.016)))*Math.max(8,num(speed,35));
+  }
+
   function updateUnifiedBullets(delta){
     const dt=Math.max(0,Math.min(.06,num(delta,.016)));
     for(let i=bullets.length-1;i>=0;i--){
@@ -559,12 +563,19 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
          stationary sphere because a legacy layer replaced/zeroed its velocity. */
       if(b.__onlineRemote){
         const rs=Math.max(8,num(b.__onlineRemoteSpeed,35));
+        const rd=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1));
+        if(rd.lengthSq()<.0001)rd.set(0,0,1);
+        rd.normalize();
+        /* Online shots have an extra invariant: their direction is immutable
+           for the lifetime of the packet.  Rebuild velocity every frame so an
+           older trajectory wrapper cannot leave the remote sphere at rest. */
         if(!b.velocity||typeof b.velocity.lengthSq!=='function'||b.velocity.lengthSq()<.0001){
-          const rd=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1));
-          if(rd.lengthSq()<.0001)rd.set(0,0,1);
-          rd.normalize();
-          b.velocity=rd.multiplyScalar(rs);
+          b.velocity=rd.clone().multiplyScalar(rs);
+        }else{
+          const vh=Math.hypot(b.velocity.x,b.velocity.z);
+          if(vh<rs*.08)b.velocity.copy(rd).multiplyScalar(rs);
         }
+        b.__onlineRemoteDir.copy?.(rd);
       }
 
       if(b.trajectory==='charger'){
@@ -631,6 +642,18 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       /* Collision must be resolved before path painting. Otherwise a fast
          projectile can paint through a wall during the same frame in which
          wallHit() discovers the collision. */
+      /* Final anti-stall guard for online shots.  If another legacy
+         layer has touched the mesh/velocity before the next frame, a received
+         projectile must still advance by its authoritative direction. */
+      if(b.__onlineRemote && b.mesh.position.distanceTo(prev)<.000001){
+        const rd=(b.__onlineRemoteDir?.clone?b.__onlineRemoteDir.clone():new THREE.Vector3(0,0,1));
+        if(rd.lengthSq()<.0001)rd.set(0,0,1);
+        rd.normalize();
+        b.mesh.position.addScaledVector(rd,rsafeOnlineStep(dt,b.__onlineRemoteSpeed));
+        b.travelled+=rsafeOnlineStep(dt,b.__onlineRemoteSpeed);
+        b.horizontalTravel+=Math.hypot(rd.x,rd.z)*rsafeOnlineStep(dt,b.__onlineRemoteSpeed);
+      }
+
       const wh=wallHit(prev,b.mesh.position);
       if(wh){
         impact(b,wh.point.clone(),wh);
