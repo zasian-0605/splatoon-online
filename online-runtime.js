@@ -237,13 +237,28 @@
     try{window.updateFighterAnimation?.(f,!!m.moving,f.squid_mode);}catch(_){}
   }
   function applyDamage(m){
-    if(state.phase!=='in_match')return;
-    const target=findFighter(m.targetId);if(!target)return;
-    if(Number.isFinite(Number(m.hp)))target.hp=Math.max(0,Math.min(target.maxHp||100,Number(m.hp)));
+    const id=String(m?.targetId||'');
+    if(!id)return;
+    let target=findFighter(id);
+    if(!target&&id!==String(state.playerId||''))target=ensureRemote({
+      id,team:m.team,weaponId:m.weaponId,spawn:{x:Number(m.x)||0,z:Number(m.z)||0},name:m.name||id
+    });
+    if(!target)return;
+    const incomingHp=Number(m.hp);
+    if(Number.isFinite(incomingHp)){
+      target.hp=Math.max(0,Math.min(target.maxHp||100,incomingHp));
+    }else{
+      target.hp=Math.max(0,(Number(target.hp)||target.maxHp||100)-Math.max(0,Number(m.damage)||0));
+    }
+    target.lastDamagedAt=performance.now();
+    if(m.attackerId)target.lastDamagedById=String(m.attackerId);
     if(m.reason==='enemy-ink'){try{window.forceHuman?.(target);}catch(_){}}
     if(m.killed||target.hp<=0){
       try{if(typeof killFighter==='function')killFighter(target);}catch(_){target.hp=0;target.alive=false;}
-    }else target.alive=true;
+    }else{
+      target.alive=true;
+      target.root&&(target.root.visible=true);
+    }
   }
   function applyRespawn(m){
     if(state.phase!=='in_match')return;
