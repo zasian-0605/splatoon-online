@@ -250,7 +250,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
 */
 (function(){
   'use strict';
-  const BUILD='V125-HIGHER-LAUNCH-ONLINE-HP-HIT-2026-10-03';
+  const BUILD='V126-CANONICAL-HOLD-FIRE-TIMER-2026-10-03';
   if(window.__V116_UNIFIED_READY)return;
   window.__V116_UNIFIED_READY=true;
 
@@ -1167,6 +1167,20 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
   let chargerInput=null;
   let suppressMouseUntil=0;
   let canonicalMouseHeld=false;
+  let canonicalHoldTimer=null;
+  function startCanonicalHoldFire(){
+    if(canonicalHoldTimer)return;
+    canonicalHoldTimer=setInterval(()=>{
+      const f=player();
+      if(!canonicalMouseHeld||!f?.alive||!battle()||isSquid(f)||!f.isPlayer||!f.weapon||
+         ['charger','spinner','wiper','roller'].includes(f.weapon.category)||f.weapon.brush)return;
+      try{fireBasic(f,aimDir(f),performance.now());}catch(err){try{console.warn('[V125 held-fire]',err);}catch(_){}
+      }
+    },30);
+  }
+  function stopCanonicalHoldFire(){
+    if(canonicalHoldTimer){clearInterval(canonicalHoldTimer);canonicalHoldTimer=null;}
+  }
 
   function clearLegacyHeavyFlags(f){
     if(!f)return;
@@ -1367,6 +1381,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     if(e.type==='pointerdown' &&
        w.category!=='charger'&&w.category!=='spinner'&&w.category!=='wiper'&&w.category!=='roller'){
       canonicalMouseHeld=true;
+      startCanonicalHoldFire();
       try{window.directPlayerShot?.();}catch(err){
         try{console.warn('[V120 pointer shot]',err);}catch(_){}
       }
@@ -1426,6 +1441,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
     }
 
     canonicalMouseHeld=true;
+    startCanonicalHoldFire();
     try{window.directPlayerShot?.();}catch(_){}
     isShooting=true;
   }
@@ -1452,6 +1468,7 @@ console.log('[SPLATOON ONLINE]['+BUILD+'] combat-focused AI active');
       }
     }
     canonicalMouseHeld=false;
+    stopCanonicalHoldFire();
     isShooting=false;
     if(e.type==='mouseup')suppressMouseUntil=performance.now()+50;
   }
